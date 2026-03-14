@@ -31,7 +31,10 @@ router.get('/data', onboardingController.getOnboardingData);
 // Proxy to get Shopify access token (for onboarding)
 router.get('/proxy/token', onboardingController.getProxyToken);
 
-// Connect shipping platform (Step 5)
+// Connect shipping platform (Step 4)
+router.post('/step4', onboardingController.connectShipping);
+
+// Legacy route for backward compatibility (Step 5 - now unused)
 router.post('/step5', onboardingController.connectShipping);
 
 module.exports = router;

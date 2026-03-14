@@ -71,13 +71,13 @@ class OnboardingController {
           result = await onboardingService.updateStep2ShopifyIntegration(merchantId, data);
           break;
         case 3:
-          result = await onboardingService.updateStep3ProductCOGS(merchantId, data);
+          result = await onboardingService.updateStep3MetaIntegration(merchantId, data);
           break;
         case 4:
-          result = await onboardingService.updateStep4MetaIntegration(merchantId, data);
+          result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, data);
           break;
         case 5:
-          result = await onboardingService.updateStep5ShiprocketIntegration(merchantId, data);
+          result = await onboardingService.updateStep5ProductCOGS(merchantId, data);
           break;
         default:
           return res.status(400).json({ error: 'Invalid step number' });
@@ -327,13 +327,13 @@ class OnboardingController {
       }
 
       // Use onboarding service to create integration
-      const result = await onboardingService.updateStep5ShiprocketIntegration(merchantId, shiprocketData);
+      const result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, shiprocketData);
 
       if (!result.success) {
         return res.status(400).json({ error: result.error });
       }
 
-      console.log(`✅ ${platform} connected successfully via Onboarding Step 5`);
+      console.log(`✅ ${platform} connected successfully via Onboarding Step 4`);
 
       res.json({
         success: true,

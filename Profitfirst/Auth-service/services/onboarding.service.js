@@ -7,9 +7,9 @@
  * ONBOARDING FLOW:
  * Step 1: Business Info (stored in PROFILE)
  * Step 2: Shopify Integration (INTEGRATION#SHOPIFY)
- * Step 3: Product COGS (PRODUCT + VARIANT records)
- * Step 4: Meta Ads Integration (INTEGRATION#META)
- * Step 5: Shiprocket Integration (INTEGRATION#SHIPROCKET)
+ * Step 3: Meta Ads Integration (INTEGRATION#META)
+ * Step 4: Shiprocket Integration (INTEGRATION#SHIPROCKET)
+ * Step 5: Product COGS (PRODUCT + VARIANT records)
  */
 
 const dynamodbService = require('./dynamodb.service');
@@ -376,15 +376,111 @@ class OnboardingService {
   }
 
   /**
-   * Update Onboarding Step 3: Product COGS
+   * Update Onboarding Step 3: Meta Ads Integration (moved from Step 4)
+   * 
+   * @param {string} merchantId - Merchant's unique ID
+   * @param {Object} metaData - Meta Ads credentials
+   * @returns {Object} Success status
+   */
+  async updateStep3MetaIntegration(merchantId, metaData) {
+    try {
+      console.log(`📝 Step 3: Connecting Meta Ads for merchant: ${merchantId}`);
+
+      // Create Meta integration record
+      const integrationResult = await dynamodbService.createIntegration({
+        merchantId: merchantId,
+        platform: 'meta',
+        credentials: {
+          adAccountId: metaData.adAccountId,
+          accessToken: metaData.accessToken // TODO: Encrypt this
+        }
+      });
+
+      if (!integrationResult.success) {
+        return { success: false, error: integrationResult.error };
+      }
+
+      // Update profile onboarding step
+      const profileUpdates = {
+        onboardingStep: 4,
+        step3CompletedAt: new Date().toISOString()
+      };
+
+      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
+      
+      console.log(`✅ Step 3 completed: Meta Ads integration created`);
+
+      return {
+        success: true,
+        data: {
+          currentStep: 4,
+          integration: integrationResult.data
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Step 3 error:`, error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update Onboarding Step 4: Shiprocket Integration (moved from Step 5)
+   * 
+   * @param {string} merchantId - Merchant's unique ID
+   * @param {Object} shiprocketData - Shiprocket credentials
+   * @returns {Object} Success status
+   */
+  async updateStep4ShiprocketIntegration(merchantId, shiprocketData) {
+    try {
+      console.log(`📝 Step 4: Connecting Shiprocket for merchant: ${merchantId}`);
+
+      // Create Shiprocket integration record
+      const integrationResult = await dynamodbService.createIntegration({
+        merchantId: merchantId,
+        platform: 'shiprocket',
+        credentials: {
+          email: shiprocketData.email,
+          token: shiprocketData.token // TODO: Encrypt this
+        }
+      });
+
+      if (!integrationResult.success) {
+        return { success: false, error: integrationResult.error };
+      }
+
+      // Update profile onboarding step
+      const profileUpdates = {
+        onboardingStep: 5,
+        step4CompletedAt: new Date().toISOString()
+      };
+
+      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
+      
+      console.log(`✅ Step 4 completed: Shiprocket integration created`);
+
+      return {
+        success: true,
+        data: {
+          currentStep: 5,
+          integration: integrationResult.data
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Step 4 error:`, error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update Onboarding Step 5: Product COGS Setup (moved from Step 3)
    * 
    * @param {string} merchantId - Merchant's unique ID
    * @param {Object} productData - Product and variants with COGS
    * @returns {Object} Success status
    */
-  async updateStep3ProductCOGS(merchantId, productData) {
+  async updateStep5ProductCOGS(merchantId, productData) {
     try {
-      console.log(`📝 Step 3: Adding product COGS for merchant: ${merchantId}`);
+      console.log(`📝 Step 5: Adding product COGS for merchant: ${merchantId}`);
 
       const results = {
         products: [],
@@ -424,120 +520,20 @@ class OnboardingService {
 
       // Update profile onboarding step
       const profileUpdates = {
-        onboardingStep: 4,
-        step3CompletedAt: new Date().toISOString()
+        onboardingStep: 6, // Completed all steps
+        step5CompletedAt: new Date().toISOString()
       };
 
       await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
       
-      console.log(`✅ Step 3 completed: Product and ${results.variants.length} variants created`);
+      console.log(`✅ Step 5 completed: Product and ${results.variants.length} variants created`);
 
       return {
         success: true,
         data: {
-          currentStep: 4,
+          currentStep: 6, // All steps completed
           product: results.products[0],
           variants: results.variants
-        }
-      };
-    } catch (error) {
-      console.error(`❌ Step 3 error:`, error.message);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Update Onboarding Step 4: Meta Ads Integration
-   * 
-   * @param {string} merchantId - Merchant's unique ID
-   * @param {Object} metaData - Meta Ads credentials
-   * @returns {Object} Success status
-   */
-  async updateStep4MetaIntegration(merchantId, metaData) {
-    try {
-      console.log(`📝 Step 4: Connecting Meta Ads for merchant: ${merchantId}`);
-
-      // Create Meta integration record
-      const integrationResult = await dynamodbService.createIntegration({
-        merchantId: merchantId,
-        platform: 'meta',
-        credentials: {
-          adAccountId: metaData.adAccountId,
-          accessToken: metaData.accessToken // TODO: Encrypt this
-        }
-      });
-
-      if (!integrationResult.success) {
-        return { success: false, error: integrationResult.error };
-      }
-
-      // Update profile onboarding step
-      const profileUpdates = {
-        onboardingStep: 5,
-        step4CompletedAt: new Date().toISOString()
-      };
-
-      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-      
-      console.log(`✅ Step 4 completed: Meta Ads integration created`);
-
-      return {
-        success: true,
-        data: {
-          currentStep: 5,
-          integration: integrationResult.data
-        }
-      };
-    } catch (error) {
-      console.error(`❌ Step 4 error:`, error.message);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Update Onboarding Step 5: Shiprocket Integration
-   * 
-   * @param {string} merchantId - Merchant's unique ID
-   * @param {Object} shiprocketData - Shiprocket credentials
-   * @returns {Object} Success status
-   */
-  async updateStep5ShiprocketIntegration(merchantId, shiprocketData) {
-    try {
-      console.log(`📝 Step 5: Connecting Shiprocket for merchant: ${merchantId}`);
-
-      // Create Shiprocket integration record
-      const integrationResult = await dynamodbService.createIntegration({
-        merchantId: merchantId,
-        platform: 'shiprocket',
-        credentials: {
-          email: shiprocketData.email,
-          token: shiprocketData.token // TODO: Encrypt this
-        }
-      });
-
-      if (!integrationResult.success) {
-        return { success: false, error: integrationResult.error };
-      }
-
-      // Complete onboarding
-      const profileUpdates = {
-        onboardingStep: 6,
-        onboardingCompleted: true,
-        step5CompletedAt: new Date().toISOString(),
-        onboardingCompletedAt: new Date().toISOString()
-      };
-
-      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-      
-      console.log(`✅ Step 5 completed: Shiprocket integration created`);
-      console.log(`🎉 Onboarding completed for merchant: ${merchantId}`);
-
-      return {
-        success: true,
-        data: {
-          currentStep: 6,
-          isCompleted: true,
-          integration: integrationResult.data
         }
       };
     } catch (error) {
@@ -599,11 +595,11 @@ class OnboardingService {
       case 2:
         return this.updateStep2ShopifyIntegration(merchantId, stepData);
       case 3:
-        return this.updateStep3ProductCOGS(merchantId, stepData);
+        return this.updateStep3MetaIntegration(merchantId, stepData);
       case 4:
-        return this.updateStep4MetaIntegration(merchantId, stepData);
+        return this.updateStep4ShiprocketIntegration(merchantId, stepData);
       case 5:
-        return this.updateStep5ShiprocketIntegration(merchantId, stepData);
+        return this.updateStep5ProductCOGS(merchantId, stepData);
       default:
         return { success: false, error: 'Invalid step number' };
     }
