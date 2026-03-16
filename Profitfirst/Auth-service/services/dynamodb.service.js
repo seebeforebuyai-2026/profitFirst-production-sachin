@@ -885,6 +885,65 @@ class DynamoDBService {
   }
 
   /**
+   * Update Integration Record
+   * 
+   * @param {string} merchantId - Merchant ID
+   * @param {string} platform - Integration platform (shopify, meta, shiprocket)
+   * @param {Object} updates - Fields to update
+   * @returns {Object} Success status and updated data/error
+   */
+  async updateIntegration(merchantId, platform, updates) {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      // Build update expression dynamically
+      const updateExpressions = [];
+      const expressionAttributeNames = {};
+      const expressionAttributeValues = {
+        ':updatedAt': timestamp
+      };
+
+      // Add updatedAt to updates
+      updates.updatedAt = timestamp;
+
+      // Process each update field
+      Object.entries(updates).forEach(([key, value], index) => {
+        if (value !== undefined && value !== null) {
+          const attrName = `#attr${index}`;
+          const valueName = `:value${index}`;
+          
+          updateExpressions.push(`${attrName} = ${valueName}`);
+          expressionAttributeNames[attrName] = key;
+          expressionAttributeValues[valueName] = value;
+        }
+      });
+
+      if (updateExpressions.length === 0) {
+        return { success: false, error: 'No valid updates provided' };
+      }
+
+      const command = new UpdateCommand({
+        TableName: newTableName,
+        Key: {
+          PK: PK_PATTERNS.MERCHANT(merchantId),
+          SK: `INTEGRATION#${platform.toUpperCase()}`
+        },
+        UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      });
+
+      const result = await newDynamoDB.send(command);
+      console.log(`✅ Integration updated: ${platform} for merchant ${merchantId}`);
+      return { success: true, data: result.Attributes };
+    } catch (error) {
+      console.error('newDynamoDB updateIntegration error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Create User Profile (change SK from USER# to PROFILE)
    * 
    * @param {Object} userData - User information
