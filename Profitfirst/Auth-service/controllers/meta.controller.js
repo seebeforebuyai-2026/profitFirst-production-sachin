@@ -1,25 +1,16 @@
 /**
  * Meta/Facebook Ads Controller
- * Handles Facebook OAuth and ad account connection
- * 
- * PRODUCTION FEATURES:
- * - Encrypted access token storage
- * - Secure session management with DynamoDB
- * - Comprehensive error handling
- * - Rate limiting protection
+ * Handles Facebook OAuth and ad account connection with production security features
  */
 
 const axios = require('axios');
-const crypto = require('crypto');
-const { PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { newDynamoDB } = require('../config/aws.config'); // ✅ CHANGE: Use new DynamoDB client
-const dynamodbService = require('../services/dynamodb.service'); // ✅ CHANGE: Add new service
-const sessionService = require('../services/session.service'); // ✅ NEW: Secure session management
-const encryptionService = require('../utils/encryption'); // ✅ NEW: Token encryption
-const MetaErrorHandler = require('../utils/meta-errors'); // ✅ NEW: Error handling
+const dynamodbService = require('../services/dynamodb.service');
+const sessionService = require('../services/session.service');
+const encryptionService = require('../utils/encryption');
+const MetaErrorHandler = require('../utils/meta-errors');
 const metaSyncService = require('../services/meta-sync.service');
 
-// ✅ CHANGE: Remove old table reference - now using unified table
+// Meta/Facebook API Configuration
 const FB_APP_ID = process.env.FB_APP_ID;
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
 const FB_REDIRECT_URI = process.env.FB_REDIRECT_URI;
@@ -35,9 +26,7 @@ class MetaController {
     try {
       const userId = req.user.userId;
 
-      console.log(`\n🔗 Initiating Meta OAuth for user: ${userId}`);
-
-      // ✅ NEW: Create secure session using DynamoDB
+      // Create secure session using DynamoDB
       const state = await sessionService.createOAuthSession(userId, 'meta');
 
       // Build OAuth URL with required scopes
@@ -56,8 +45,6 @@ class MetaController {
         `state=${state}&` +
         `response_type=code`;
 
-      console.log(`✅ OAuth URL generated with secure session: ${state.substring(0, 8)}...`);
-
       res.json({
         success: true,
         authUrl: authUrl,
@@ -65,26 +52,6 @@ class MetaController {
       });
     } catch (error) {
       console.error('❌ OAuth initiation error:', error);
-      res.status(500).json({
-        error: 'Failed to initiate OAuth',
-        message: error.message
-      });
-    }
-  }
-        `client_id=${FB_APP_ID}&` +
-        `redirect_uri=${encodeURIComponent(FB_REDIRECT_URI)}&` +
-        `state=${state}&` +
-        `scope=${encodeURIComponent(scopes)}`;
-
-      console.log(`✅ OAuth URL generated`);
-
-      res.json({
-        success: true,
-        authUrl,
-        message: 'Redirect user to Facebook OAuth'
-      });
-    } catch (error) {
-      console.error('❌ Meta OAuth initiation error:', error);
       res.status(500).json({
         error: 'Failed to initiate OAuth',
         message: error.message
@@ -101,29 +68,23 @@ class MetaController {
     try {
       const { code, state, error, error_description } = req.query;
 
-      console.log(`\n📥 Meta OAuth callback received`);
-
       // Check for OAuth errors
       if (error) {
-        console.error(`❌ OAuth error: ${error} - ${error_description}`);
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         return res.redirect(`${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error_description || error)}`);
       }
 
-      // ✅ NEW: Validate session using secure session service
+      // Validate session using secure session service
       const session = await sessionService.getOAuthSession(state);
 
       if (!session) {
-        console.error('❌ Invalid or expired session state');
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         return res.redirect(`${frontendUrl}/onboarding?meta=error&message=Invalid or expired session`);
       }
 
       const { userId } = session;
-      console.log(`   User ID: ${userId}`);
 
       // Exchange code for access token
-      console.log(`🔄 Exchanging code for access token...`);
       const tokenResponse = await axios.get(
         `https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`,
         {
@@ -137,10 +98,8 @@ class MetaController {
       );
 
       const shortLivedToken = tokenResponse.data.access_token;
-      console.log(`✅ Short-lived token obtained`);
 
       // Exchange for long-lived token
-      console.log(`🔄 Exchanging for long-lived token...`);
       const longLivedResponse = await axios.get(
         `https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`,
         {
@@ -155,7 +114,6 @@ class MetaController {
 
       const accessToken = longLivedResponse.data.access_token;
       const expiresIn = longLivedResponse.data.expires_in;
-      console.log(`✅ Long-lived token obtained (expires in ${expiresIn}s)`);
 
       // Get user profile
       const profileResponse = await axios.get(
@@ -169,7 +127,6 @@ class MetaController {
       );
 
       const profile = profileResponse.data;
-      console.log(`✅ User profile: ${profile.name} (${profile.email})`);
 
       // Get ad accounts
       const adAccountsResponse = await axios.get(
@@ -183,15 +140,12 @@ class MetaController {
       );
 
       const adAccounts = adAccountsResponse.data.data || [];
-      console.log(`✅ Found ${adAccounts.length} ad account(s)`);
 
       // Save connection to database
       await saveConnection(userId, accessToken, profile, adAccounts, expiresIn);
 
-      // ✅ NEW: Clean up session after successful completion
+      // Clean up session after successful completion
       await sessionService.deleteOAuthSession(state);
-
-      console.log(`✅ Meta connection saved successfully\n`);
 
       // Redirect to frontend
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -212,11 +166,9 @@ class MetaController {
   async getConnection(req, res) {
     try {
       const userId = req.user.userId;
-      const merchantId = userId; // ✅ CHANGE: Use userId as merchantId
+      const merchantId = userId;
 
-      console.log(`🔍 Getting Meta connection for merchant: ${merchantId}`);
-
-      // ✅ CHANGE: Use new service to get integration
+      // Get integration using new service
       const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
@@ -237,8 +189,6 @@ class MetaController {
           message: 'No Meta connection found'
         });
       }
-
-      console.log(`✅ Meta connection found for merchant: ${merchantId}`);
 
       // Don't expose access token - return safe connection data
       const safeConnection = {
@@ -270,11 +220,8 @@ class MetaController {
   async selectAdAccount(req, res) {
     try {
       const userId = req.user.userId;
-      const merchantId = userId; // ✅ CHANGE: Use userId as merchantId
+      const merchantId = userId;
       const { adAccountId } = req.body;
-
-      console.log(`\n💾 Selecting ad account for merchant: ${merchantId}`);
-      console.log(`   Ad Account ID: ${adAccountId}`);
 
       if (!adAccountId) {
         return res.status(400).json({
@@ -282,7 +229,7 @@ class MetaController {
         });
       }
 
-      // ✅ CHANGE: Get existing integration using new service
+      // Get existing integration using new service
       const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
@@ -334,12 +281,9 @@ class MetaController {
         });
       }
 
-      console.log(`✅ Ad account selected successfully`);
-
       // Trigger Hybrid Sync (Fast Preview + Background Full History)
       const accessToken = metaIntegration.credentials?.accessToken;
       if (accessToken) {
-        // ✅ NEW: Decrypt access token before use
         try {
           let decryptedAccessToken;
           if (metaIntegration.credentials?.tokenEncrypted) {
@@ -349,12 +293,9 @@ class MetaController {
           }
           metaSyncService.startHybridSync(userId, `act_${adAccountId}`, decryptedAccessToken);
         } catch (decryptError) {
-          console.error('❌ Failed to decrypt token for sync:', decryptError.message);
           // Continue without sync - user can manually sync later
         }
       }
-
-      console.log(`✅ Meta setup completed\n`);
 
       res.json({
         success: true,
@@ -362,69 +303,8 @@ class MetaController {
         selectedAccount
       });
     } catch (error) {
-      console.error('❌ Select ad account error:', error);
       res.status(500).json({
         error: 'Failed to select ad account',
-        message: error.message
-      });
-    }
-  }
-
-  /**
-   * Manually sync 3 months data for existing connection
-   * @route POST /api/meta/sync-data
-   * @access Protected
-   */
-  async syncData(req, res) {
-    try {
-      const userId = req.user.userId;
-
-      console.log(`\n🔄 Manual data sync initiated for user: ${userId}`);
-
-      // Get connection from database
-      const command = new GetCommand({
-        TableName: META_CONNECTIONS_TABLE,
-        Key: { userId }
-      });
-
-      const result = await dynamoDB.send(command);
-
-      if (!result.Item) {
-        return res.status(404).json({
-          error: 'No Meta connection found. Please add Meta credentials to database first.'
-        });
-      }
-
-      const connection = result.Item;
-
-      if (!connection.accessToken) {
-        return res.status(400).json({
-          error: 'Access token not found in connection. Please update database with valid accessToken.'
-        });
-      }
-
-      if (!connection.adAccounts || connection.adAccounts.length === 0) {
-        return res.status(400).json({
-          error: 'No ad accounts found. Please update database with adAccounts array.'
-        });
-      }
-
-      console.log(`   Found ${connection.adAccounts.length} ad account(s)`);
-      console.log(`   📊 Fetching 3 months of insights data...`);
-
-      // Use the sync service to fetch 3 months data
-      const syncResult = await metaSyncService.fetch3MonthsData(userId);
-
-      res.json({
-        success: true,
-        message: '3 months of Meta insights data synced successfully',
-        ...syncResult
-      });
-
-    } catch (error) {
-      console.error('❌ Manual sync error:', error);
-      res.status(500).json({
-        error: 'Failed to sync data',
         message: error.message
       });
     }
@@ -438,17 +318,11 @@ class MetaController {
   async getAdAccountData(req, res) {
     try {
       const userId = req.user.userId;
-      const merchantId = userId; // ✅ CHANGE: Use userId as merchantId
+      const merchantId = userId;
       const { accountId } = req.params;
       const { startDate, endDate } = req.query;
 
-      console.log(`\n📊 Fetching ad account data for merchant: ${merchantId}`);
-      console.log(`   Account ID: ${accountId}`);
-      if (startDate && endDate) {
-        console.log(`   Date Range: ${startDate} to ${endDate}`);
-      }
-
-      // ✅ CHANGE: Get integration using new service
+      // Get integration using new service
       const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
@@ -477,25 +351,20 @@ class MetaController {
         });
       }
 
-      // ✅ NEW: Decrypt access token before use
+      // Decrypt access token before use
       let decryptedAccessToken;
       try {
         // Check if token is encrypted (new format) or plain text (legacy)
         if (metaIntegration.credentials?.tokenEncrypted) {
           decryptedAccessToken = encryptionService.decrypt(accessToken);
-          console.log(`🔓 Access token decrypted successfully`);
         } else {
           decryptedAccessToken = accessToken; // Legacy plain text token
-          console.log(`⚠️ Using legacy plain text token - should be re-encrypted`);
         }
       } catch (decryptError) {
-        console.error('❌ Failed to decrypt access token:', decryptError.message);
         return res.status(400).json({
           error: 'Invalid access token. Please reconnect your Meta account.'
         });
       }
-
-      console.log(`✅ Meta integration found, fetching insights...`);
 
       // Fetch ad account insights from Facebook API
       const adAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
@@ -527,16 +396,13 @@ class MetaController {
 
       const insights = insightsResponse.data.data[0] || {};
 
-      console.log(`✅ Ad account data fetched successfully\n`);
-
       res.json({
         success: true,
         accountId,
         insights,
-        currency: selectedAccount?.currency || 'USD' // ✅ FIXED: Use selectedAccount
+        currency: selectedAccount?.currency || 'USD'
       });
     } catch (error) {
-      console.error('❌ Get ad account data error:', error);
       res.status(500).json({
         error: 'Failed to fetch ad account data',
         message: error.message
@@ -547,14 +413,11 @@ class MetaController {
 }
 
 /**
- * Save Meta connection to database (standalone function)
- * ✅ UPDATED: Use new unified table structure with encrypted tokens
+ * Save Meta connection to database with encrypted tokens
  */
 async function saveConnection(userId, accessToken, profile, adAccounts, expiresIn) {
-  const merchantId = userId; // ✅ CHANGE: Use userId as merchantId
+  const merchantId = userId;
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-  console.log(`💾 Saving Meta connection for merchant: ${merchantId}`);
 
   // Check for existing integration to preserve user preferences
   let existingCredentials = {};
@@ -566,29 +429,26 @@ async function saveConnection(userId, accessToken, profile, adAccounts, expiresI
       );
       if (metaIntegration) {
         existingCredentials = metaIntegration.credentials || {};
-        console.log(`📋 Found existing Meta integration, preserving settings`);
       }
     }
   } catch (err) {
-    console.warn('⚠️ Could not fetch existing Meta integration:', err.message);
+    // Continue without existing credentials
   }
 
-  // ✅ NEW: Encrypt the access token before storing
+  // Encrypt the access token before storing
   let encryptedAccessToken;
   try {
     encryptedAccessToken = encryptionService.encrypt(accessToken);
-    console.log(`🔐 Access token encrypted successfully`);
   } catch (encryptError) {
-    console.error('❌ Failed to encrypt access token:', encryptError.message);
     throw new Error('Failed to secure access token');
   }
 
-  // ✅ CHANGE: Use new createIntegration method
+  // Use new createIntegration method
   const integrationData = {
     merchantId: merchantId,
     platform: 'meta',
     credentials: {
-      accessToken: encryptedAccessToken, // ✅ NEW: Store encrypted token
+      accessToken: encryptedAccessToken, // Store encrypted token
       facebookId: profile.id,
       profileName: profile.name,
       profileId: profile.id,
@@ -605,7 +465,7 @@ async function saveConnection(userId, accessToken, profile, adAccounts, expiresI
       selectedAdAccountId: existingCredentials.selectedAdAccountId,
       selectedAdAccount: existingCredentials.selectedAdAccount,
       lastSyncAt: existingCredentials.lastSyncAt,
-      // ✅ NEW: Add security metadata
+      // Add security metadata
       tokenEncrypted: true,
       tokenCreatedAt: new Date().toISOString()
     }
@@ -616,8 +476,6 @@ async function saveConnection(userId, accessToken, profile, adAccounts, expiresI
   if (!result.success) {
     throw new Error(`Failed to save Meta integration: ${result.error}`);
   }
-
-  console.log(`✅ Meta integration saved successfully with encrypted token`);
 }
 
 module.exports = new MetaController();

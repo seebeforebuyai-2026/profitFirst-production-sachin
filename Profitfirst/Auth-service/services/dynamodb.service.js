@@ -717,7 +717,6 @@ class DynamoDBService {
       });
 
       await newDynamoDB.send(command);
-      console.log(`✅ Integration created: ${integrationData.platform} for merchant ${integrationData.merchantId}`);
       return { success: true, data: integration };
     } catch (error) {
       console.error('newDynamoDB createIntegration error:', error);
@@ -753,7 +752,6 @@ class DynamoDBService {
       });
 
       await newDynamoDB.send(command);
-      console.log(`✅ Product created: ${productData.productName} for merchant ${productData.merchantId}`);
       return { success: true, data: product };
     } catch (error) {
       console.error('newDynamoDB createProduct error:', error);
@@ -795,7 +793,6 @@ class DynamoDBService {
       });
 
       await newDynamoDB.send(command);
-      console.log(`✅ Variant created: ${variantData.variantName} (${variantData.variantId}) for product ${variantData.productId}`);
       return { success: true, data: variant };
     } catch (error) {
       console.error('newDynamoDB createVariant error:', error);
@@ -935,7 +932,6 @@ class DynamoDBService {
       });
 
       const result = await newDynamoDB.send(command);
-      console.log(`✅ Integration updated: ${platform} for merchant ${merchantId}`);
       return { success: true, data: result.Attributes };
     } catch (error) {
       console.error('newDynamoDB updateIntegration error:', error);
@@ -952,20 +948,15 @@ class DynamoDBService {
   async createUserProfile(userData) {
     try {
       const userId = userData.userId || uuidv4();
-      const merchantId = userId; // ✅ CRITICAL FIX: Always use userId as merchantId
+      const merchantId = userId; // Always use userId as merchantId
       const timestamp = new Date().toISOString();
       const isVerified = userData.isVerified || false;
 
-      console.log(`🔧 Creating user profile:`);
-      console.log(`   userId: ${userId}`);
-      console.log(`   merchantId: ${merchantId}`);
-      console.log(`   email: ${userData.email}`);
-
       const user = {
-        PK: PK_PATTERNS.MERCHANT(merchantId), // ✅ Always use merchantId (which is userId)
-        SK: 'PROFILE', // ✅ Changed from USER# to PROFILE
+        PK: PK_PATTERNS.MERCHANT(merchantId), // Always use merchantId (which is userId)
+        SK: 'PROFILE', // Changed from USER# to PROFILE
         entityType: 'PROFILE',
-        merchantId: merchantId, // ✅ Store merchantId consistently
+        merchantId: merchantId, // Store merchantId consistently
         userId: userId,
         email: userData.email,
         firstName: userData.firstName,
@@ -979,8 +970,6 @@ class DynamoDBService {
         lastLogin: null
       };
 
-      console.log(`📝 Creating record with PK: ${user.PK}, SK: ${user.SK}`);
-
       const command = new PutCommand({
         TableName: newTableName,
         Item: user,
@@ -988,7 +977,6 @@ class DynamoDBService {
       });
 
       await newDynamoDB.send(command);
-      console.log(`✅ User profile created successfully`);
       return { success: true, data: user };
     } catch (error) {
       console.error('newDynamoDB createUserProfile error:', error);
@@ -1036,8 +1024,6 @@ class DynamoDBService {
    */
   async updateUserProfileOnboarding(merchantId, updates) {
     try {
-      console.log(`🔧 Original updates:`, updates);
-
       // Filter out undefined values
       const validUpdates = {};
       Object.keys(updates).forEach(key => {
@@ -1045,8 +1031,6 @@ class DynamoDBService {
           validUpdates[key] = updates[key];
         }
       });
-
-      console.log(`🔧 Valid updates (filtered):`, validUpdates);
 
       if (Object.keys(validUpdates).length === 0) {
         return { success: false, error: 'No valid updates provided' };
@@ -1071,12 +1055,6 @@ class DynamoDBService {
 
       // Add updatedAt
       updateExpressions.push('updatedAt = :updatedAt');
-
-      console.log(`🔧 Final Update Expression:`, {
-        updateExpressions,
-        expressionAttributeNames,
-        expressionAttributeValues
-      });
 
       const command = new UpdateCommand({
         TableName: newTableName,

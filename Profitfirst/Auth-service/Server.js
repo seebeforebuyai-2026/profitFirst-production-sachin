@@ -105,8 +105,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
 
-// In development, allow all origins for easier testing
-// In production, restrict to specific origins
+// CORS configuration
 const corsOptions = isProduction ? {
   origin: function(origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, curl)
@@ -202,7 +201,6 @@ app.get('/', (req, res) => {
 
 // Request logging middleware
 app.use((req, _res, next) => {
-  const logLevel = isProduction ? 'info' : 'debug';
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] ${req.method} ${req.path} - IP: ${req.ip}`;
   
@@ -315,42 +313,25 @@ app.use((err, req, res, _next) => {
 
 // Start server
 const server = app.listen(PORT, async () => {
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`🚀 SERVER STARTED`);
-  console.log(`${'='.repeat(60)}`);
-  console.log(`✅ Server: port ${PORT}`);
+  console.log(`🚀 ProfitFirst Server Started`);
+  console.log(`✅ Port: ${PORT}`);
   console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health: http://localhost:${PORT}/health`);
-  console.log(`\n💾 DATABASE CONFIGURATION`);
-  console.log(`   Region: ${process.env.AWS_REGION || 'ap-south-1'} (Cognito)`);
-  console.log(`   Region: ap-southeast-1 (Singapore - New Database)`);
-  console.log(`   Table: ${process.env.NEW_DYNAMODB_TABLE_NAME || 'ProfitFirst_Core'}`);
-  console.log(`   Status: Connected ✅`);
-  console.log(`\n🔗 ROUTES REGISTERED`);
-  console.log(`   /api/auth/* - Authentication`);
-  console.log(`   /api/onboard/* - Onboarding`);
-  console.log(`   /api/shopify/* - Shopify OAuth`);
-  console.log(`   /api/meta/* - Meta Ads OAuth`);
-  console.log(`   /api/shipping/* - Shipping Connection`);
-  console.log(`   /api/user/* - User Profile`);
-  console.log(`\n⚠️  NO SYNC SCHEDULER RUNNING`);
-  console.log(`   Data processing will be added in next phase`);
-  console.log(`${'='.repeat(60)}\n`);
+  console.log(`💾 Database: Singapore (ap-southeast-1)`);
+  console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
 });
 
 // Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
-  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  console.log(`${signal} received. Shutting down gracefully...`);
   
   server.close(() => {
-    console.log('✅ HTTP server closed');
-    console.log('👋 Process terminated gracefully');
+    console.log('Server closed');
     process.exit(0);
   });
 
   // Force shutdown after 10 seconds
   setTimeout(() => {
-    console.error('⚠️  Forced shutdown after timeout');
+    console.error('Forced shutdown after timeout');
     process.exit(1);
   }, 10000);
 };
@@ -361,12 +342,12 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   gracefulShutdown('UNHANDLED_REJECTION');
 });
 

@@ -45,7 +45,6 @@ class SessionService {
 
       await newDynamoDB.send(command);
       
-      console.log(`✅ OAuth session created: ${state.substring(0, 8)}... for user ${userId}`);
       return state;
     } catch (error) {
       console.error('Create OAuth session error:', error);
@@ -76,7 +75,6 @@ class SessionService {
       const result = await newDynamoDB.send(command);
       
       if (!result.Item) {
-        console.log(`⚠️ OAuth session not found: ${state.substring(0, 8)}...`);
         return null;
       }
 
@@ -85,13 +83,11 @@ class SessionService {
       
       // Check if session is expired
       if (session.expiresAt < now) {
-        console.log(`⚠️ OAuth session expired: ${state.substring(0, 8)}...`);
         // Clean up expired session
         await this.deleteOAuthSession(state);
         return null;
       }
 
-      console.log(`✅ OAuth session found: ${state.substring(0, 8)}... for user ${session.userId}`);
       return {
         userId: session.userId,
         platform: session.platform,
@@ -121,7 +117,6 @@ class SessionService {
       });
 
       await newDynamoDB.send(command);
-      console.log(`🗑️ OAuth session deleted: ${state.substring(0, 8)}...`);
     } catch (error) {
       console.error('Delete OAuth session error:', error);
       // Don't throw - session cleanup is not critical
@@ -133,7 +128,6 @@ class SessionService {
    * Note: DynamoDB TTL will automatically delete expired items
    */
   async cleanupExpiredSessions() {
-    console.log('🧹 DynamoDB TTL will automatically clean up expired sessions');
     // DynamoDB TTL handles this automatically
   }
 }

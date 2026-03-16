@@ -81,9 +81,6 @@ class OnboardingService {
    */
   async updateStep1BusinessInfo(merchantId, businessData) {
     try {
-      console.log(`📝 Step 1: Updating business info for merchant: ${merchantId}`);
-      console.log(`📋 Received business data:`, businessData);
-
       // Build updates object with only defined values
       const updates = {
         onboardingStep: 2,
@@ -109,16 +106,11 @@ class OnboardingService {
       if (businessData.whatsapp) updates.whatsapp = businessData.whatsapp;
       if (businessData.referral) updates.referral = businessData.referral;
 
-      console.log(`📋 Updates to be sent:`, updates);
-
       const result = await dynamodbService.updateUserProfileOnboarding(merchantId, updates);
       
       if (!result.success) {
-        console.error(`❌ Step 1 failed:`, result.error);
         return { success: false, error: result.error };
       }
-      
-      console.log(`✅ Step 1 completed: Business info saved`);
 
       return {
         success: true,
@@ -135,7 +127,6 @@ class OnboardingService {
         }
       };
     } catch (error) {
-      console.error(`❌ Step 1 error:`, error.message);
       return { success: false, error: error.message };
     }
   }
@@ -152,10 +143,6 @@ class OnboardingService {
    */
   async updateStep2ShopifyIntegration(merchantId, shopifyData) {
     try {
-      console.log(`📝 Step 2: Processing Shopify integration for merchant: ${merchantId}`);
-      console.log(`🔗 Shopify store: ${shopifyData.shopifyStore}`);
-      console.log(`🔧 Mode: ${shopifyData.installationMode || 'external'}`);
-
       // Validate required fields
       if (!shopifyData.shopifyStore) {
         return { 
@@ -167,32 +154,23 @@ class OnboardingService {
       // Validate Shopify URL format
       const isValidUrl = this.isValidShopifyUrl(shopifyData.shopifyStore);
       if (!isValidUrl) {
-        console.log(`❌ Invalid Shopify URL format: ${shopifyData.shopifyStore}`);
         return { 
           success: false, 
           error: 'Invalid Shopify URL format. Must be: yourstore.myshopify.com' 
         };
       }
 
-      console.log(`✅ Shopify URL format is valid`);
-
       // If we have an access token, verify and save it
       if (shopifyData.accessToken) {
-        console.log(`🔑 Access token provided, verifying...`);
-        
         // Test credentials with Shopify API
         const credentialsTest = await this.testShopifyCredentials(shopifyData);
         
         if (!credentialsTest.success) {
-          console.log(`❌ Shopify credentials test failed: ${credentialsTest.error}`);
           return { 
             success: false, 
             error: `Shopify connection failed: ${credentialsTest.error}` 
           };
         }
-
-        console.log(`✅ Shopify credentials are valid`);
-        console.log(`📊 Shop info: ${credentialsTest.shopInfo.name} (${credentialsTest.shopInfo.domain})`);
 
         // Save integration record
         const integrationResult = await dynamodbService.createIntegration({
@@ -212,7 +190,6 @@ class OnboardingService {
         });
 
         if (!integrationResult.success) {
-          console.log(`❌ Failed to save integration: ${integrationResult.error}`);
           return { success: false, error: integrationResult.error };
         }
 
@@ -223,8 +200,6 @@ class OnboardingService {
         };
 
         await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-        
-        console.log(`✅ Step 2 completed: Shopify integration created and tested`);
 
         return {
           success: true,
@@ -239,7 +214,6 @@ class OnboardingService {
         };
       } else {
         // No access token provided - this is just a validation request
-        console.log(`📋 No access token provided - validation only`);
         return {
           success: true,
           data: {
@@ -251,7 +225,6 @@ class OnboardingService {
         };
       }
     } catch (error) {
-      console.error(`❌ Step 2 error:`, error.message);
       return { success: false, error: error.message };
     }
   }
@@ -289,8 +262,6 @@ class OnboardingService {
       // Clean URL (remove protocol if present)
       const cleanStore = shopifyData.shopifyStore.replace(/^https?:\/\//, '');
       const shopifyUrl = `https://${cleanStore}/admin/api/2023-10/shop.json`;
-      
-      console.log(`🔗 Testing Shopify API: ${shopifyUrl}`);
 
       const response = await axios.get(shopifyUrl, {
         headers: {
@@ -323,8 +294,6 @@ class OnboardingService {
         };
       }
     } catch (error) {
-      console.error(`🔥 Shopify API test error:`, error.message);
-      
       if (error.response) {
         const status = error.response.status;
         const statusText = error.response.statusText;
@@ -384,8 +353,6 @@ class OnboardingService {
    */
   async updateStep3MetaIntegration(merchantId, metaData) {
     try {
-      console.log(`📝 Step 3: Connecting Meta Ads for merchant: ${merchantId}`);
-
       // Create Meta integration record
       const integrationResult = await dynamodbService.createIntegration({
         merchantId: merchantId,
@@ -407,8 +374,6 @@ class OnboardingService {
       };
 
       await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-      
-      console.log(`✅ Step 3 completed: Meta Ads integration created`);
 
       return {
         success: true,
@@ -418,7 +383,6 @@ class OnboardingService {
         }
       };
     } catch (error) {
-      console.error(`❌ Step 3 error:`, error.message);
       return { success: false, error: error.message };
     }
   }
@@ -432,8 +396,6 @@ class OnboardingService {
    */
   async updateStep4ShiprocketIntegration(merchantId, shiprocketData) {
     try {
-      console.log(`📝 Step 4: Connecting Shiprocket for merchant: ${merchantId}`);
-
       // Create Shiprocket integration record
       const integrationResult = await dynamodbService.createIntegration({
         merchantId: merchantId,
@@ -455,8 +417,6 @@ class OnboardingService {
       };
 
       await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-      
-      console.log(`✅ Step 4 completed: Shiprocket integration created`);
 
       return {
         success: true,
@@ -466,7 +426,6 @@ class OnboardingService {
         }
       };
     } catch (error) {
-      console.error(`❌ Step 4 error:`, error.message);
       return { success: false, error: error.message };
     }
   }
@@ -480,8 +439,6 @@ class OnboardingService {
    */
   async updateStep5ProductCOGS(merchantId, productData) {
     try {
-      console.log(`📝 Step 5: Adding product COGS for merchant: ${merchantId}`);
-
       const results = {
         products: [],
         variants: []
@@ -525,8 +482,6 @@ class OnboardingService {
       };
 
       await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-      
-      console.log(`✅ Step 5 completed: Product and ${results.variants.length} variants created`);
 
       return {
         success: true,
@@ -537,7 +492,6 @@ class OnboardingService {
         }
       };
     } catch (error) {
-      console.error(`❌ Step 5 error:`, error.message);
       return { success: false, error: error.message };
     }
   }
