@@ -209,7 +209,7 @@ class AuthController {
           if (resendResult.success) {
             console.log(`✅ OTP resent, creating DynamoDB record...`);
             
-            // Create user in DynamoDB to sync
+            // Create user in DynamoDB to sync (without userId - will be temporary)
             const dbResult = await dynamoDBService.createUserProfile({
               email: normalizedEmail,
               firstName: sanitizedFirstName,
@@ -242,7 +242,7 @@ class AuthController {
 
       console.log(`✅ User created in Cognito, creating DynamoDB record...`);
 
-      // Store user in DynamoDB
+      // Store user in DynamoDB (without userId - will be temporary until first login)
       const dbResult = await dynamoDBService.createUserProfile({
         email: normalizedEmail,
         firstName: sanitizedFirstName,
@@ -462,7 +462,9 @@ class AuthController {
 
       // Get user details from DynamoDB using email
       let userResult = await dynamoDBService.getUserByEmail(normalizedEmail);
-      const cognitoUserId = cognitoUserDetails.data.Username; // ✅ Get Cognito ID
+      const cognitoUserId = cognitoUserDetails.data.Username; // Get Cognito ID
+
+      console.log(`🔑 Cognito User ID: ${cognitoUserId}`);
 
       // If user not found in DynamoDB but exists in Cognito, create them with Cognito ID
       if (!userResult.success) {
@@ -475,11 +477,9 @@ class AuthController {
           const lastName = userAttributes.find(attr => attr.Name === 'family_name')?.Value || '';
           const emailVerified = userAttributes.find(attr => attr.Name === 'email_verified')?.Value === 'true';
           
-          console.log(`🔑 Using Cognito ID as merchantId: ${cognitoUserId}`);
-          
-          // Create user in DynamoDB using Cognito ID
+          // CRITICAL: Always use Cognito ID as userId
           const createResult = await dynamoDBService.createUserProfile({
-            userId: cognitoUserId, // ✅ CRITICAL FIX: Use Cognito sub as userId
+            userId: cognitoUserId, // MUST be Cognito sub
             email: normalizedEmail,
             firstName: firstName,
             lastName: lastName,
@@ -495,40 +495,25 @@ class AuthController {
             return res.status(500).json({ error: 'Failed to create user record. Please contact support.' });
           }
         } else {
-          console.log(`❌ Failed to get user details from Cognito: ${cognitoUserDetails.error}`);
           return res.status(500).json({ error: 'Failed to retrieve user information. Please contact support.' });
         }
       } else {
-        // ✅ CRITICAL FIX: Check if existing user has wrong ID (not Cognito ID)
+        // User exists in DynamoDB - check if migration is needed
         if (userResult.data.userId !== cognitoUserId) {
-          console.log(`🔧 MIGRATION NEEDED: User has old UUID (${userResult.data.userId}) instead of Cognito ID (${cognitoUserId})`);
-          console.log(`🔄 Creating new record with Cognito ID and marking old one for cleanup...`);
+          console.log(`🔄 User needs migration from ${userResult.data.userId} to ${cognitoUserId}`);
           
-          // Create new record with Cognito ID
-          const migrateResult = await dynamoDBService.createUserProfile({
-            userId: cognitoUserId, // ✅ Use Cognito ID
-            email: normalizedEmail,
-            firstName: userResult.data.firstName,
-            lastName: userResult.data.lastName,
-            authProvider: 'cognito',
-            isVerified: userResult.data.isVerified,
-            onboardingCompleted: userResult.data.onboardingCompleted,
-            onboardingStep: userResult.data.onboardingStep,
-            // Copy any other important data
-            businessName: userResult.data.businessName,
-            businessType: userResult.data.businessType,
-            phone: userResult.data.phone,
-            whatsapp: userResult.data.whatsapp
-          });
+          const migrationResult = await dynamoDBService.migrateTemporaryUser(normalizedEmail, cognitoUserId);
           
-          if (migrateResult.success) {
-            console.log(`✅ User migrated to Cognito ID: ${cognitoUserId}`);
-            console.log(`⚠️  Old record (${userResult.data.userId}) should be cleaned up later`);
-            userResult = migrateResult; // Use the new record
+          if (migrationResult.success) {
+            if (migrationResult.migrated) {
+              console.log(`✅ User successfully migrated to Cognito ID`);
+            } else {
+              console.log(`✅ User already has correct Cognito ID`);
+            }
+            userResult = migrationResult;
           } else {
-            console.log(`❌ Migration failed: ${migrateResult.error}`);
-            // Continue with old record for now, but log the issue
-            console.log(`⚠️  Continuing with old record, but this should be fixed`);
+            console.log(`❌ Migration failed: ${migrationResult.error}`);
+            return res.status(500).json({ error: 'Failed to update user record. Please contact support.' });
           }
         }
       }

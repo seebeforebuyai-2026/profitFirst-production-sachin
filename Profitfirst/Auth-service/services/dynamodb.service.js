@@ -11,7 +11,6 @@
 
 const { PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 const { newDynamoDB, newTableName } = require('../config/aws.config');
-const { v4: uuidv4 } = require('uuid');
 const { ENTITY_TYPES, PK_PATTERNS, SK_PATTERNS } = require('../config/dynamodb.schema');
 
 class DynamoDBService {
@@ -23,7 +22,12 @@ class DynamoDBService {
    */
   async createUser(userData) {
     try {
-      const userId = userData.userId || uuidv4();
+      // CRITICAL: Never generate new UUID - always require userId to be passed
+      if (!userData.userId) {
+        throw new Error('userId is required - cannot create user without Cognito user ID');
+      }
+      
+      const userId = userData.userId; // Must be Cognito sub
       const timestamp = new Date().toISOString();
       const isVerified = userData.isVerified || false;
 
@@ -947,8 +951,22 @@ class DynamoDBService {
    */
   async createUserProfile(userData) {
     try {
-      const userId = userData.userId || uuidv4();
-      const merchantId = userId; // Always use userId as merchantId
+      // For signup: userId might not be available yet (user not confirmed)
+      // For login: userId must be provided (Cognito sub)
+      let userId;
+      let merchantId;
+      
+      if (userData.userId) {
+        // Login case: Use Cognito sub
+        userId = userData.userId;
+        merchantId = userId;
+      } else {
+        // Signup case: Create temporary ID, will be updated on first login
+        userId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        merchantId = userId;
+        console.log(`⚠️  Creating temporary user ID for signup: ${userId}`);
+      }
+      
       const timestamp = new Date().toISOString();
       const isVerified = userData.isVerified || false;
 
@@ -1102,6 +1120,73 @@ class DynamoDBService {
       return { success: true, data: result.Attributes };
     } catch (error) {
       console.error('newDynamoDB updateLastLogin error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Migrate temporary user to Cognito ID
+   * 
+   * @param {string} email - User's email
+   * @param {string} cognitoUserId - Cognito user ID (sub)
+   * @returns {Object} Success status and user data/error
+   */
+  async migrateTemporaryUser(email, cognitoUserId) {
+    try {
+      // Find user by email
+      const userResult = await this.getUserByEmail(email);
+      
+      if (!userResult.success) {
+        return { success: false, error: 'User not found' };
+      }
+      
+      const oldUser = userResult.data;
+      
+      // If user already has correct Cognito ID, no migration needed
+      if (oldUser.userId === cognitoUserId) {
+        return { success: true, data: oldUser, migrated: false };
+      }
+      
+      console.log(`🔄 Migrating user from ${oldUser.userId} to ${cognitoUserId}`);
+      
+      // Create new record with Cognito ID
+      const newUser = {
+        PK: PK_PATTERNS.MERCHANT(cognitoUserId),
+        SK: 'PROFILE',
+        entityType: 'PROFILE',
+        merchantId: cognitoUserId,
+        userId: cognitoUserId,
+        email: oldUser.email,
+        firstName: oldUser.firstName,
+        lastName: oldUser.lastName,
+        authProvider: oldUser.authProvider,
+        isVerified: oldUser.isVerified,
+        onboardingCompleted: oldUser.onboardingCompleted,
+        onboardingStep: oldUser.onboardingStep,
+        businessName: oldUser.businessName,
+        businessType: oldUser.businessType,
+        phone: oldUser.phone,
+        whatsapp: oldUser.whatsapp,
+        createdAt: oldUser.createdAt,
+        updatedAt: new Date().toISOString(),
+        lastLogin: null
+      };
+      
+      const command = new PutCommand({
+        TableName: newTableName,
+        Item: newUser
+      });
+      
+      await newDynamoDB.send(command);
+      
+      // Delete old record
+      await this.deleteUser(oldUser.merchantId, oldUser.userId);
+      
+      console.log(`✅ User migrated successfully to Cognito ID: ${cognitoUserId}`);
+      
+      return { success: true, data: newUser, migrated: true };
+    } catch (error) {
+      console.error('Migrate temporary user error:', error);
       return { success: false, error: error.message };
     }
   }
