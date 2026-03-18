@@ -294,58 +294,54 @@ class OnboardingController {
       res.redirect(errorUrl);
     }
   }
-  async connectShipping(req, res) {
+ async connectShipping(req, res) {
     try {
-      const userId = req.user.userId;
-      const merchantId = userId;
+      const merchantId = req.user.userId;
       const { platform, email, password, access_token, secret_key } = req.body;
 
-      console.log(`\n🚚 Step 5: Connecting ${platform} for merchant: ${merchantId}`);
+      console.log(`\n🚚 Step 4: Connecting ${platform} for merchant: ${merchantId}`);
 
-      // Prepare shipping data based on platform
-      let shiprocketData = {};
-      
-      if (platform === 'Shiprocket') {
-        if (!email || !password) {
-          return res.status(400).json({
-            error: 'Missing required fields',
-            message: 'Email and password are required for Shiprocket'
-          });
-        }
-        
-        // TODO: Validate credentials with Shiprocket API first
-        // For now, we'll store the credentials and assume they're valid
-        shiprocketData = {
-          email: email,
-          token: `shiprocket_token_${Date.now()}` // TODO: Get real token from API
-        };
-      } else {
+      if (platform !== 'Shiprocket') {
         return res.status(400).json({
           error: 'Unsupported platform',
           message: `Platform ${platform} is not supported yet`
         });
       }
 
-      // Use onboarding service to create integration
+      // 1. Validate React sent the fields
+      if (!email || !password) {
+        return res.status(400).json({
+          error: 'Missing required fields',
+          message: 'Email and password are required for Shiprocket'
+        });
+      }
+        
+      // 2. Prepare data for our Service
+      const shiprocketData = {
+        email: email,
+        password: password
+      };
+
+      // 3. Let the Service handle the API call, token generation, and encryption!
       const result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, shiprocketData);
 
       if (!result.success) {
-        return res.status(400).json({ error: result.error });
+        // This will catch the "Invalid credentials" error from the service
+        return res.status(400).json({ message: result.error });
       }
 
       console.log(`✅ ${platform} connected successfully via Onboarding Step 4`);
 
-      res.json({
+      res.status(200).json({
         success: true,
         message: `${platform} connected successfully`,
         platform: platform,
         currentStep: result.data.currentStep,
-        isCompleted: result.data.isCompleted,
         data: result.data
       });
 
     } catch (error) {
-      console.error('❌ Step 5 shipping connection error:', error.message);
+      console.error('❌ Step 4 shipping connection error:', error.message);
       res.status(500).json({
         error: 'Failed to connect shipping platform',
         message: error.message
