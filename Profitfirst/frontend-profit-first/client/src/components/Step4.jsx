@@ -31,7 +31,7 @@ const Step4 = ({ onComplete }) => {
           break;
         case "Shipway":
           payload.email = formData.email;
-          payload.password = formData.password; // Backend knows this is the license key
+          payload.password = formData.password; 
           break;
         case "Dilevery":
           payload.access_token = formData.access_token;
@@ -44,34 +44,27 @@ const Step4 = ({ onComplete }) => {
           break;
       }
 
-      // Step 1: Connect shipping account
+      // Step 1: Connect shipping account securely (This does EVERYTHING)
       await axiosInstance.post("/onboard/step4", payload);
       toast.success("✅ Shipping account connected!", { autoClose: 1500 });
       
-      // Step 2: Update onboarding step
-      await axiosInstance.post("/onboard/step", {
-        step: 4,
-        data: {
-          platform: platform,
-          completedAt: new Date().toISOString()
-        }
-      });
+      // 🚨 WE DELETED THE SECOND API CALL HERE! 🚨
+      // The backend already updated the profile to step 5.
       
-      // Step 4: Smooth transition to dashboard
+      // Step 2: Smooth transition to Next Step (COGS)
       setTimeout(() => {
         toast.success("🎉 Integration saved! Moving to Next Step...", { autoClose: 1500 });
         setTimeout(() => onComplete(), 1000);
       }, 1500);
       
     } catch (err) {
-      const errorMessage = err.response?.data?.message || "Failed to connect shipping account.";
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || "Failed to connect shipping account.";
       toast.error(errorMessage);
       console.error("Submission error:", err.response || err);
     } finally {
       setLoading(false);
     }
   };
-
   const renderFields = () => {
     switch (platform) {
       case "Shiprocket":
