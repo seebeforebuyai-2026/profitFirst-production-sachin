@@ -116,3 +116,6 @@ shiprocketPassword: [Encrypted] (Crucial for generating new tokens later)
 accessToken: [Encrypted]
 issuedAt: The date you got the token.
 expiresAt: 2026-03-26T... (Current date + 9 days)
+
+
+ENCRYPTION_KEY=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
