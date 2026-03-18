@@ -949,61 +949,51 @@ class DynamoDBService {
    * @param {Object} userData - User information
    * @returns {Object} Success status and user data/error
    */
-  async createUserProfile(userData) {
-    try {
-      // For signup: userId might not be available yet (user not confirmed)
-      // For login: userId must be provided (Cognito sub)
-      let userId;
-      let merchantId;
-      
-      if (userData.userId) {
-        // Login case: Use Cognito sub
-        userId = userData.userId;
-        merchantId = userId;
-      } else {
-        // Signup case: Create temporary ID, will be updated on first login
-        userId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        merchantId = userId;
-        console.log(`⚠️  Creating temporary user ID for signup: ${userId}`);
-      }
-      
-      const timestamp = new Date().toISOString();
-      const isVerified = userData.isVerified || false;
-
-      const user = {
-        PK: PK_PATTERNS.MERCHANT(merchantId), // Always use merchantId (which is userId)
-        SK: 'PROFILE', // Changed from USER# to PROFILE
-        entityType: 'PROFILE',
-        merchantId: merchantId, // Store merchantId consistently
-        userId: userId,
-        email: userData.email,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
+async createUserProfile(userData) {
+  try {
+    if (!userData.userId) {
+      console.error("CRITICAL: Cannot create DynamoDB profile without a valid Cognito userId.");
+      return { success: false, error: "Missing Cognito user ID" };
+    }
+    
+    const merchantId = userData.userId;
+    const timestamp = new Date().toISOString();
+    
+    const params = {
+      TableName: this.tableName,
+      Item: {
+        PK: `MERCHANT#${merchantId}`,
+        SK: `PROFILE`,
+        entityType: "PROFILE",
+        merchantId: merchantId,
+        userId: merchantId,
+        email: userData.email || '',
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
         authProvider: userData.authProvider || 'cognito',
-        isVerified: isVerified,
-        onboardingCompleted: userData.onboardingCompleted || false,
-        onboardingStep: userData.onboardingStep || 1,
+        isVerified: userData.isVerified || false,
+        onboardingCompleted: false,
+        onboardingStep: 1,
         createdAt: timestamp,
-        updatedAt: timestamp,
-        lastLogin: null
-      };
-
-      const command = new PutCommand({
-        TableName: newTableName,
-        Item: user,
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
-      });
-
-      await newDynamoDB.send(command);
-      return { success: true, data: user };
+        updatedAt: timestamp
+      },
+      ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+    };
+    
+    try {
+      await this.docClient.send(new PutCommand(params));
+      return { success: true, data: { merchantId, userId: merchantId } };
     } catch (error) {
-      console.error('newDynamoDB createUserProfile error:', error);
       if (error.name === 'ConditionalCheckFailedException') {
-        return { success: false, error: 'User profile already exists' };
+        console.log(`ℹ️  User profile already exists for ${merchantId}`);
+        return { success: true, data: { merchantId, userId: merchantId } };
       }
       return { success: false, error: error.message };
     }
+  } catch (error) {
+    return { success: false, error: error.message };
   }
+}
 
   /**
    * Get User Profile (using PROFILE SK)

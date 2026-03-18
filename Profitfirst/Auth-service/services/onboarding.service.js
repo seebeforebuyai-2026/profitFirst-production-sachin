@@ -13,6 +13,7 @@
  */
 
 const dynamodbService = require('./dynamodb.service');
+const encryptionService = require('../utils/encryption.js');
 
 class OnboardingService {
   /**
@@ -172,11 +173,14 @@ class OnboardingService {
           };
         }
 
-        // Save integration record
-        const integrationResult = await dynamodbService.createIntegration({
-          merchantId: merchantId,
-          platform: 'shopify',
-          credentials: {
+        // Check if integration already exists
+        const existingIntegration = await dynamodbService.getIntegrationStatus(merchantId, 'shopify');
+        
+        let integrationResult;
+        if (existingIntegration.success) {
+          // Update existing integration (reconnection case)
+          console.log(`🔄 Shopify integration exists, updating for merchant: ${merchantId}`);
+          integrationResult = await dynamodbService.updateIntegration(merchantId, 'shopify', {
             shopifyStore: shopifyData.shopifyStore,
             accessToken: shopifyData.accessToken, // TODO: Encrypt this
             shopName: credentialsTest.shopInfo.name,
@@ -185,9 +189,28 @@ class OnboardingService {
             currency: credentialsTest.shopInfo.currency,
             timezone: credentialsTest.shopInfo.timezone,
             testedAt: new Date().toISOString(),
-            connectedVia: 'external_oauth' // Track how it was connected
-          }
-        });
+            connectedVia: 'external_oauth',
+            status: 'active'
+          });
+        } else {
+          // Create new integration
+          console.log(`➕ Creating new Shopify integration for merchant: ${merchantId}`);
+          integrationResult = await dynamodbService.createIntegration({
+            merchantId: merchantId,
+            platform: 'shopify',
+            credentials: {
+              shopifyStore: shopifyData.shopifyStore,
+              accessToken: shopifyData.accessToken, // TODO: Encrypt this
+              shopName: credentialsTest.shopInfo.name,
+              shopDomain: credentialsTest.shopInfo.domain,
+              shopEmail: credentialsTest.shopInfo.email,
+              currency: credentialsTest.shopInfo.currency,
+              timezone: credentialsTest.shopInfo.timezone,
+              testedAt: new Date().toISOString(),
+              connectedVia: 'external_oauth'
+            }
+          });
+        }
 
         if (!integrationResult.success) {
           return { success: false, error: integrationResult.error };
@@ -351,42 +374,50 @@ class OnboardingService {
    * @param {Object} metaData - Meta Ads credentials
    * @returns {Object} Success status
    */
-  async updateStep3MetaIntegration(merchantId, metaData) {
-    try {
-      // Create Meta integration record
-      const integrationResult = await dynamodbService.createIntegration({
+async updateStep3MetaIntegration(merchantId, metaData) {
+  try {
+    const existingIntegration = await dynamodbService.getIntegrationStatus(merchantId, 'meta');
+    
+    // Calculate Expiration (60 days for Meta)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 60);
+    
+    const payload = {
+      adAccountId: metaData.adAccountId,
+      accessToken: encryptionService.encrypt(metaData.accessToken),
+      expiresAt: expiresAt.toISOString(),
+      status: 'active'
+    };
+
+    let integrationResult;
+    if (existingIntegration.success) {
+      console.log(`🔄 Meta integration exists, updating for merchant: ${merchantId}`);
+      integrationResult = await dynamodbService.updateIntegration(merchantId, 'meta', payload);
+    } else {
+      console.log(`➕ Creating new Meta integration for merchant: ${merchantId}`);
+      integrationResult = await dynamodbService.createIntegration({
         merchantId: merchantId,
         platform: 'meta',
-        credentials: {
-          adAccountId: metaData.adAccountId,
-          accessToken: metaData.accessToken // TODO: Encrypt this
-        }
+        credentials: payload
       });
-
-      if (!integrationResult.success) {
-        return { success: false, error: integrationResult.error };
-      }
-
-      // Update profile onboarding step
-      const profileUpdates = {
-        onboardingStep: 4,
-        step3CompletedAt: new Date().toISOString()
-      };
-
-      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-
-      return {
-        success: true,
-        data: {
-          currentStep: 4,
-          integration: integrationResult.data
-        }
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
     }
-  }
 
+    if (!integrationResult.success) return { success: false, error: integrationResult.error };
+
+    // Update Profile to Step 4
+    await dynamodbService.updateUserProfileOnboarding(merchantId, {
+      onboardingStep: 4,
+      step3CompletedAt: new Date().toISOString()
+    });
+
+    return { 
+      success: true, 
+      data: { currentStep: 4, integration: integrationResult.data } 
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
   /**
    * Update Onboarding Step 4: Shiprocket Integration (moved from Step 5)
    * 
@@ -394,41 +425,81 @@ class OnboardingService {
    * @param {Object} shiprocketData - Shiprocket credentials
    * @returns {Object} Success status
    */
-  async updateStep4ShiprocketIntegration(merchantId, shiprocketData) {
-    try {
-      // Create Shiprocket integration record
-      const integrationResult = await dynamodbService.createIntegration({
-        merchantId: merchantId,
-        platform: 'shiprocket',
-        credentials: {
-          email: shiprocketData.email,
-          token: shiprocketData.token // TODO: Encrypt this
-        }
-      });
+ async updateStep4ShiprocketIntegration(merchantId, shiprocketData) {
+  try {
 
-      if (!integrationResult.success) {
-        return { success: false, error: integrationResult.error };
+    if (!shiprocketData.email || !shiprocketData.password) {
+      return { success: false, error: "Email and Password are required." };
+    }
+
+
+    const axios = require('axios');
+      let generatedToken = "";
+
+     try {
+        console.log(`🚀 Authenticating with Shiprocket for: ${shiprocketData.email}`);
+        
+        const authResponse = await axios.post('https://apiv2.shiprocket.in/v1/external/auth/login', {
+          email: shiprocketData.email,
+          password: shiprocketData.password
+        });
+
+        generatedToken = authResponse.data.token;
+
+        if (!generatedToken) throw new Error("No token returned");
+        console.log(`✅ Shiprocket Authentication Successful! Token generated.`);
+        
+      } catch (apiError) {
+        console.error("❌ Shiprocket Auth Error:", apiError.message);
+        return { 
+          success: false, 
+          error: "Invalid Shiprocket credentials. Please check your email and password." 
+        };
       }
 
-      // Update profile onboarding step
-      const profileUpdates = {
-        onboardingStep: 5,
-        step4CompletedAt: new Date().toISOString()
+    const existingIntegration = await dynamodbService.getIntegrationStatus(merchantId, 'shiprocket');
+    
+    // Calculate Expiration (10 days for Shiprocket)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 10);
+    
+    const payload = {
+        email: shiprocketData.email,
+        password: encryptionService.encrypt(shiprocketData.password), // 🔒 SECURE
+        token: encryptionService.encrypt(generatedToken),             // 🔒 SECURE
+        expiresAt: expiresAt.toISOString(),
+        status: 'active'
       };
 
-      await dynamodbService.updateUserProfileOnboarding(merchantId, profileUpdates);
-
-      return {
-        success: true,
-        data: {
-          currentStep: 5,
-          integration: integrationResult.data
-        }
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
+    let integrationResult;
+    if (existingIntegration.success) {
+      console.log(`🔄 Shiprocket integration exists, updating for merchant: ${merchantId}`);
+      integrationResult = await dynamodbService.updateIntegration(merchantId, 'shiprocket', payload);
+    } else {
+      console.log(`➕ Creating new Shiprocket integration for merchant: ${merchantId}`);
+      integrationResult = await dynamodbService.createIntegration({
+        merchantId: merchantId,
+        platform: 'shiprocket',
+        credentials: payload
+      });
     }
+
+    if (!integrationResult.success) return { success: false, error: integrationResult.error };
+
+    // Update Profile to Step 5
+    await dynamodbService.updateUserProfileOnboarding(merchantId, {
+      onboardingStep: 5,
+      step4CompletedAt: new Date().toISOString()
+    });
+
+    return { 
+      success: true, 
+      data: { currentStep: 5, integration: integrationResult.data } 
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
   }
+}
 
   /**
    * Update Onboarding Step 5: Product COGS Setup (moved from Step 3)
@@ -478,6 +549,7 @@ class OnboardingService {
       // Update profile onboarding step
       const profileUpdates = {
         onboardingStep: 6, // Completed all steps
+        onboardingCompleted: true,
         step5CompletedAt: new Date().toISOString()
       };
 

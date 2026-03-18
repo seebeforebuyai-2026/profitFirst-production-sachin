@@ -110,180 +110,47 @@ class AuthController {
    * @route POST /api/auth/signup
    * @access Public
    */
-  async signup(req, res) {
-    try {
-      const { firstName, lastName, email, password } = req.body;
-
-      console.log(`\n📝 Signup attempt for: ${email}`);
-
-      // Validate required fields
-      if (!firstName || !lastName || !email || !password) {
-        console.log(`⚠️  Missing required fields for signup`);
-        return res.status(400).json({ error: 'All fields are required' });
-      }
-
-      // Normalize and sanitize inputs
-      const normalizedEmail = email.toLowerCase().trim();
-      const sanitizedFirstName = firstName.trim();
-      const sanitizedLastName = lastName.trim();
-
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(normalizedEmail)) {
-        console.log(`⚠️  Invalid email format: ${email}`);
-        return res.status(400).json({ error: 'Invalid email format' });
-      }
-
-      console.log(`\n📝 Signup attempt for: ${normalizedEmail}`);
-
-      // ✅ CRITICAL FIX: Check if user already exists in DynamoDB FIRST
-      const existingUser = await dynamoDBService.getUserByEmail(normalizedEmail);
-      
-      if (existingUser.success) {
-        console.log(`⚠️  User already exists in DynamoDB: ${normalizedEmail}`);
-        console.log(`   Verified: ${existingUser.data.isVerified}`);
-        console.log(`   Created: ${existingUser.data.createdAt}`);
-        
-        // If user exists but is not verified, allow resending OTP
-        if (!existingUser.data.isVerified) {
-          console.log(`📧 User not verified, resending OTP...`);
-          
-          const resendResult = await cognitoService.resendOTP(normalizedEmail);
-          
-          if (resendResult.success) {
-            console.log(`✅ OTP resent successfully`);
-            return res.status(200).json({ 
-              message: 'Account exists but not verified. A new OTP has been sent to your email.',
-              userId: existingUser.data.userId,
-              requiresVerification: true
-            });
-          } else {
-            console.log(`❌ Failed to resend OTP: ${resendResult.error}`);
-            
-            // If resend fails, user might not exist in Cognito
-            // This can happen if DynamoDB has stale data
-            if (resendResult.error.includes('UserNotFoundException')) {
-              console.log(`🔧 User not in Cognito, cleaning up DynamoDB and allowing re-signup...`);
-              
-              // Delete stale DynamoDB record
-              await dynamoDBService.deleteUser(existingUser.data.userId);
-              
-              // Continue with signup below
-            } else {
-              return res.status(400).json({ 
-                error: 'User exists but verification failed. Please try again or contact support.' 
-              });
-            }
-          }
-        } else {
-          // User exists and is verified - prevent duplicate
-          console.log(`❌ DUPLICATE PREVENTED: User already verified`);
-          return res.status(409).json({ 
-            error: 'Email already registered. Please login instead.',
-            canLogin: true
-          });
-        }
-      }
-
-      console.log(`🔧 Creating new user in Cognito...`);
-      
-      // Sign up in Cognito (this will send OTP to email)
-      const cognitoResult = await cognitoService.signUp(
-        normalizedEmail, 
-        password, 
-        sanitizedFirstName, 
-        sanitizedLastName
-      );
-
-      if (!cognitoResult.success) {
-        console.log(`❌ Cognito signup failed: ${cognitoResult.error}`);
-        
-        // Handle specific Cognito errors
-        if (cognitoResult.error.includes('UsernameExistsException') || 
-            cognitoResult.error.includes('already exists')) {
-          console.log(`⚠️  User exists in Cognito but not in DynamoDB - syncing...`);
-          
-          // Try to resend OTP
-          const resendResult = await cognitoService.resendOTP(normalizedEmail);
-          
-          if (resendResult.success) {
-            console.log(`✅ OTP resent, creating DynamoDB record...`);
-            
-            // Create user in DynamoDB to sync (without userId - will be temporary)
-            const dbResult = await dynamoDBService.createUserProfile({
-              email: normalizedEmail,
-              firstName: sanitizedFirstName,
-              lastName: sanitizedLastName,
-              authProvider: 'cognito',
-              isVerified: false
-            });
-            
-            if (dbResult.success) {
-              console.log(`✅ User synced to DynamoDB: ${dbResult.data.userId}`);
-              return res.status(200).json({ 
-                message: 'Account exists but not verified. A new OTP has been sent to your email.',
-                userId: dbResult.data.userId,
-                requiresVerification: true
-              });
-            } else {
-              console.log(`❌ Failed to sync to DynamoDB: ${dbResult.error}`);
-              // If DynamoDB create fails, it means user already exists there
-              // This is a race condition - return appropriate error
-              return res.status(409).json({ 
-                error: 'Email already registered. Please login or verify your email.',
-                requiresVerification: true
-              });
-            }
-          }
-        }
-        
-        return res.status(400).json({ error: cognitoResult.error });
-      }
-
-      console.log(`✅ User created in Cognito, creating DynamoDB record...`);
-
-      // Store user in DynamoDB (without userId - will be temporary until first login)
-      const dbResult = await dynamoDBService.createUserProfile({
-        email: normalizedEmail,
-        firstName: sanitizedFirstName,
-        lastName: sanitizedLastName,
-        authProvider: 'cognito',
-        isVerified: false
-      });
-
-      if (!dbResult.success) {
-        console.log(`❌ Failed to create user in DynamoDB: ${dbResult.error}`);
-        
-        // This shouldn't happen since we checked above, but handle gracefully
-        if (dbResult.error.includes('already exists')) {
-          console.log(`⚠️  Race condition detected - user created between check and insert`);
-          return res.status(409).json({ 
-            error: 'Email already registered. Please check your email for verification code.',
-            requiresVerification: true
-          });
-        }
-        
-        // For other errors, user is in Cognito but not DynamoDB
-        // They can still verify and login - will be synced then
-        console.log(`⚠️  User in Cognito but not DynamoDB - will sync on login`);
-        return res.status(201).json({
-          message: 'User registered successfully. Please check your email for OTP verification.',
-          note: 'Account will be fully activated after email verification.'
-        });
-      }
-
-      console.log(`✅ SIGNUP SUCCESSFUL: ${normalizedEmail} (userId: ${dbResult.data.userId})`);
-
-      res.status(201).json({
-        message: 'User registered successfully. Please check your email for OTP verification.',
-        userId: dbResult.data.userId
-      });
-    } catch (error) {
-      console.error('❌ Signup error:', error.message);
-      console.error('   Stack:', error.stack);
-      res.status(500).json({ error: 'Registration failed. Please try again.' });
+async signup(req, res) {
+  try {
+    const { firstName, lastName, email, password } = req.body;
+    
+    // 1. Validation
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // 2. Cognito Signup Only
+    console.log(`🔧 Attempting Cognito Signup for: ${normalizedEmail}`);
+    const cognitoResult = await cognitoService.signUp(
+      normalizedEmail, 
+      password, 
+      firstName.trim(), 
+      lastName.trim()
+    );
+    
+    // 3. Handle Failures
+    if (!cognitoResult.success) {
+      console.log(`❌ Cognito signup failed: ${cognitoResult.error}`);
+      return res.status(400).json({ 
+        error: cognitoResult.error,
+        requiresVerification: cognitoResult.error.includes('UsernameExistsException')
+      });
+    }
+    
+    // 4. Success Response (NO DYNAMODB WRITE)
+    console.log(`✅ SIGNUP SUCCESSFUL: ${normalizedEmail}. Awaiting OTP.`);
+    return res.status(201).json({
+      message: 'User registered successfully. Please check your email for OTP verification.',
+      requiresVerification: true
+    });
+  } catch (error) {
+    console.error('❌ Signup error:', error.message);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
+}
+
 
   /**
    * Verify Email with OTP
@@ -292,118 +159,40 @@ class AuthController {
    * @route POST /api/auth/verify-otp
    * @access Public
    */
-  async verifyOTP(req, res) {
-    try {
-      const { email, otp } = req.body;
-      const normalizedEmail = email.toLowerCase().trim();
-      const cleanOtp = otp.toString().trim();
+ /**
+ * Verify Email with OTP (Cognito Only)
+ */
+async verifyOTP(req, res) {
+  try {
+    const { email, otp } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    const cleanOtp = otp.toString().trim();
 
-      console.log(`\n✉️  ========================================`);
-      console.log(`   EMAIL VERIFICATION REQUEST`);
-      console.log(`   ========================================`);
-      console.log(`   Email (original): ${email}`);
-      console.log(`   Email (normalized): ${normalizedEmail}`);
-      console.log(`   OTP (original): ${otp}`);
-      console.log(`   OTP (cleaned): ${cleanOtp}`);
-      console.log(`   OTP length: ${cleanOtp.length}`);
-      console.log(`   OTP type: ${typeof cleanOtp}`);
-      console.log(`   OTP format: ${/^\d{6}$/.test(cleanOtp) ? '✓ Valid (6 digits)' : '✗ Invalid'}`);
-      console.log(`   ========================================\n`);
-
-      // Validate OTP format
-      if (!/^\d{6}$/.test(cleanOtp)) {
-        console.log(`❌ Invalid OTP format - rejecting request`);
-        return res.status(400).json({ error: 'OTP must be exactly 6 digits' });
-      }
-
-      // Verify OTP with Cognito
-      console.log(`📤 Sending verification request to Cognito...`);
-      const verifyResult = await cognitoService.verifyEmail(normalizedEmail, cleanOtp);
-
-      if (!verifyResult.success && !verifyResult.alreadyVerified) {
-        console.log(`\n❌ ========================================`);
-        console.log(`   VERIFICATION FAILED`);
-        console.log(`   ========================================`);
-        console.log(`   Error: ${verifyResult.error}`);
-        console.log(`   ========================================\n`);
-        return res.status(400).json({ error: verifyResult.error });
-      }
-
-      if (verifyResult.alreadyVerified) {
-        console.log(`✅ User already verified in Cognito - updating DynamoDB...`);
-      } else {
-        console.log(`✅ OTP verified in Cognito`);
-      }
-
-      // Check if user exists in DynamoDB
-      const userResult = await dynamoDBService.getUserByEmail(normalizedEmail);
-      
-      if (!userResult.success) {
-        console.log(`⚠️  User verified in Cognito but not in DynamoDB, creating record...`);
-        
-        // Get user details from Cognito to create DynamoDB record
-        // We need to sign in temporarily to get access token
-        // For now, we'll create with basic info and let login sync the rest
-        const createResult = await dynamoDBService.createUserProfile({
-          email: normalizedEmail,
-          firstName: 'User', // Will be updated on first login
-          lastName: '',
-          authProvider: 'cognito',
-          isVerified: true
-        });
-        
-        if (createResult.success) {
-          console.log(`✅ User created in DynamoDB: ${createResult.data.userId}`);
-        } else {
-          console.log(`⚠️  Failed to create user in DynamoDB: ${createResult.error}`);
-          console.log(`   User will be synced on first login`);
-        }
-      } else {
-        // Update verification status in DynamoDB
-        console.log(`📝 User exists in DynamoDB, updating verification status...`);
-        console.log(`   Current status: isVerified = ${userResult.data.isVerified}`);
-        
-        const updateResult = await dynamoDBService.updateUserVerification(normalizedEmail, true);
-        
-        if (updateResult.success) {
-          console.log(`✅ User verification updated in DynamoDB`);
-          console.log(`   New status: isVerified = true`);
-          console.log(`   User can now login`);
-        } else {
-          console.error(`❌ CRITICAL: Failed to update verification in DynamoDB: ${updateResult.error}`);
-          console.error(`   User: ${normalizedEmail}`);
-          console.error(`   This user will NOT be able to login!`);
-          // Don't fail the request - user is verified in Cognito
-          // They can still login and will be synced
-        }
-      }
-
-      // Mark email as verified in Cognito (ensures password reset works)
-      console.log(`🔧 Marking email as verified in Cognito...`);
-      const cognitoVerifyResult = await cognitoService.markEmailAsVerified(normalizedEmail);
-      
-      if (cognitoVerifyResult.success) {
-        console.log(`✅ Email marked as verified in Cognito`);
-      } else {
-        console.error(`⚠️  Failed to mark email as verified in Cognito: ${cognitoVerifyResult.error}`);
-      }
-
-      console.log(`\n✅ EMAIL VERIFICATION SUCCESSFUL: ${normalizedEmail}`);
-      console.log(`   User can now login with their credentials\n`);
-
-      res.status(200).json({
-        message: 'Email verified successfully. You can now login.'
-      });
-    } catch (error) {
-      console.error('❌ Verify OTP error:', error.name || 'Unknown');
-      console.error('   Message:', error.message || 'No message');
-      if (error.stack) {
-        console.error('   Stack:', error.stack);
-      }
-      res.status(500).json({ error: 'Verification failed. Please try again.' });
+    // 1. Validate format
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      return res.status(400).json({ error: 'OTP must be exactly 6 digits' });
     }
-  }
 
+    // 2. Verify with Cognito Service
+    const verifyResult = await cognitoService.verifyEmail(normalizedEmail, cleanOtp);
+
+    if (!verifyResult.success && !verifyResult.alreadyVerified) {
+      console.log(`❌ Verification FAILED for: ${normalizedEmail}`);
+      return res.status(400).json({ error: verifyResult.error });
+    }
+
+    // 3. Success Response
+    console.log(`✅ EMAIL VERIFIED: ${normalizedEmail}. User can now login.`);
+    
+    return res.status(200).json({
+      message: 'Email verified successfully. You can now login.',
+      canLogin: true
+    });
+  } catch (error) {
+    console.error('❌ Verify OTP error:', error.message);
+    res.status(500).json({ error: 'Verification failed. Please try again.' });
+  }
+}
   /**
    * Resend OTP Code
    * Sends a new verification code to user's email
@@ -436,155 +225,75 @@ class AuthController {
    * @route POST /api/auth/login
    * @access Public
    */
-  async login(req, res) {
-    try {
-      const { email, password } = req.body;
-      const normalizedEmail = email.toLowerCase().trim();
+  /**
+ * User Login (Check & Create PROFILE)
+ */
+async login(req, res) {
+  try {
+    const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
 
-      console.log(`\n🔐 Login attempt for: ${normalizedEmail}`);
+    // 1. Authenticate with Cognito
+    const signInResult = await cognitoService.signIn(normalizedEmail, password);
+    if (!signInResult.success) {
+      return res.status(401).json({ error: signInResult.error });
+    }
 
-      // Sign in with Cognito
-      const signInResult = await cognitoService.signIn(normalizedEmail, password);
+    // 2. Get the real Cognito sub (User ID) and Attributes
+    const cognitoUserDetails = await cognitoService.getUserDetails(signInResult.data.AccessToken);
+    const cognitoUserId = cognitoUserDetails.data.Username; // This is the 'sub'
+    
+    const userAttributes = cognitoUserDetails.data.UserAttributes || [];
+    const firstName = userAttributes.find(a => a.Name === 'given_name')?.Value || 'User';
+    const lastName = userAttributes.find(a => a.Name === 'family_name')?.Value || '';
 
-      if (!signInResult.success) {
-        console.log(`❌ Login failed for ${normalizedEmail}: ${signInResult.error}`);
-        return res.status(401).json({ error: signInResult.error });
-      }
+    // 3. THE CRITICAL CHECK: Fetch profile using PROFILE Sort Key
+    let userResult = await dynamoDBService.getUserProfile(cognitoUserId);
 
-      console.log(`✅ Cognito authentication successful for: ${normalizedEmail}`);
-
-      // Get user details from Cognito to check verification status and get Cognito ID
-      const cognitoUserDetails = await cognitoService.getUserDetails(signInResult.data.AccessToken);
-      const cognitoEmailVerified = cognitoUserDetails.success && 
-        cognitoUserDetails.data.UserAttributes?.find(attr => attr.Name === 'email_verified')?.Value === 'true';
-
-      console.log(`📊 Cognito verification status: ${cognitoEmailVerified ? 'VERIFIED ✅' : 'NOT VERIFIED ❌'}`);
-
-      // Get user details from DynamoDB using email
-      let userResult = await dynamoDBService.getUserByEmail(normalizedEmail);
-      const cognitoUserId = cognitoUserDetails.data.Username; // Get Cognito ID
-
-      console.log(`🔑 Cognito User ID: ${cognitoUserId}`);
-
-      // If user not found in DynamoDB but exists in Cognito, create them with Cognito ID
-      if (!userResult.success) {
-        console.log(`⚠️  User exists in Cognito but not in DynamoDB: ${normalizedEmail}`);
-        console.log(`🔧 Creating user record in DynamoDB with Cognito ID: ${cognitoUserId}`);
-        
-        if (cognitoUserDetails.success) {
-          const userAttributes = cognitoUserDetails.data.UserAttributes || [];
-          const firstName = userAttributes.find(attr => attr.Name === 'given_name')?.Value || 'User';
-          const lastName = userAttributes.find(attr => attr.Name === 'family_name')?.Value || '';
-          const emailVerified = userAttributes.find(attr => attr.Name === 'email_verified')?.Value === 'true';
-          
-          // CRITICAL: Always use Cognito ID as userId
-          const createResult = await dynamoDBService.createUserProfile({
-            userId: cognitoUserId, // MUST be Cognito sub
-            email: normalizedEmail,
-            firstName: firstName,
-            lastName: lastName,
-            authProvider: 'cognito',
-            isVerified: emailVerified
-          });
-          
-          if (createResult.success) {
-            console.log(`✅ User created in DynamoDB: ${createResult.data.userId}`);
-            userResult = createResult;
-          } else {
-            console.log(`❌ Failed to create user in DynamoDB: ${createResult.error}`);
-            return res.status(500).json({ error: 'Failed to create user record. Please contact support.' });
-          }
-        } else {
-          return res.status(500).json({ error: 'Failed to retrieve user information. Please contact support.' });
-        }
-      } else {
-        // User exists in DynamoDB - check if migration is needed
-        if (userResult.data.userId !== cognitoUserId) {
-          console.log(`🔄 User needs migration from ${userResult.data.userId} to ${cognitoUserId}`);
-          
-          const migrationResult = await dynamoDBService.migrateTemporaryUser(normalizedEmail, cognitoUserId);
-          
-          if (migrationResult.success) {
-            if (migrationResult.migrated) {
-              console.log(`✅ User successfully migrated to Cognito ID`);
-            } else {
-              console.log(`✅ User already has correct Cognito ID`);
-            }
-            userResult = migrationResult;
-          } else {
-            console.log(`❌ Migration failed: ${migrationResult.error}`);
-            return res.status(500).json({ error: 'Failed to update user record. Please contact support.' });
-          }
-        }
-      }
-
-      console.log(`✅ User found in database: ${userResult.data.userId}`);
-      console.log(`📊 DynamoDB verification status: ${userResult.data.isVerified ? 'VERIFIED ✅' : 'NOT VERIFIED ❌'}`);
-
-      // AUTO-SYNC: If Cognito says verified but DynamoDB says not verified, sync them
-      if (cognitoEmailVerified && !userResult.data.isVerified) {
-        console.log(`🔄 SYNC DETECTED: Cognito is verified but DynamoDB is not`);
-        console.log(`   Updating DynamoDB to match Cognito...`);
-        
-        const syncResult = await dynamoDBService.updateUserVerification(normalizedEmail, true);
-        if (syncResult.success) {
-          console.log(`✅ DynamoDB synced successfully - user is now verified`);
-          userResult.data.isVerified = true; // Update local copy
-        } else {
-          console.error(`❌ Failed to sync DynamoDB: ${syncResult.error}`);
-        }
-      } else if (cognitoEmailVerified && userResult.data.isVerified) {
-        console.log(`✅ Databases in sync - both show verified`);
-      } else if (!cognitoEmailVerified && !userResult.data.isVerified) {
-        console.log(`⚠️  User not verified in either database`);
-      }
-
-      // Update last login timestamp
-      await dynamoDBService.updateLastLogin(userResult.data.userId);
-
-      // Check onboarding status from database
-      const onboardingCompleted = userResult.data.onboardingCompleted || false;
-      const onboardingStep = userResult.data.onboardingStep || 1;
-
-      console.log(`📊 Onboarding status for ${normalizedEmail}:`, {
-        completed: onboardingCompleted,
-        currentStep: onboardingStep
+    // 4. Create Profile if it doesn't exist (First Login Case)
+    if (!userResult.success) {
+      console.log(`🆕 First Login: Creating DynamoDB profile for ${cognitoUserId}`);
+      
+      const createResult = await dynamoDBService.createUserProfile({
+        userId: cognitoUserId,
+        email: normalizedEmail,
+        firstName: firstName,
+        lastName: lastName,
+        authProvider: 'cognito',
+        isVerified: true // Login successful implies verification
       });
 
-      // Prepare response data
-      const responseData = {
-        message: 'Login successful',
-        user: {
-          userId: userResult.data.userId,
-          email: userResult.data.email,
-          firstName: userResult.data.firstName,
-          lastName: userResult.data.lastName,
-          isVerified: userResult.data.isVerified,
-          onboardingCompleted: onboardingCompleted,
-          onboardingStep: onboardingStep
-        },
-        tokens: {
-          accessToken: signInResult.data.AccessToken,
-          idToken: signInResult.data.IdToken,
-          refreshToken: signInResult.data.RefreshToken
-        }
-      };
-
-      // Log successful login
-      if (onboardingCompleted) {
-        console.log(`✅ LOGIN SUCCESSFUL: ${normalizedEmail} → Redirect to DASHBOARD (onboarding complete)`);
-      } else {
-        console.log(`✅ LOGIN SUCCESSFUL: ${normalizedEmail} → Redirect to ONBOARDING (step ${onboardingStep})`);
+      if (!createResult.success) {
+        throw new Error("Failed to initialize user profile in database.");
       }
-
-      // Return JSON response
-      res.status(200).json(responseData);
-    } catch (error) {
-      console.error(`❌ Login error for ${req.body.email}:`, error.message);
-      res.status(500).json({ error: 'Login failed. Please try again.' });
+      userResult = createResult; // Use the newly created data
     }
-  }
 
+    // 5. Update last login timestamp
+    await dynamoDBService.updateLastLogin(cognitoUserId);
+
+    // 6. Return response to React
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        userId: cognitoUserId,
+        email: normalizedEmail,
+        firstName: userResult.data.firstName || firstName,
+        onboardingStep: userResult.data.onboardingStep || 1,
+        onboardingCompleted: userResult.data.onboardingCompleted || false
+      },
+      tokens: {
+        accessToken: signInResult.data.AccessToken,
+        idToken: signInResult.data.IdToken,
+        refreshToken: signInResult.data.RefreshToken
+      }
+    });
+
+  } catch (error) {
+    console.error(`❌ Login Error:`, error.message);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+}
   /**
    * Check User Status
    * Checks if user exists and their verification status
@@ -1070,36 +779,41 @@ class AuthController {
    * @route GET /api/auth/profile
    * @access Protected
    */
-  async getProfile(req, res) {
-    try {
-      const { email } = req.user;
+  /**
+ * Get Authenticated User Profile
+ */
+async getProfile(req, res) {
+  try {
+    // req.user comes from your Auth Middleware (decoded JWT)
+    const { userId, email } = req.user; 
 
-      const userResult = await dynamoDBService.getUserByEmail(email);
+    // Fetch by PK: MERCHANT#<ID>, SK: PROFILE
+    const userResult = await dynamoDBService.getUserProfile(userId);
 
-      if (!userResult.success) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      const { userId, firstName, lastName, isVerified, createdAt, lastLogin, authProvider } = userResult.data;
-
-      res.status(200).json({
-        user: {
-          userId,
-          email,
-          firstName,
-          lastName,
-          isVerified,
-          authProvider,
-          createdAt,
-          lastLogin
-        }
-      });
-    } catch (error) {
-      console.error('Get profile error:', error.message);
-      res.status(500).json({ error: 'Failed to fetch profile. Please try again.' });
+    if (!userResult.success) {
+      return res.status(404).json({ error: 'Profile not found' });
     }
-  }
 
+    const data = userResult.data;
+
+    res.status(200).json({
+      user: {
+        userId: userId,
+        email: data.email || email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        isVerified: data.isVerified,
+        onboardingStep: data.onboardingStep || 1,
+        onboardingCompleted: data.onboardingCompleted || false,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get Profile error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch profile.' });
+  }
+}
   /**
    * Get OAuth Login URL
    * Returns Cognito Hosted UI URL for social login

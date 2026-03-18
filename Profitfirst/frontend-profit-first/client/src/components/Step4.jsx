@@ -48,21 +48,7 @@ const Step4 = ({ onComplete }) => {
       await axiosInstance.post("/onboard/step4", payload);
       toast.success("✅ Shipping account connected!", { autoClose: 1500 });
       
-      // Step 2: Sync shipments (only for Shiprocket for now)
-      if (platform === "Shiprocket") {
-        setTimeout(async () => {
-          try {
-            toast.info("🔄 Syncing shipment data...", { autoClose: 2000 });
-            const syncResponse = await axiosInstance.post("/shipping/sync");
-            toast.success(`✅ Synced ${syncResponse.data.count} shipments!`, { autoClose: 2000 });
-          } catch (syncErr) {
-            console.error("Sync error:", syncErr);
-            toast.warning("⚠️ Connected but sync failed. You can sync later from dashboard.", { autoClose: 3000 });
-          }
-        }, 1500);
-      }
-      
-      // Step 3: Update onboarding step
+      // Step 2: Update onboarding step
       await axiosInstance.post("/onboard/step", {
         step: 4,
         data: {
@@ -73,9 +59,9 @@ const Step4 = ({ onComplete }) => {
       
       // Step 4: Smooth transition to dashboard
       setTimeout(() => {
-        toast.success("🎉 Onboarding complete! Redirecting to dashboard...", { autoClose: 1500 });
+        toast.success("🎉 Integration saved! Moving to Next Step...", { autoClose: 1500 });
         setTimeout(() => onComplete(), 1000);
-      }, platform === "Shiprocket" ? 3500 : 1500);
+      }, 1500);
       
     } catch (err) {
       const errorMessage = err.response?.data?.message || "Failed to connect shipping account.";
