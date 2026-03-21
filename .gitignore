@@ -184,9 +184,3 @@ aws-credentials.json
 # Backup files
 *.bak
 *.backup
-
-# Temporary documentation files
-DATABASE_PRODUCTION_FIXES.md
-STEP2_ENHANCED_SUMMARY.md
-UPDATES.md
-Project.md
