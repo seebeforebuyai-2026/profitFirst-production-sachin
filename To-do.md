@@ -92,3 +92,10 @@ NEXT UP - COGS PAGE (Product Manufacturing Details)
 - Save each variant as its own row: PK: MERCHANT#<id>, SK: VARIANT#<variantId>
 - Fields to store: productName, variantName, costPrice, salePrice
 - This is Step 5 of onboarding
+
+
+
+
+
+SQS_QUEUE_URL=https://sqs.ap-southeast-1.amazonaws.com/243547230894/profitfirst-sync-queue-sachin
+S3_BUCKET_NAME=profitfirst-raw-data-sachin

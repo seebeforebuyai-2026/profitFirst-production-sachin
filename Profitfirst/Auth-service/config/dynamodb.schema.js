@@ -121,7 +121,7 @@ const ENTITY_SCHEMAS = {
     optional: ['onboardingCompleted', 'onboardingStep', 'lastSyncedOrderId', 'syncProgress']
   }
 };
-
+ 
 // Global Secondary Indexes (GSI)
 const GSIs = {
   // GSI for email lookup
