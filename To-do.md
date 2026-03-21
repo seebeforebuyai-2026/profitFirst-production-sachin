@@ -1,73 +1,4 @@
-Single Source of Truth strategy.
 
-🏗️ The Simple "Unified ID" Plan
-One person = One ID.
-We will use the AWS Cognito ID as the Merchant ID for everything. Do not generate any other UUIDs.
-
-Step 1: Signup & OTP (The Identity)
-Action: User signs up and verifies OTP via Cognito.
-Production Rule: Cognito creates a unique sub (Subject ID). This is your permanent Merchant ID.
-The Bug Fix: Your backend must not create a DynamoDB record until the user successfully verifies their OTP and logs in for the first time.
-Action 1: Fix the Signup/Login (No More Ghost Records)
-Target: auth.controller.js
-The Fix: Delete any code that creates temp_ IDs or writes to DynamoDB during signup.
-The Pro Logic: Only write to DynamoDB after the user logs in. If they don't have a record yet, create one using their sub ID from Cognito.
-
-
-Step 2: First Login (The Profile)
-Action: User logs in. React gets a JWT Token.
-
-Backend Task: Create the PROFILE record in DynamoDB.
-
-PK: MERCHANT#<Cognito_sub>
-
-SK: PROFILE
-
-The Bug Fix: Stop using "temp" IDs. If they are logged in, you know exactly who they are.
-
-
-Step 3: Business Details (Step 1 Onboarding)
-Action: User enters Business Name and Phone.
-Backend Task: Update the existing PROFILE record. Do not create a new one.
-The Bug Fix: Ensure your code uses UpdateItem so you don't overwrite the email or signup date.
-Action 3: The "Update" Rule (Business Details)
-Target: onboarding.controller.js
-
-The Fix: Switch from PutItem to UpdateItem.
-
-The Pro Logic: Instead of throwing a whole new object at the database, just tell it: "Hey, for this Merchant ID, add this business name and this phone number."
-
-
-
-
-Step 4: Shopify Connection (Step 2 Onboarding)
-Action: User connects Shopify.
-
-Backend Task: Create a new record in the same table.
-
-PK: MERCHANT#<Cognito_sub> (The same ID from Step 1!)
-
-SK: INTEGRATION#SHOPIFY
-
-The Bug Fix: Never generate a new UUID here. Use the sub from the user's login token.
-Action 4: The Integration Link (Shopify/Meta/Shiprocket)
-Target: onboarding.controller.js
-
-The Fix: When saving a connection, pull the ID from the Login Token (req.user.sub).
-
-The Pro Logic: This ensures the Shopify account is "glued" to the right user account. No more disconnected data!
-
-
-Step 5: Meta & Shiprocket (Final Steps)
-Action: User connects Ads and Shipping.
-
-Backend Task: Create two more records.
-
-SK: INTEGRATION#META
-
-SK: INTEGRATION#SHIPROCKET
-
-The Bug Fix: Store these in the Singapore Region table only. Delete the Mumbai code.
 Action 5: Product Organization (Scalability)
 Target: onboarding.controller.js
 
@@ -119,3 +50,45 @@ expiresAt: 2026-03-26T... (Current date + 9 days)
 
 
 ENCRYPTION_KEY=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+
+
+================================================================
+
+CODE CLEANUP - FILES TO DELETE / REVIEW
+(Do this after COGS page is complete)
+
+✅ COMPLETED
+- auth.controller.js - Fixed (no DynamoDB on signup/OTP)
+- onboarding.service.js - Fixed (Cognito sub as merchantId, upsert integrations)
+- dynamodb.service.js - Fixed (createUserProfile requires userId)
+- Shiprocket flow - Fixed (auto-generate token from email+password)
+- Meta flow - Fixed (60-day expiry, upsert logic)
+
+❌ SAFE TO DELETE (Old/Unused Files)
+- config/onboarding-table-schema.js     → Old separate Onboarding table, replaced by single table
+- controllers/dashboard.controller.js   → Uses old dynamoDB + redis.config, not in Server.js
+- controllers/orderconformationdata.js  → Uses old ap-south-1 DynamoDB, not in Server.js
+- routes/dashboard.routes.js            → Not registered in Server.js
+- routes/prediction.routes.js           → Not registered in Server.js
+- scripts/check-shiprocket-connection.js → Debug script only
+- scripts/check-shiprocket-fields.js    → Debug script only
+- scripts/get-shopify-token.js          → Debug script only
+
+⚠️ NEEDS REWRITE BEFORE USE
+- controllers/shopify.controller.js     → Uses old dynamoDB from aws.config, needs new DB
+- controllers/prediction.controller.js  → Uses old ap-south-1 DynamoDB directly
+- services/prediction.service.js        → Uses old DynamoDB client
+
+⚠️ KEEP BUT REVIEW LATER (Only needed if AI features are active)
+- config/ai.config.js
+- config/bedrock.config.js
+- config/groq.config.js
+
+================================================================
+
+NEXT UP - COGS PAGE (Product Manufacturing Details)
+- User enters product cost price (COGS) per variant
+- Save each product as its own row: PK: MERCHANT#<id>, SK: PRODUCT#<productId>
+- Save each variant as its own row: PK: MERCHANT#<id>, SK: VARIANT#<variantId>
+- Fields to store: productName, variantName, costPrice, salePrice
+- This is Step 5 of onboarding

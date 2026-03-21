@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { PulseLoader } from "react-spinners";
 import { toast } from "react-toastify";
 import axiosInstance from "../../axios";
-
+import { useNavigate } from 'react-router-dom';
 const Step4 = ({ onComplete }) => {
   const [platform, setPlatform] = useState("Shiprocket");
   const [formData, setFormData] = useState({
@@ -12,6 +12,8 @@ const Step4 = ({ onComplete }) => {
     password: "",
   });
   const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -47,16 +49,7 @@ const Step4 = ({ onComplete }) => {
       // Step 1: Connect shipping account securely (This does EVERYTHING)
       await axiosInstance.post("/onboard/step4", payload);
       toast.success("✅ Shipping account connected!", { autoClose: 1500 });
-      
-      // 🚨 WE DELETED THE SECOND API CALL HERE! 🚨
-      // The backend already updated the profile to step 5.
-      
-      // Step 2: Smooth transition to Next Step (COGS)
-      setTimeout(() => {
-        toast.success("🎉 Integration saved! Moving to Next Step...", { autoClose: 1500 });
-        setTimeout(() => onComplete(), 1000);
-      }, 1500);
-      
+      navigate('/dashboard');   
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.response?.data?.error || "Failed to connect shipping account.";
       toast.error(errorMessage);

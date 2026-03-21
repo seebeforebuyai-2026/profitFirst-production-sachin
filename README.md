@@ -362,4 +362,50 @@ FB_REDIRECT_URI=https://your-api-domain.com/api/meta/callback
 - Meta Ads requires manual ad account selection
 - Shiprocket integration needs API key setup
 
+---
+
+## 📋 Step 1 Implementation Notes (Dashboard Lock Flow)
+
+### 3 Critical Changes for Production-Ready Implementation
+
+#### Change 1: Sequential Trigger (Not Parallel)
+**Problem**: If we trigger Product Fetch and Order Sync in parallel, orders might sync before COGS is set.
+
+**Solution**: 
+1. User clicks "Set Up Products" → Product fetch starts
+2. User enters COGS for all variants
+3. User clicks "Save All Costs" → Only THEN order sync starts
+
+**Why**: Orders need `cogsAtSale` stamped correctly during sync. If sync runs before COGS is set, historical profit will be wrong.
+
+#### Change 2: Onboarding Step Index
+**Current**: Step 4 is Shiprocket (last step in wizard)
+
+**Update**: When Shiprocket saves successfully:
+- `onboardingStep: 6` (not 5 - wizard is closed)
+- `onboardingCompleted: true`
+- `dashboardUnlocked: false` (still locked, waiting for COGS + sync)
+
+#### Change 3: SQS Visibility Timeout
+**Current**: 5 minutes
+
+**Update**: 15 minutes
+
+**Why**: For 50,000+ products or 100,000 orders:
+- 50,000 products ÷ 250 per page = 200 pages
+- 200 pages × 0.5s per page = 100 seconds
+- Plus rate limit backoffs = ~12-15 minutes total
+
+If timeout is 5 minutes, worker crashes mid-way and job reappears → duplicate processing possible.
+
+---
+
+## 🚀 Next Steps
+
+1. **Step 1**: Update Shiprocket save logic to set `dashboardUnlocked: false`
+2. **Step 2**: Frontend redirects to `/dashboard` after Shiprocket
+3. **Step 3**: Dashboard lock logic (blur + welcome modal)
+4. **Step 4**: Products page with sequential trigger
+5. **Step 5**: SQS queue setup (15-minute timeout)
+
 
