@@ -8,7 +8,6 @@ const dynamodbService = require('../services/dynamodb.service');
 const sessionService = require('../services/session.service');
 const encryptionService = require('../utils/encryption');
 const MetaErrorHandler = require('../utils/meta-errors');
-const metaSyncService = require('../services/meta-sync.service');
 
 // Meta/Facebook API Configuration
 const FB_APP_ID = process.env.FB_APP_ID;

@@ -488,8 +488,13 @@ async updateStep3MetaIntegration(merchantId, metaData) {
 
     // Update Profile to Step 5
     await dynamodbService.updateUserProfileOnboarding(merchantId, {
-      onboardingStep: 5,
-      step4CompletedAt: new Date().toISOString()
+      onboardingStep: 6,
+      onboardingCompleted: true,
+      step4CompletedAt: new Date().toISOString(),
+      cogsCompleted: false,
+      initialSyncCompleted: false,
+      dashboardUnlocked: false
+
     });
 
     return { 

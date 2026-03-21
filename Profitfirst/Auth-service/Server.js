@@ -12,10 +12,11 @@ const adminRoutes = require('./routes/admin.routes');
 const onboardingRoutes = require('./routes/onboarding.routes');
 const shopifyRoutes = require('./routes/shopify.routes');
 const metaRoutes = require('./routes/meta.routes');
-const shippingRoutes = require('./routes/shipping.routes');
 const aiChatRoutes = require('./routes/ai-chat.routes');
 const predictionRoutes = require('./routes/prediction.routes');
 const userRoutes = require('./routes/user.routes');
+const productsRoutes = require('./routes/products.routes');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -228,17 +229,14 @@ app.use('/api/onboard', onboardingRoutes);
 // Shopify routes (requires authentication)
 app.use('/api/shopify', shopifyRoutes);
 
-// Meta/Facebook Ads routes
-app.use('/api/meta', metaRoutes);
-
-// Shipping platform routes
-app.use('/api/shipping', shippingRoutes);
-
 // User profile routes (requires authentication)
 app.use('/api/user', userRoutes);
 
 // Admin routes (requires admin key)
 app.use('/api/admin', adminRoutes);
+
+app.use('/api/products', productsRoutes);
+
 
 // Health check endpoint - useful for monitoring and load balancers
 app.get('/health', (_req, res) => {
