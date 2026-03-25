@@ -42,7 +42,8 @@ const ENTITY_TYPES = {
   EXPENSE: 'EXPENSE',
   SUMMARY: 'SUMMARY',
   INTEGRATION: 'INTEGRATION',
-  METADATA: 'METADATA'
+  METADATA: 'METADATA',
+  SYNC_STATUS: 'SYNC_STATUS'
 };
 
 // PK/SK Patterns
@@ -71,7 +72,9 @@ const SK_PATTERNS = {
   EXPENSE: (expenseId) => `EXPENSE#${expenseId}`,
   SUMMARY: (date) => `SUMMARY#${date}`,
   INTEGRATION: (platform) => `INTEGRATION#${platform}`,
-  METADATA: () => `METADATA`
+  METADATA: () => `METADATA`,
+  SYNC: (platform) => `SYNC#${platform.toUpperCase()}`
+
 };
 
 // Entity Schemas
@@ -119,6 +122,10 @@ const ENTITY_SCHEMAS = {
   METADATA: {
     required: ['merchantId', 'createdAt'],
     optional: ['onboardingCompleted', 'onboardingStep', 'lastSyncedOrderId', 'syncProgress']
+  },
+  SYNC_STATUS: {
+    required: ['merchantId', 'platform', 'status', 'percent'],
+    optional: ['sinceDate', 'startedAt', 'completedAt', 'lastSyncedId']
   }
 };
  

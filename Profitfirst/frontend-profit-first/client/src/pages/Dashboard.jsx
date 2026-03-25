@@ -1,25 +1,3 @@
-/**
- * Dashboard Component
- * 
- * PURPOSE: Main business analytics dashboard showing comprehensive e-commerce metrics
- * 
- * KEY FEATURES:
- * 1. Date Range Selection - Filter data by custom date ranges
- * 2. Performance Charts - Revenue, profit, costs visualization
- * 3. Cost Breakdown - Pie chart showing expense categories
- * 4. Marketing Analytics - Ad spend, ROAS, reach, clicks
- * 5. Product Performance - Best/least selling products
- * 6. Customer Analytics - New vs returning customers
- * 7. Shipping Status - Delivery tracking and status breakdown
- * 
- * DATA SOURCES:
- * - Shopify: Orders, revenue, products
- * - Meta/Facebook: Ad campaigns, ROAS
- * - Shiprocket: Shipping and delivery status
- * 
- * API ENDPOINT: GET /api/data/dashboard
- * Query params: startDate, endDate, userId
- */
 
 import React, { useState, useEffect, useMemo } from "react";
 import axiosInstance from "../../axios";
@@ -43,13 +21,6 @@ import {
 import DateRangeSelector from "../components/DateRangeSelector";
 import { PulseLoader } from "react-spinners";
 
-/**
- * Card Component - Displays individual metric
- * 
- * @param {string} title - Metric name (e.g., "Revenue", "Orders")
- * @param {string|number} value - Metric value (e.g., "₹125,000", "45")
- * @param {string} formula - Optional tooltip showing how metric is calculated
- */
 const Card = ({ title, value, formula, decision, decisionColor, subtitle }) => (
   <div className="group relative bg-[#161616] p-3 lg:p-4 rounded-xl tooltip-wrapper overflow-hidden">
     {formula && (
@@ -173,97 +144,97 @@ const Dashboard = () => {
   const [activeIndex, setActiveIndex] = useState(null);
 
   // Fetch effect
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true);
-      setError(null);
-      const startDateString = format(dateRange.startDate, "yyyy-MM-dd");
-      const endDateString = format(dateRange.endDate, "yyyy-MM-dd");
-      const userId = localStorage.getItem("userId");
+  // useEffect(() => {
+  //   const fetchDashboardData = async () => {
+  //     setIsLoading(true);
+  //     setError(null);
+  //     const startDateString = format(dateRange.startDate, "yyyy-MM-dd");
+  //     const endDateString = format(dateRange.endDate, "yyyy-MM-dd");
+  //     const userId = localStorage.getItem("userId");
 
-      console.log('Fetching dashboard data:', {
-        startDate: startDateString,
-        endDate: endDateString,
-        userId
-      });
+  //     console.log('Fetching dashboard data:', {
+  //       startDate: startDateString,
+  //       endDate: endDateString,
+  //       userId
+  //     });
 
-      try {
-        const response = await axiosInstance.get("/data/dashboard", {
-          params: {
-            startDate: startDateString,
-            endDate: endDateString,
-            userId: userId
-          },
-        });
+  //     try {
+  //       const response = await axiosInstance.get("/data/dashboard", {
+  //         params: {
+  //           startDate: startDateString,
+  //           endDate: endDateString,
+  //           userId: userId
+  //         },
+  //       });
 
-        console.log('✅ Dashboard data received:', response.data);
+  //       console.log('✅ Dashboard data received:', response.data);
 
-        // Check if sync is in progress
-        if (response.data.syncInProgress) {
-          console.log('🔄 Sync in progress:', response.data.syncStatus);
-          setDashboardData({
-            syncInProgress: true,
-            syncStatus: response.data.syncStatus,
-            message: response.data.message
-          });
+  //       // Check if sync is in progress
+  //       if (response.data.syncInProgress) {
+  //         console.log('🔄 Sync in progress:', response.data.syncStatus);
+  //         setDashboardData({
+  //           syncInProgress: true,
+  //           syncStatus: response.data.syncStatus,
+  //           message: response.data.message
+  //         });
 
-          // Poll for sync status every 30 seconds if sync is in progress
-          setTimeout(() => {
-            fetchDashboardData();
-          }, 30000);
+  //         // Poll for sync status every 30 seconds if sync is in progress
+  //         setTimeout(() => {
+  //           fetchDashboardData();
+  //         }, 30000);
 
-          return;
-        }
+  //         return;
+  //       }
 
-        setDashboardData(response.data);
-      } catch (err) {
-        console.error('❌ Dashboard fetch error:', err);
-        setError(err.response?.data?.message || err.message || 'Failed to load dashboard data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  //       setDashboardData(response.data);
+  //     } catch (err) {
+  //       console.error('❌ Dashboard fetch error:', err);
+  //       setError(err.response?.data?.message || err.message || 'Failed to load dashboard data');
+  //     } finally {
+  //       setIsLoading(false);
+  //     }
+  //   };
 
-    fetchDashboardData();
-  }, [dateRange]);
+  //   fetchDashboardData();
+  // }, [dateRange]);
 
   // Fetch Shiprocket data separately
-  useEffect(() => {
-    const fetchShiprocketData = async () => {
-      setIsLoadingShiprocket(true);
-      const startDateString = format(dateRange.startDate, "yyyy-MM-dd");
-      const endDateString = format(dateRange.endDate, "yyyy-MM-dd");
-      const userId = localStorage.getItem("userId");
+  // useEffect(() => {
+  //   const fetchShiprocketData = async () => {
+  //     setIsLoadingShiprocket(true);
+  //     const startDateString = format(dateRange.startDate, "yyyy-MM-dd");
+  //     const endDateString = format(dateRange.endDate, "yyyy-MM-dd");
+  //     const userId = localStorage.getItem("userId");
 
-      console.log('🚀 Fetching Shiprocket data (V2 - from revenue_stats):', {
-        startDate: startDateString,
-        endDate: endDateString,
-        userId,
-        timestamp: new Date().toISOString()
-      });
+  //     console.log('🚀 Fetching Shiprocket data (V2 - from revenue_stats):', {
+  //       startDate: startDateString,
+  //       endDate: endDateString,
+  //       userId,
+  //       timestamp: new Date().toISOString()
+  //     });
 
-      try {
-        const response = await axiosInstance.get("/shipping/dashboard-v2", {
-          params: {
-            startDate: startDateString,
-            endDate: endDateString,
-            _t: Date.now() // Cache buster
-          },
-        });
+  //     try {
+  //       const response = await axiosInstance.get("/shipping/dashboard-v2", {
+  //         params: {
+  //           startDate: startDateString,
+  //           endDate: endDateString,
+  //           _t: Date.now() // Cache buster
+  //         },
+  //       });
 
-        console.log('✅ Shiprocket data received (V2):', response.data);
-        setShiprocketData(response.data);
-      } catch (err) {
-        console.error('❌ Shiprocket fetch error:', err);
-        // Don't set error, just log it - Shiprocket is optional
-        setShiprocketData(null);
-      } finally {
-        setIsLoadingShiprocket(false);
-      }
-    };
+  //       console.log('✅ Shiprocket data received (V2):', response.data);
+  //       setShiprocketData(response.data);
+  //     } catch (err) {
+  //       console.error('❌ Shiprocket fetch error:', err);
+  //       // Don't set error, just log it - Shiprocket is optional
+  //       setShiprocketData(null);
+  //     } finally {
+  //       setIsLoadingShiprocket(false);
+  //     }
+  //   };
 
-    fetchShiprocketData();
-  }, [dateRange]);
+  //   fetchShiprocketData();
+  // }, [dateRange]);
 
   // Derived safe variables to avoid undefined errors
   const pieData = dashboardData?.financialsBreakdownData?.pieData ?? [];

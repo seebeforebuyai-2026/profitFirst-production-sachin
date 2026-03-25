@@ -492,20 +492,15 @@ class DynamoDBService {
     }
   }
 
-  /**
-   * Get Integration Status
-   * 
-   * @param {string} merchantId - Merchant ID
-   * @param {string} platform - Platform name (shopify, meta, shiprocket)
-   * @returns {Object} Success status and integration data/error
-   */
+  
   async getIntegrationStatus(merchantId, platform) {
     try {
       const command = new GetCommand({
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: SK_PATTERNS.INTEGRATION(platform)
+          SK: `INTEGRATION#${platform.toUpperCase()}` 
+          // SK: SK_PATTERNS.INTEGRATION(platform)
         }
       });
 

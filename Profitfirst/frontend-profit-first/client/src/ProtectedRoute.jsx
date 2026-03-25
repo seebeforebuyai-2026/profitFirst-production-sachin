@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useProfile } from '../ProfileContext';
+import { useProfile } from './ProfileContext';
 
 const ProtectedRoute = ({ children, requireUnlock = false }) => {
   const { profile, loading } = useProfile();

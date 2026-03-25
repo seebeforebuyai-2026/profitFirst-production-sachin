@@ -38,7 +38,7 @@ import BusinessExpenses from "./pages/BusinessExpenses";
 import { isTokenValid } from "./utils/auth";
 import { useState, useEffect } from "react";
 import { ProfileProvider } from "./ProfileContext";
-
+import ProtectedRoute from "./ProtectedRoute";
 function AppWrapper() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // STEP 1: Check for OAuth tokens in URL hash FIRST

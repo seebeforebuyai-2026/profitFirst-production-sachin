@@ -9,7 +9,7 @@ class ShopifyUtil {
 
       const query = `
         query getProducts($cursor: String) {
-          products(first: 50, after: $cursor) {
+          products(first: 50, after: $cursor , query: "status:active") {
             pageInfo {
               hasNextPage
               endCursor
@@ -57,6 +57,53 @@ class ShopifyUtil {
     } catch (error) {
       console.error('Shopify GraphQL Error:', error.message);
       throw error;
+    }
+  }
+
+  async fetchShopifyOrders(shop, encryptedToken, sinceDate, cursor = null) {
+    try {
+      const accessToken = encryptionService.decrypt(encryptedToken);
+      const url = `https://${shop}/admin/api/2023-10/graphql.json`;
+
+      const query = `
+        query getOrders($cursor: String, $query: String) {
+          orders(first: 50, after: $cursor, query: $query) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              node {
+                id
+                name
+                createdAt
+                displayFinancialStatus
+                totalPriceSet { shopMoney { amount currencyCode } }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      title
+                      quantity
+                      variant { id price }
+                      product { id }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const variables = {
+        cursor,
+        query: `created_at:>=${sinceDate}`
+      };
+
+      const response = await axios.post(url, { query, variables }, {
+        headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' }
+      });
+
+      return response.data.data.orders;
+    } catch (error) {
+      throw new Error(`Shopify Order API Error: ${error.message}`);
     }
   }
 }

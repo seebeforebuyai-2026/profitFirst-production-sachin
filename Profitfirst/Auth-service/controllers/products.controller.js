@@ -8,24 +8,42 @@ class ProductsController {
     } catch (error) { res.status(500).json({ error: error.message }); }
   }
 
-  async getProductsList(req, res) {
+async getProductsList(req, res) {
     try {
+      const merchantId = req.user.userId;
       const { limit = 50, lastKey } = req.query;
       
-      // 🟢 Decode base64 lastKey back to JSON for DynamoDB
-      const exclusiveStartKey = lastKey ? JSON.parse(Buffer.from(lastKey, 'base64').toString()) : null;
-
-      const result = await productsService.getVariantsList(req.user.userId, parseInt(limit), exclusiveStartKey);
+      let exclusiveStartKey = null;
       
-      // 🟢 Encode LastEvaluatedKey to base64 for frontend safety
-      if (result.lastKey) {
-        result.lastKey = Buffer.from(JSON.stringify(result.lastKey)).toString('base64');
+      // 🟢 Safer Decoding: Handle edge cases where lastKey is a string "null" or "undefined"
+      if (lastKey && lastKey !== 'null' && lastKey !== 'undefined' && lastKey !== '') {
+        try {
+          const decoded = Buffer.from(lastKey, 'base64').toString('utf8');
+          exclusiveStartKey = JSON.parse(decoded);
+        } catch (e) {
+          console.error("⚠️ Invalid lastKey format, starting from page 1");
+          exclusiveStartKey = null;
+        }
       }
 
-      res.json(result);
-    } catch (error) { res.status(500).json({ error: error.message }); }
-  }
+      const result = await productsService.getVariantsList(merchantId, parseInt(limit), exclusiveStartKey);
+      
+      // 🟢 Safer Encoding
+      let encodedLastKey = null;
+      if (result.lastKey) {
+        encodedLastKey = Buffer.from(JSON.stringify(result.lastKey)).toString('base64');
+      }
 
+      res.json({
+        success: true,
+        variants: result.variants,
+        lastKey: encodedLastKey
+      });
+    } catch (error) {
+      console.error("❌ List API error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  }
   async saveCogs(req, res) {
     try {
       await productsService.saveCogsBatch(req.user.userId, req.body.variants);

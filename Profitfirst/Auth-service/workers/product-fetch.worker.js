@@ -59,6 +59,7 @@ const processProductFetch = async (merchantId) => {
       const productEdges = data.edges;
       if (productEdges.length === 0) break;
 
+      
       // 1. S3 Backup
       try {
         await s3Client.send(new PutObjectCommand({
@@ -73,6 +74,10 @@ const processProductFetch = async (merchantId) => {
       const batchItems = [];
       productEdges.forEach(({ node: p }) => {
         p.variants.edges.forEach(({ node: v }) => {
+          const price = Number(v.price);
+          if (!price || price <= 0) {
+            return; // Skip this variant
+          }
           batchItems.push({
             PutRequest: {
               Item: {

@@ -7,23 +7,39 @@ const WelcomeModal = ({ isOpen }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 z-[100] flex items-center justify-center p-4">
-      <div className="bg-[#1a1a1a] rounded-2xl p-8 max-w-md w-full border border-gray-700 shadow-2xl">
-        <div className="text-center">
-          <div className="text-6xl mb-4">👋</div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            Welcome to ProfitFirst!
-          </h2>
-          <p className="text-gray-400 mb-6">
-            To see your real profit, first set your product costs (COGS).
-          </p>
-          <button
-            onClick={() => navigate("/dashboard/products")} // 🟢 Actually takes them to setup
-            className="w-full py-3 px-6 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            → Set Up Products
-          </button>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      {/* Dark Overlay Backdrop */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+
+      {/* Modal Card */}
+      <div className="relative bg-[#1a1a1a] rounded-3xl p-10 max-w-md w-full border border-gray-800 shadow-2xl text-center">
+        <div className="mb-6">
+          <img 
+            className="w-48 mx-auto" 
+            src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png" 
+            alt="ProfitFirst"
+          />
         </div>
+
+        <h2 className="text-2xl font-bold text-white mb-3">
+          Welcome to ProfitFirst!
+        </h2>
+        
+        <p className="text-gray-400 mb-8 leading-relaxed">
+          To calculate your real-time profit analytics, we first need you to set your <br/>
+          <span className="text-green-400 font-semibold"> Product Manufacturing Costs (COGS)</span>.
+        </p>
+
+        <button
+          onClick={() => navigate("/dashboard/products")}
+          className="w-full py-4 px-6 bg-green-500 hover:bg-green-600 active:scale-95 text-black font-bold rounded-xl transition-all shadow-lg shadow-green-500/20"
+        >
+          → Set Up Product Costs
+        </button>
+        
+        <p className="mt-4 text-[10px] text-gray-600 uppercase tracking-widest">
+          Setup Phase: Step 1 of 2
+        </p>
       </div>
     </div>
   );

@@ -1,20 +1,96 @@
+hat is 100% DONE:
+Data Extraction: Workers for Shopify, Meta, and Shiprocket are finished.
+Financial Brain: The Summary Calculator is perfectly accurate.
+Setup UI: The "Products" page and COGS setup are complete.
+❌ What is MISSING (The Final 3 Steps):
+1. The Dashboard Aggregation API (Immediate Next Step)
+The Problem: You have 365 individual SUMMARY# records in the database. But the dashboard needs to show the "Last 7 Days" or "Last 30 Days" total.
+The Task: Create an API that queries a date range, sums up the numbers, calculates the Weighted Ratios (POAS/ROAS), and sends one single JSON object to the React charts.
+2. The Dashboard UI Connection
+The Problem: Your main dashboard charts are currently using "static" or "old" data.
+The Task: Connect your MainDashboard.jsx and Analytics.jsx to the new Aggregation API so the charts reflect the real profit your workers calculated.
+3. The Automation (EventBridge Cron)
+The Problem: Right now, you have to run the workers manually in your terminal.
+The Task: Set up AWS EventBridge (or a simple internal cron) to wake up the workers every hour (for new orders) and every night at 2:00 AM IST (for a full summary refresh).
+🚀 THE NEXT ACTION: Step 1 (The Dashboard API)
+We need to build the API that React will call to get the final numbers. We will use the Weighted Aggregation Rule from your spec (never average percentages).
+🛠️ Part A: Update sync.service.js
+Add a method to query and sum up daily records.
+Add this to Profitfirst/Auth-service/services/sync.service.js:
+code
+JavaScript
+async getDashboardSummary(merchantId, startDate, endDate) {
+    try {
+      const params = {
+        TableName: newTableName,
+        KeyConditionExpression: 'PK = :pk AND SK BETWEEN :start AND :end',
+        ExpressionAttributeValues: {
+          ':pk': `MERCHANT#${merchantId}`,
+          ':start': `SUMMARY#${startDate}`,
+          ':end': `SUMMARY#${endDate}`
+        }
+      };
 
-Action 5: Product Organization (Scalability)
-Target: onboarding.controller.js
+      const result = await newDynamoDB.send(new QueryCommand(params));
+      const summaries = result.Items || [];
 
-The Fix: Don't save a list of 100 products inside the User Profile.
+      // 1. Initialize Totals
+      const totals = {
+        revenueGenerated: 0, revenueEarned: 0, netRevenue: 0,
+        cogs: 0, adsSpend: 0, shippingSpend: 0, gatewayFees: 0,
+        businessExpenses: 0, totalOrders: 0, deliveredOrders: 0,
+        rtoOrders: 0, moneyKept: 0
+      };
 
-The Pro Logic: Save each product as its own row: PK: MERCHANT#123, SK: PRODUCT#ABC. This keeps your database fast and prevents it from breaking when a merchant has a lot of items.
+      // 2. Sum the raw data
+      summaries.forEach(day => {
+        Object.keys(totals).forEach(key => {
+          totals[key] += (day[key] || 0);
+        });
+      });
 
-The "Production Ready" ResultWhen you finish, a scan of your database for one user will look like this simple Your Final Database View (Perfection):
-Partition Key (PK)	Sort Key (SK)	Content
-MERCHANT#COGNITO_ID	PROFILE	Business info, Email, Onboarding Step
-MERCHANT#COGNITO_ID	INTEGRATION#SHOPIFY	Encrypted Shopify Tokens
-MERCHANT#COGNITO_ID	INTEGRATION#META	Encrypted Meta Tokens
-MERCHANT#COGNITO_ID	INTEGRATION#SHIPROCKET	Encrypted Shiprocket Tokens
-MERCHANT#COGNITO_ID	PRODUCT#12345	Product Name, Cost Price (COGS)
-MERCHANT#COGNITO_ID	PRODUCT#67890	Product Name, Cost Price (COGS)
+      // 3. 🟢 Calculate Weighted Ratios (The Senior Rule)
+      const profitMargin = totals.netRevenue > 0 ? (totals.moneyKept / totals.netRevenue) * 100 : 0;
+      const roas = totals.adsSpend > 0 ? (totals.revenueGenerated / totals.adsSpend) : 0;
+      const poas = totals.adsSpend > 0 ? (totals.moneyKept / totals.adsSpend) : 0;
+      const aov = totals.totalOrders > 0 ? (totals.revenueGenerated / totals.totalOrders) : 0;
 
+      return {
+        success: true,
+        summary: {
+          ...totals,
+          profitMargin: Number(profitMargin.toFixed(2)),
+          roas: Number(roas.toFixed(2)),
+          poas: Number(poas.toFixed(2)),
+          aov: Number(aov.toFixed(2))
+        },
+        chartData: summaries // Send raw days for the line charts
+      };
+    } catch (error) {
+      console.error('Dashboard API Error:', error);
+      throw error;
+    }
+  }
+🛠️ Part B: Create the Route
+File: Profitfirst/Auth-service/routes/dashboard.routes.js
+code
+JavaScript
+const express = require('express');
+const router = express.Router();
+const syncService = require('../services/sync.service');
+const { authenticateToken } = require('../middleware/auth.middleware');
+
+router.get('/summary', authenticateToken, async (req, res) => {
+  try {
+    const { from, to } = req.query; // Expects YYYY-MM-DD
+    const result = await syncService.getDashboardSummary(req.user.userId, from, to);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = router;
 
 ================================================================
 

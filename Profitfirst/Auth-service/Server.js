@@ -16,7 +16,7 @@ const aiChatRoutes = require('./routes/ai-chat.routes');
 const predictionRoutes = require('./routes/prediction.routes');
 const userRoutes = require('./routes/user.routes');
 const productsRoutes = require('./routes/products.routes');
-
+const syncRoutes = require('./routes/sync.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -226,6 +226,9 @@ app.use('/api/auth', authLimiter, authRoutes);
 // Onboarding routes (requires authentication)
 app.use('/api/onboard', onboardingRoutes);
 
+app.use('/api/dashboard', require('./routes/dashboard.routes'));
+
+
 // Shopify routes (requires authentication)
 app.use('/api/shopify', shopifyRoutes);
 
@@ -236,6 +239,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.use('/api/products', productsRoutes);
+app.use('/api/sync', syncRoutes);
 
 
 // Health check endpoint - useful for monitoring and load balancers
