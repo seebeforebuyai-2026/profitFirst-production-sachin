@@ -6,6 +6,8 @@
  */
 
 const crypto = require('crypto');
+require('dotenv').config({ path: '../.env' });
+
 
 class EncryptionService {
   constructor() {

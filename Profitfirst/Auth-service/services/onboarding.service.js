@@ -541,14 +541,10 @@ class OnboardingService {
       if (!integrationResult.success)
         return { success: false, error: integrationResult.error };
 
-      // Update Profile to Step 5
+      // Update Profile to Step 5 (not complete yet - still need COGS and Expenses)
       await dynamodbService.updateUserProfileOnboarding(merchantId, {
-        onboardingStep: 6,
-        onboardingCompleted: true,
+        onboardingStep: 5,
         step4CompletedAt: new Date().toISOString(),
-        cogsCompleted: false,
-        initialSyncCompleted: false,
-        dashboardUnlocked: false,
       });
 
       return {

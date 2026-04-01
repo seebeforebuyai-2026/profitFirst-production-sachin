@@ -49,7 +49,14 @@ const Step4 = ({ onComplete }) => {
       // Step 1: Connect shipping account securely (This does EVERYTHING)
       await axiosInstance.post("/onboard/step4", payload);
       toast.success("✅ Shipping account connected!", { autoClose: 1500 });
-      navigate('/dashboard');   
+      
+      // Step 2: Call onComplete to properly advance to next step
+      if (onComplete) {
+        await onComplete();
+      } else {
+        // Fallback: navigate to dashboard if onComplete not provided
+        navigate('/dashboard');
+      }
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.response?.data?.error || "Failed to connect shipping account.";
       toast.error(errorMessage);

@@ -1,31 +1,15 @@
-/**
- * Business Expenses Component
- * 
- * PURPOSE: Manage additional business expenses for accurate profit calculations
- * 
- * EXPENSE CATEGORIES:
- * 1. Agency Fees - Marketing agency costs
- * 2. RTO Handling Fees - Return processing costs
- * 3. Payment Gateway Fees - Transaction processing fees (% of revenue)
- * 4. Staff Fees - Employee salaries
- * 5. Office Rent - Operational overhead
- * 6. Other Expenses - Miscellaneous costs
- * 
- * IMPACT: These expenses are deducted from Net Profit calculation
- * Updated Formula: Net Profit = Revenue - (COGS + Ad Spend + Shipping + Business Expenses)
- */
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import axiosInstance from "../../axios";
 import { toast } from "react-toastify";
 import { PulseLoader } from "react-spinners";
-import { FiSave, FiDollarSign, FiTrendingDown, FiInfo } from "react-icons/fi";
+import { FiSave, FiDollarSign, FiTrendingDown, FiInfo, FiUsers, FiHome } from "react-icons/fi";
 
 const BusinessExpenses = () => {
+  // 🟢 Exactly matching the Backend Object Structure
   const [expenses, setExpenses] = useState({
     agencyFees: 0,
     rtoHandlingFees: 0,
-    paymentGatewayFeePercent: 2.5, // Default 2.5%
+    paymentGatewayFeePercent: 2.5,
     staffFees: 0,
     officeRent: 0,
     otherExpenses: 0
@@ -35,350 +19,172 @@ const BusinessExpenses = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Fetch existing expenses on component mount
   useEffect(() => {
     fetchExpenses();
   }, []);
 
   const fetchExpenses = async () => {
+    setIsLoading(true);
     try {
+      // 🟢 ISSUE 2 FIX: Calling the specific business-expenses endpoint
       const response = await axiosInstance.get("/user/business-expenses");
-      if (response.data.expenses) {
+      if (response.data.success && response.data.expenses) {
         setExpenses(response.data.expenses);
       }
     } catch (error) {
-      console.error("Error fetching business expenses:", error);
-      // Don't show error toast for first time users (404 is expected)
-      if (error.response?.status !== 404) {
-        toast.error("Failed to load business expenses");
-      }
+      console.error("Error fetching expenses:", error);
+      toast.error("Failed to load existing expenses");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleInputChange = (field, value) => {
-    // Convert to number and ensure non-negative
-    const numValue = Math.max(0, parseFloat(value) || 0);
-    
-    setExpenses(prev => ({
-      ...prev,
-      [field]: numValue
-    }));
+    const numValue = value === "" ? 0 : parseFloat(value);
+    setExpenses(prev => ({ ...prev, [field]: numValue }));
     setHasChanges(true);
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await axiosInstance.post("/user/business-expenses", { expenses });
-      toast.success("Business expenses saved successfully!");
-      setHasChanges(false);
+      // 🟢 ISSUE 1 & 3 FIX: Correct endpoint and structure
+      // We don't need the extra sync call because the Backend Controller now handles the SQS trigger!
+      const response = await axiosInstance.post("/user/business-expenses", { 
+        expenses 
+      });
+      
+      if (response.data.success) {
+        toast.success("Settings saved! Recalculating your dashboard profit...");
+        setHasChanges(false);
+        
+        // 🟢 Production UX: Wait 2 seconds for the worker to start, then refresh dashboard
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 2000);
+      }
     } catch (error) {
-      console.error("Error saving business expenses:", error);
-      toast.error("Failed to save business expenses");
+      console.error("Save error:", error);
+      toast.error("Failed to save expenses");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Calculate total monthly expenses
-  const totalMonthlyExpenses = Object.values(expenses).reduce((sum, value) => {
-    // Exclude percentage-based fees from monthly total
-    if (typeof value === 'number') {
-      return sum + value;
-    }
-    return sum;
-  }, 0) - expenses.paymentGatewayFeePercent; // Subtract percentage as it's not a fixed amount
+  const totalFixedMonthly = useMemo(() => {
+    return (
+      expenses.agencyFees + 
+      expenses.staffFees + 
+      expenses.officeRent + 
+      expenses.otherExpenses
+    );
+  }, [expenses]);
+
+  const dailyHit = (totalFixedMonthly / 30).toFixed(2);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#0D1D1E]">
-        <PulseLoader size={15} color="#12EB8E" />
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0D1D1E] gap-4">
+        <PulseLoader size={10} color="#12EB8E" />
+        <p className="text-gray-500 text-xs uppercase tracking-widest">Checking Overheads...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 text-white space-y-6 bg-[#0D1D1E] min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="p-6 text-white space-y-6 max-w-6xl mx-auto pb-20">
+      {/* Header Area */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Business Expenses</h2>
-          <p className="text-gray-400 mt-1">
-            Configure additional business expenses for accurate profit calculations
-          </p>
+          <h2 className="text-3xl font-black tracking-tight">Business Overheads</h2>
+          <p className="text-gray-400 text-sm">Fixed monthly costs (Rent, Salaries) are divided by 30 days.</p>
         </div>
         
         <button
           onClick={handleSave}
           disabled={!hasChanges || isSaving}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`flex items-center gap-2 px-8 py-3 rounded-xl font-bold transition-all shadow-lg ${
             hasChanges && !isSaving
-              ? "bg-green-600 hover:bg-green-700 text-white"
-              : "bg-gray-600 text-gray-400 cursor-not-allowed"
+              ? "bg-green-500 text-black hover:bg-green-400 scale-105"
+              : "bg-gray-800 text-gray-500 cursor-not-allowed"
           }`}
         >
-          {isSaving ? (
-            <PulseLoader size={8} color="#ffffff" />
-          ) : (
-            <FiSave className="w-4 h-4" />
-          )}
-          {isSaving ? "Saving..." : "Save Changes"}
+          {isSaving ? <PulseLoader size={5} color="#000" /> : <FiSave />}
+          {isSaving ? "Updating Profit Engine..." : "Save All Changes"}
         </button>
       </div>
 
-      {/* Info Card */}
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <FiInfo className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+      {/* Logic Info */}
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5 flex items-start gap-4">
+        <FiInfo className="text-blue-400 size-6 mt-1" />
+        <div className="text-sm text-blue-100/70">
+          <strong className="text-blue-400 block mb-1">Production Logic (Snapshotting)</strong>
+          Once saved, these rates are "frozen" into your daily profit records. Past data remains accurate 
+          even if you change your rent next month.
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-[#161616] border border-gray-800 rounded-2xl p-6 space-y-5">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-green-400 flex items-center gap-2">
+            <FiDollarSign /> Marketing & Growth
+          </h3>
+          <InputField label="Monthly Agency Fees" value={expenses.agencyFees} onChange={(val) => handleInputChange('agencyFees', val)} icon="₹" />
+          <InputField label="Other Tools/Software" value={expenses.otherExpenses} onChange={(val) => handleInputChange('otherExpenses', val)} icon="₹" />
+        </div>
+
+        <div className="bg-[#161616] border border-gray-800 rounded-2xl p-6 space-y-5">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-orange-400 flex items-center gap-2">
+            <FiTrendingDown /> Operations & Logistics
+          </h3>
+          <InputField label="RTO Handling Fee (Per Order)" value={expenses.rtoHandlingFees} onChange={(val) => handleInputChange('rtoHandlingFees', val)} icon="₹" />
+          <InputField label="Payment Gateway Fee (%)" value={expenses.paymentGatewayFeePercent} onChange={(val) => handleInputChange('paymentGatewayFeePercent', val)} icon="%" />
+        </div>
+
+        <div className="bg-[#161616] border border-gray-800 rounded-2xl p-6 space-y-5">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-purple-400 flex items-center gap-2">
+            <FiUsers /> Human Resources
+          </h3>
+          <InputField label="Total Monthly Salaries" value={expenses.staffFees} onChange={(val) => handleInputChange('staffFees', val)} icon="₹" />
+        </div>
+
+        <div className="bg-[#161616] border border-gray-800 rounded-2xl p-6 space-y-5">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
+            <FiHome /> Infrastructure
+          </h3>
+          <InputField label="Monthly Office Rent" value={expenses.officeRent} onChange={(val) => handleInputChange('officeRent', val)} icon="₹" />
+        </div>
+      </div>
+
+      {/* Summary Logic Visualization */}
+      <div className="bg-gradient-to-r from-[#111] to-[#161616] border border-gray-800 rounded-3xl p-8 shadow-2xl flex flex-col md:flex-row justify-around items-center gap-8 text-center">
           <div>
-            <h3 className="text-blue-400 font-medium mb-1">How This Affects Your Profits</h3>
-            <p className="text-gray-300 text-sm">
-              These expenses will be automatically deducted from your Net Profit calculations in the dashboard. 
-              This gives you a more accurate picture of your actual business profitability.
-            </p>
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">Total Monthly Burn</div>
+            <div className="text-5xl font-black text-white">₹{totalFixedMonthly.toLocaleString('en-IN')}</div>
           </div>
-        </div>
-      </div>
-
-      {/* Expense Categories */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Marketing Expenses */}
-        <div className="bg-[#161616] rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <FiDollarSign className="w-5 h-5 text-green-400" />
-            Marketing Expenses
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Agency Fees (Monthly)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={expenses.agencyFees}
-                  onChange={(e) => handleInputChange('agencyFees', e.target.value)}
-                  className="w-full pl-8 pr-4 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Monthly fees paid to marketing agencies or consultants
-              </p>
-            </div>
-          </div>
-        </div>
-
-          {/* Other Expenses */}
-        <div className="bg-[#161616] rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <FiDollarSign className="w-5 h-5 text-gray-400" />
-            Other Expenses
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Other Expenses (Monthly)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={expenses.otherExpenses}
-                  onChange={(e) => handleInputChange('otherExpenses', e.target.value)}
-                  className="w-full pl-8 pr-4 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Miscellaneous business expenses (software, tools, etc.)
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-        {/* Operational Expenses */}
-        <div className="bg-[#161616] rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <FiTrendingDown className="w-5 h-5 text-orange-400" />
-            Operational Expenses
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                RTO Handling Fees (Monthly)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={expenses.rtoHandlingFees}
-                  onChange={(e) => handleInputChange('rtoHandlingFees', e.target.value)}
-                  className="w-full pl-8 pr-4 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Costs for processing returned orders (RTO)
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Payment Gateway Fees (%)
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="0.1"
-                  value={expenses.paymentGatewayFeePercent}
-                  onChange={(e) => handleInputChange('paymentGatewayFeePercent', e.target.value)}
-                  className="w-full pl-4 pr-8 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="2.5"
-                />
-                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">%</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Percentage fee charged by payment processors (Razorpay, PayU, etc.)
-              </p>
-            </div>
-          </div>
-        </div>
-
-
-
-        {/* Staff & Office Expenses */}
-        <div className="bg-[#161616] rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <FiDollarSign className="w-5 h-5 text-purple-400" />
-      
-            Staff & Office
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Staff Fees (Monthly)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  value={expenses.staffFees}
-                  onChange={(e) => handleInputChange('staffFees', e.target.value)}
-                  className="w-full pl-8 pr-4 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Total monthly salaries and employee costs
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Office Rent (Monthly)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  value={expenses.officeRent}
-                  onChange={(e) => handleInputChange('officeRent', e.target.value)}
-                  className="w-full pl-8 pr-4 py-3 bg-[#0D1D1E] border border-gray-700 rounded-lg text-white focus:border-green-500 focus:outline-none"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Monthly office rent and utilities
-              </p>
-            </div>
-          </div>
-        </div>
-
-
-      {/* Summary Card */}
-      <div className="bg-[#00131C] rounded-xl p-6">
-        <h3 className="text-lg font-semibold mb-4">Monthly Expense Summary</h3>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">
-              ₹{expenses.agencyFees.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400">Agency Fees</div>
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">Daily Profit Deduction</div>
+            <div className="text-5xl font-black text-red-500">- ₹{dailyHit}</div>
           </div>
-          
-          <div className="text-center">
-            <div className="text-2xl font-bold text-orange-400">
-              ₹{expenses.rtoHandlingFees.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400">RTO Handling</div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-400">
-              {expenses.paymentGatewayFeePercent}%
-            </div>
-            <div className="text-xs text-gray-400">Gateway Fees</div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-2xl font-bold text-purple-400">
-              ₹{expenses.staffFees.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400">Staff Fees</div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">
-              ₹{expenses.officeRent.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400">Office Rent</div>
-          </div>
-          
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-400">
-              ₹{expenses.otherExpenses.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400">Other</div>
-          </div>
-        </div>
-        
-        <div className="mt-6 pt-4 border-t border-gray-700">
-          <div className="flex justify-between items-center">
-            <span className="text-lg font-medium">Total Fixed Monthly Expenses:</span>
-            <span className="text-2xl font-bold text-red-400">
-              ₹{(totalMonthlyExpenses).toLocaleString('en-IN')}
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            * Payment gateway fees are calculated as percentage of revenue
-          </p>
-        </div>
       </div>
     </div>
   );
 };
+
+const InputField = ({ label, value, onChange, icon }) => (
+  <div className="space-y-1.5">
+    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</label>
+    <div className="relative">
+      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-bold">{icon}</span>
+      <input
+        type="number"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full pl-10 pr-4 py-3 bg-[#0a0a0a] border border-gray-800 rounded-xl text-white font-mono focus:border-green-500 focus:outline-none transition-all"
+        placeholder="0.00"
+      />
+    </div>
+  </div>
+);
 
 export default BusinessExpenses;

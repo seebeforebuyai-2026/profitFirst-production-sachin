@@ -3,7 +3,16 @@ const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { sqsClient, sqsQueueUrl, newDynamoDB, newTableName, s3Client, s3BucketName } = require('../config/aws.config');
 const axios = require('axios');
-const encryptionService = require('../utils/encryption');
+const axiosRetry = require('axios-retry').default;
+
+// 🟢 Automatically retry on network errors or 5xx/429 status codes
+axiosRetry(axios, { 
+  retries: 3, 
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.response.status === 429;
+  }
+});const encryptionService = require('../utils/encryption');
 const syncService = require('../services/sync.service');
 
 let isShuttingDown = false;

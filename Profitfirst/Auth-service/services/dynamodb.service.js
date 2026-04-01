@@ -1182,6 +1182,50 @@ async createUserProfile(userData) {
   }
 
   /**
+   * 🟢 STEP 1: Save current monthly overheads to the PROFILE
+   * These values represent the "Active Rates" for the business.
+   */
+  async updateBusinessOverheads(merchantId, overheads) {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const command = new UpdateCommand({
+        TableName: newTableName,
+        Key: { 
+          PK: `MERCHANT#${merchantId}`, 
+          SK: 'PROFILE' 
+        },
+        // We save all 6 categories directly into the Profile
+        UpdateExpression: `SET 
+          agencyFees = :af,
+          staffFees = :sf,
+          officeRent = :or,
+          otherExpenses = :oe,
+          rtoHandlingFees = :rf,
+          paymentGatewayFeePercent = :pg,
+          expensesCompleted = :ec,
+          updatedAt = :t`,
+        ExpressionAttributeValues: {
+          ':af': Number(overheads.agencyFees || 0),
+          ':sf': Number(overheads.staffFees || 0),
+          ':or': Number(overheads.officeRent || 0),
+          ':oe': Number(overheads.otherExpenses || 0),
+          ':rf': Number(overheads.rtoHandlingFees || 0),
+          ':pg': Number(overheads.paymentGatewayFeePercent || 2.5),
+          ':ec': true,
+          ':t': timestamp
+        },
+        ReturnValues: 'ALL_NEW'
+      });
+
+      const result = await newDynamoDB.send(command);
+      return { success: true, data: result.Attributes };
+    } catch (error) {
+      console.error('Update Overheads Error:', error);
+      throw error;
+    }
+  }
+  /**
    * Delete User
    * 
    * @param {string} merchantId - Merchant ID

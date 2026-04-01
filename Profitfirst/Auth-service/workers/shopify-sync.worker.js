@@ -5,7 +5,17 @@ const { sqsClient, sqsQueueUrl, newDynamoDB, newTableName, s3Client, s3BucketNam
 const shopifyUtil = require('../utils/shopify.util');
 const syncService = require('../services/sync.service');
 const dynamodbService = require('../services/dynamodb.service');
+const axios = require('axios');
+const axiosRetry = require('axios-retry').default;
 
+// 🟢 Automatically retry on network errors or 5xx/429 status codes
+axiosRetry(axios, { 
+  retries: 3, 
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.response.status === 429;
+  }
+});
 let isShuttingDown = false;
 
 const pollQueue = async () => {

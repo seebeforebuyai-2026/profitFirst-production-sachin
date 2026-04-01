@@ -149,20 +149,33 @@ app.use(compression({
 }));
 
 // Body parsing middleware with size limits and error handling
+// app.use(express.json({ 
+//   limit: '10kb',
+//   verify: (req, res, buf, encoding) => {
+//     // Verify JSON payload size
+//     if (buf.length > 10240) { // 10KB in bytes
+//       throw new Error('Request body too large');
+//     }
+//   }
+// }));
+// app.use(express.urlencoded({ 
+//   extended: true, 
+//   limit: '10kb',
+//   verify: (req, res, buf, encoding) => {
+//     if (buf.length > 10240) {
+//       throw new Error('Request body too large');
+//     }
+//   }
+// }));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 🟢 ALSO UPDATE THE VERIFY FUNCTION (Crucial!)
 app.use(express.json({ 
-  limit: '10kb',
+  limit: '10mb', 
   verify: (req, res, buf, encoding) => {
-    // Verify JSON payload size
-    if (buf.length > 10240) { // 10KB in bytes
-      throw new Error('Request body too large');
-    }
-  }
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: '10kb',
-  verify: (req, res, buf, encoding) => {
-    if (buf.length > 10240) {
+    if (buf.length > 10 * 1024 * 1024) { // 10MB in bytes
       throw new Error('Request body too large');
     }
   }
@@ -227,7 +240,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/onboard', onboardingRoutes);
 
 app.use('/api/dashboard', require('./routes/dashboard.routes'));
-
+app.use('/api/expenses', require('./routes/expense.routes'));
 
 // Shopify routes (requires authentication)
 app.use('/api/shopify', shopifyRoutes);

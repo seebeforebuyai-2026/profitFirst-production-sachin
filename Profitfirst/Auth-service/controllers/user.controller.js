@@ -1,323 +1,74 @@
-/**
- * User Controller
- * Handles user profile and settings
- */
+const dynamodbService = require('../services/dynamodb.service');
+const { SendMessageCommand } = require('@aws-sdk/client-sqs');
+const { sqsClient, sqsQueueUrl } = require('../config/aws.config');
 
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-
-const client = new DynamoDBClient({ region: process.env.AWS_REGION });
-const docClient = DynamoDBDocumentClient.from(client);
-
-const SHIPPING_CONNECTIONS_TABLE = process.env.SHIPPING_CONNECTIONS_TABLE || 'shipping_connections';
-
-/**
- * Get user profile
- * GET /api/user/profile
- */
-const getProfile = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const email = req.user.email; // From JWT token
-    console.log(`📋 Getting profile for user: ${userId} (${email})`);
-
-    // Get onboarding data (this contains user's settings)
-    const onboardingParams = {
-      TableName: process.env.ONBOARDING_TABLE_NAME || 'Onboarding',
-      Key: { userId }
-    };
-
-    const onboardingResult = await docClient.send(new GetCommand(onboardingParams));
-    const onboarding = onboardingResult.Item || {};
-
-    // Get shipping connection data (for Shiprocket email)
-    let shippingConnection = null;
+class UserController {
+  /**
+   * 🟢 GET /api/user/business-expenses
+   * Fetches the current overheads from the PROFILE record.
+   */
+  async getBusinessExpenses(req, res) {
     try {
-      const shippingParams = {
-        TableName: SHIPPING_CONNECTIONS_TABLE,
-        Key: { userId }
-      };
-      const shippingResult = await docClient.send(new GetCommand(shippingParams));
-      if (shippingResult.Item) {
-        shippingConnection = {
-          platform: shippingResult.Item.platform,
-          email: shippingResult.Item.email,
-          status: shippingResult.Item.status,
-          connectedAt: shippingResult.Item.connectedAt
-        };
-        console.log(`✅ Found shipping connection: ${shippingConnection.platform} - ${shippingConnection.email}`);
+      const merchantId = req.user.userId;
+      
+      // We use our existing getUserProfile method
+      const result = await dynamodbService.getUserProfile(merchantId);
+      
+      if (!result.success) {
+        return res.status(404).json({ error: "Profile not found" });
       }
-    } catch (shippingError) {
-      console.log(`⚠️  Could not fetch shipping connection: ${shippingError.message}`);
+
+      // Return only the expense fields or defaults
+      const data = result.data;
+      res.json({
+        success: true,
+        expenses: {
+          agencyFees: data.agencyFees || 0,
+          staffFees: data.staffFees || 0,
+          officeRent: data.officeRent || 0,
+          otherExpenses: data.otherExpenses || 0,
+          rtoHandlingFees: data.rtoHandlingFees || 0,
+          paymentGatewayFeePercent: data.paymentGatewayFeePercent || 2.5,
+          expensesCompleted: data.expensesCompleted || false
+        }
+      });
+    } catch (error) {
+      console.error('Get Expenses Error:', error);
+      res.status(500).json({ error: "Internal server error" });
     }
+  }
 
-    // If we have shipping connection, use that email for step5
-    if (shippingConnection && shippingConnection.email) {
-      onboarding.step5 = {
-        ...(onboarding.step5 || {}),
-        shiproactId: shippingConnection.email,
-        shiproactPassword: '' // Don't expose password
-      };
+  /**
+   * 🟢 POST /api/user/business-expenses
+   * Saves overheads to PROFILE and triggers the Summary Engine.
+   */
+  async updateBusinessExpenses(req, res) {
+    try {
+      const merchantId = req.user.userId;
+      const { expenses } = req.body;
+
+      if (!expenses) {
+        return res.status(400).json({ error: "Expense data is required" });
+      }
+
+      // 1. Save to DynamoDB Service (The function you added in Step 1)
+      await dynamodbService.updateBusinessOverheads(merchantId, expenses);
+
+       const syncService = require('../services/sync.service');
+      await syncService.startInitialSync(merchantId);
+     
+
+       res.json({
+        success: true,
+        message: "Final setup complete. Your dashboard is now syncing!",
+        expensesCompleted: true
+      });
+
+    } catch (error) {
+      console.error('Update Expenses Error:', error);
+      res.status(500).json({ error: "Failed to save expenses" });
     }
-
-    // Extract name from onboarding step1 or use email
-    const step1 = onboarding.step1 || {};
-    const firstName = step1.firstName || step1.name || '';
-    const lastName = step1.lastName || '';
-
-    console.log(`✅ Profile loaded successfully`);
-
-    res.json({
-      userId: userId,
-      email: email,
-      firstName: firstName,
-      lastName: lastName,
-      onboarding: onboarding,
-      shippingConnection: shippingConnection
-    });
-  } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
   }
-};
+}
 
-/**
- * Update basic profile
- * PUT /api/user/profile/basic
- */
-const updateBasicProfile = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { firstName, lastName, email } = req.body;
-
-    const params = {
-      TableName: process.env.DYNAMODB_TABLE_NAME || 'Users',
-      Key: { userId },
-      UpdateExpression: 'SET firstName = :firstName, lastName = :lastName, email = :email',
-      ExpressionAttributeValues: {
-        ':firstName': firstName,
-        ':lastName': lastName,
-        ':email': email
-      },
-      ReturnValues: 'ALL_NEW'
-    };
-
-    await docClient.send(new UpdateCommand(params));
-
-    res.json({ message: 'Profile updated successfully' });
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
-  }
-};
-
-/**
- * Update Shopify credentials
- * PUT /api/user/profile/shopify
- */
-const updateShopify = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { storeUrl, apiKey, apiSecret, accessToken } = req.body;
-
-    const params = {
-      TableName: process.env.ONBOARDING_TABLE_NAME || 'Onboarding',
-      Key: { userId },
-      UpdateExpression: 'SET step2 = :step2',
-      ExpressionAttributeValues: {
-        ':step2': { storeUrl, apiKey, apiSecret, accessToken }
-      }
-    };
-
-    await docClient.send(new UpdateCommand(params));
-
-    res.json({ message: 'Shopify credentials updated successfully' });
-  } catch (error) {
-    console.error('Update Shopify error:', error);
-    res.status(500).json({ error: 'Failed to update Shopify credentials' });
-  }
-};
-
-/**
- * Update Meta credentials
- * PUT /api/user/profile/meta
- */
-const updateMeta = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { adAccountId } = req.body;
-
-    const params = {
-      TableName: process.env.ONBOARDING_TABLE_NAME || 'Onboarding',
-      Key: { userId },
-      UpdateExpression: 'SET step4 = :step4',
-      ExpressionAttributeValues: {
-        ':step4': { adAccountId }
-      }
-    };
-
-    await docClient.send(new UpdateCommand(params));
-
-    res.json({ message: 'Meta credentials updated successfully' });
-  } catch (error) {
-    console.error('Update Meta error:', error);
-    res.status(500).json({ error: 'Failed to update Meta credentials' });
-  }
-};
-
-/**
- * Update Shiprocket credentials
- * PUT /api/user/profile/shiprocket
- */
-const updateShiprocket = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { shiproactId, shiproactPassword } = req.body;
-
-    // 1. Update Onboarding table (Legacy)
-    const onboardingParams = {
-      TableName: process.env.ONBOARDING_TABLE_NAME || 'Onboarding',
-      Key: { userId },
-      UpdateExpression: 'SET step5 = :step5',
-      ExpressionAttributeValues: {
-        ':step5': { shiproactId, shiproactPassword }
-      }
-    };
-    await docClient.send(new UpdateCommand(onboardingParams));
-
-    // 2. Update Shipping Connections table (For Sync Services)
-    // We assume this is a new connection or update
-    const { PutCommand } = require('@aws-sdk/lib-dynamodb');
-
-    // We don't have the token yet, but the dashboard controller will auto-login
-    // using these credentials on next request.
-    const shippingParams = {
-      TableName: SHIPPING_CONNECTIONS_TABLE,
-      Item: {
-        userId,
-        platform: 'shiprocket',
-        email: shiproactId,
-        password: shiproactPassword,
-        status: 'active',
-        updatedAt: new Date().toISOString(),
-        // Preserve existing token if we're just updating password?
-        // Actually, if password changes, old token might be invalid anyway
-        // Let the system generate a new one.
-        connectedAt: new Date().toISOString()
-      }
-    };
-
-    // Check if item exists to preserve other fields? 
-    // For now, overwrite is safer to ensure clean state with new credentials.
-    await docClient.send(new PutCommand(shippingParams));
-
-    console.log(`✅ Shiprocket credentials updated for user: ${userId}`);
-
-    res.json({ message: 'Shiprocket credentials updated successfully' });
-  } catch (error) {
-    console.error('Update Shiprocket error:', error);
-    res.status(500).json({ error: 'Failed to update Shiprocket credentials' });
-  }
-};
-
-/**
- * Get Business Expenses
- * @route GET /api/user/business-expenses
- * @access Protected
- */
-const getBusinessExpenses = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-
-    const command = new QueryCommand({
-      TableName: process.env.DYNAMODB_TABLE_NAME || 'Users',
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: {
-        ':userId': userId
-      },
-      ProjectionExpression: 'businessExpenses'
-    });
-
-    const result = await docClient.send(command);
-    const user = result.Items?.[0];
-
-    res.json({
-      expenses: user?.businessExpenses || {
-        agencyFees: 0,
-        rtoHandlingFees: 0,
-        paymentGatewayFeePercent: 2.5,
-        staffFees: 0,
-        officeRent: 0,
-        otherExpenses: 0
-      }
-    });
-
-  } catch (error) {
-    console.error('Get business expenses error:', error);
-    res.status(500).json({
-      error: 'Failed to get business expenses',
-      message: error.message
-    });
-  }
-};
-
-/**
- * Update Business Expenses
- * @route POST /api/user/business-expenses
- * @access Protected
- */
-const updateBusinessExpenses = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { expenses } = req.body;
-
-    // Validate expenses object
-    const requiredFields = ['agencyFees', 'rtoHandlingFees', 'paymentGatewayFeePercent', 'staffFees', 'officeRent', 'otherExpenses'];
-    for (const field of requiredFields) {
-      if (typeof expenses[field] !== 'number' || expenses[field] < 0) {
-        return res.status(400).json({
-          error: 'Invalid expense data',
-          message: `${field} must be a non-negative number`
-        });
-      }
-    }
-
-    // Update user's business expenses
-    const command = new UpdateCommand({
-      TableName: process.env.DYNAMODB_TABLE_NAME || 'Users',
-      Key: { userId },
-      UpdateExpression: 'SET businessExpenses = :expenses, updatedAt = :updatedAt',
-      ExpressionAttributeValues: {
-        ':expenses': expenses,
-        ':updatedAt': new Date().toISOString()
-      }
-    });
-
-    await docClient.send(command);
-
-    console.log(`✅ Business expenses updated for user: ${userId}`);
-
-    res.json({
-      success: true,
-      message: 'Business expenses updated successfully',
-      expenses
-    });
-
-  } catch (error) {
-    console.error('Update business expenses error:', error);
-    res.status(500).json({
-      error: 'Failed to update business expenses',
-      message: error.message
-    });
-  }
-};
-
-module.exports = {
-  getProfile,
-  updateBasicProfile,
-  updateShopify,
-  updateMeta,
-  updateShiprocket,
-  getBusinessExpenses,
-  updateBusinessExpenses
-};
+module.exports = new UserController();

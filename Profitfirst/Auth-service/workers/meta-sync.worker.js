@@ -2,6 +2,16 @@ const { ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client
 const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { sqsClient, sqsQueueUrl, newDynamoDB, newTableName } = require('../config/aws.config');
 const axios = require('axios');
+const axiosRetry = require('axios-retry').default;
+
+// 🟢 Automatically retry on network errors or 5xx/429 status codes
+axiosRetry(axios, { 
+  retries: 3, 
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.response.status === 429;
+  }
+});
 const encryptionService = require('../utils/encryption'); // ✅ Fixed Path
 const syncService = require('../services/sync.service');
 

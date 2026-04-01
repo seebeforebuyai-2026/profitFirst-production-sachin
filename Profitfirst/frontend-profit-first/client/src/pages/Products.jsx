@@ -185,6 +185,8 @@ const Products = () => {
       });
       if (response.data.success) {
         toast.success("✅ COGS saved successfully!");
+                navigate("/dashboard/business-expenses"); 
+
         updateProfile({ cogsCompleted: true });
         if (syncStatus.shopify.status === "pending") await startSync();
       }
