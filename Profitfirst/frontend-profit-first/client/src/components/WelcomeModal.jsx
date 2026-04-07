@@ -1,10 +1,11 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-const WelcomeModal = ({ isOpen }) => {
+const WelcomeModal = ({ isOpen,step }) => {
   const navigate = useNavigate();
 
   if (!isOpen) return null;
+  const isCogsStep = step === "cogs";
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -21,25 +22,24 @@ const WelcomeModal = ({ isOpen }) => {
           />
         </div>
 
-        <h2 className="text-2xl font-bold text-white mb-3">
-          Welcome to ProfitFirst!
-        </h2>
+        <h2 className="text-2xl font-bold text-white mb-2">
+        {isCogsStep ? "Step 1: Product Costs" : "Step 2: Business Expense"}
+      </h2>
         
-        <p className="text-gray-400 mb-8 leading-relaxed">
-          To calculate your real-time profit analytics, we first need you to set your <br/>
-          <span className="text-green-400 font-semibold"> Product Manufacturing Costs (COGS)</span>.
-        </p>
+        <p className="text-gray-400 mb-6">
+        {isCogsStep 
+          ? "To see your real profit, first set your product costs (COGS)."
+          : "Almost there! Now set your monthly rent and salaries to unlock the dashboard."}
+      </p>
 
         <button
-          onClick={() => navigate("/dashboard/products")}
+        onClick={() => navigate(isCogsStep ? "/dashboard/products" : "/dashboard/business-expenses")}
           className="w-full py-4 px-6 bg-green-500 hover:bg-green-600 active:scale-95 text-black font-bold rounded-xl transition-all shadow-lg shadow-green-500/20"
         >
-          → Set Up Product Costs
+        {isCogsStep ? "→ Set Up Products" : "→ Set Up Expenses"}
         </button>
         
-        <p className="mt-4 text-[10px] text-gray-600 uppercase tracking-widest">
-          Setup Phase: Step 1 of 2
-        </p>
+      
       </div>
     </div>
   );

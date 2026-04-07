@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { PulseLoader } from "react-spinners";
 import { toast } from "react-toastify";
 import axiosInstance from "../../axios";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 const Step4 = ({ onComplete }) => {
   const [platform, setPlatform] = useState("Shiprocket");
   const [formData, setFormData] = useState({
@@ -19,52 +19,61 @@ const Step4 = ({ onComplete }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      // Clear fields that don't belong to the selected platform before sending
-      let payload = { platform };
-      switch (platform) {
-        case "Shiprocket":
-        case "Nimbuspost":
-          payload.email = formData.email;
-          payload.password = formData.password;
-          break;
-        case "Shipway":
-          payload.email = formData.email;
-          payload.password = formData.password; 
-          break;
-        case "Dilevery":
-          payload.access_token = formData.access_token;
-          break;
-        case "Ithink Logistics":
-          payload.access_token = formData.access_token;
-          payload.secret_key = formData.secret_key;
-          break;
-        default:
-          break;
-      }
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-      // Step 1: Connect shipping account securely (This does EVERYTHING)
-      await axiosInstance.post("/onboard/step4", payload);
-      toast.success("✅ Shipping account connected!", { autoClose: 1500 });
-      
-      // Step 2: Call onComplete to properly advance to next step
-      if (onComplete) {
-        await onComplete();
-      } else {
-        // Fallback: navigate to dashboard if onComplete not provided
-        navigate('/dashboard');
-      }
-    } catch (err) {
-      const errorMessage = err.response?.data?.message || err.response?.data?.error || "Failed to connect shipping account.";
-      toast.error(errorMessage);
-      console.error("Submission error:", err.response || err);
-    } finally {
-      setLoading(false);
+  try {
+    let payload = { platform };
+
+    switch (platform) {
+      case "Shiprocket":
+      case "Nimbuspost":
+      case "Shipway":
+        payload.email = formData.email;
+        payload.password = formData.password;
+        break;
+
+      case "Dilevery":
+        payload.access_token = formData.access_token;
+        break;
+
+      case "Ithink Logistics":
+        payload.access_token = formData.access_token;
+        payload.secret_key = formData.secret_key;
+        break;
+
+      default:
+        break;
     }
-  };
+
+    // ✅ FIX: Store response
+    const response = await axiosInstance.post("/onboard/step4", payload);
+
+    if (response.data.success) {
+      toast.success("✅ Shipping account connected!", { autoClose: 1500 });
+
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 1500);
+    } else {
+      console.log("Step 4 failed:", response.data);
+      toast.error(response.data.message || "Connection failed");
+    }
+
+  } catch (err) {
+    const errorMessage =
+      err.response?.data?.message ||
+      err.response?.data?.error ||
+      "Failed to connect shipping account.";
+
+    toast.error(errorMessage);
+    console.error("Submission error:", err.response || err);
+
+  } finally {
+    setLoading(false);
+  }
+};
   const renderFields = () => {
     switch (platform) {
       case "Shiprocket":
@@ -226,10 +235,12 @@ const Step4 = ({ onComplete }) => {
 
           {/* Heading */}
           <h2 className="text-center text-2xl font-bold mb-2">
-           Connect your Shiprocket Account
+            Connect your Shiprocket Account
           </h2>
           <p className="text-center text-sm text-gray-400 mb-4">
-Track your accounts profit, sells and buys in detail with shipping account.          </p>
+            Track your accounts profit, sells and buys in detail with shipping
+            account.{" "}
+          </p>
 
           {/* Form fields */}
           <form onSubmit={handleSubmit} className="space-y-4 mb-4">
@@ -263,7 +274,7 @@ Track your accounts profit, sells and buys in detail with shipping account.     
       </main>
     </div>
   );
-}; 
+};
 
 const InputField = ({ label, name, value, onChange, type = "text" }) => (
   <div>

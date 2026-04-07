@@ -1,107 +1,131 @@
-const { ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client-sqs');
-const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { sqsClient, sqsQueueUrl, newDynamoDB, newTableName } = require('../config/aws.config');
-const axios = require('axios');
-const axiosRetry = require('axios-retry').default;
-
-// 🟢 Automatically retry on network errors or 5xx/429 status codes
-axiosRetry(axios, { 
-  retries: 3, 
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) => {
-    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.response.status === 429;
-  }
-});
-const encryptionService = require('../utils/encryption'); // ✅ Fixed Path
-const syncService = require('../services/sync.service');
+const { ReceiveMessageCommand, DeleteMessageCommand, SendMessageCommand } = require("@aws-sdk/client-sqs");
+const { PutCommand, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const { 
+  sqsClient, 
+  metaQueueUrl, 
+  shiprocketQueueUrl, 
+  newDynamoDB, 
+  newTableName,
+  s3Client,
+  s3BucketName 
+} = require("../config/aws.config");
+const axios = require("axios");
+const encryptionService = require("../utils/encryption");
 
 let isShuttingDown = false;
 
 const pollQueue = async () => {
-  console.log("🚀 Meta Ads Sync Worker started...");
+  console.log("🚀 Meta Ads Worker: Active and Waiting...");
   while (!isShuttingDown) {
     try {
-      const { Messages } = await sqsClient.send(new ReceiveMessageCommand({
-        QueueUrl: sqsQueueUrl, MaxNumberOfMessages: 1, WaitTimeSeconds: 20
+      const { Messages } = await sqsClient.send(new ReceiveMessageCommand({ 
+        QueueUrl: metaQueueUrl, 
+        WaitTimeSeconds: 20 
       }));
-      if (!Messages) continue;
-
+      
+      if (!Messages || Messages.length === 0) continue;
+      
       const message = Messages[0];
       const body = JSON.parse(message.Body);
-      if (body.type === 'META_SYNC') {
-        console.log(`📦 Processing Meta Ads for: ${body.merchantId}`);
-        await processMetaSync(body);
-      }
-      await sqsClient.send(new DeleteMessageCommand({ QueueUrl: sqsQueueUrl, ReceiptHandle: message.ReceiptHandle }));
-    } catch (e) {
-      if (!isShuttingDown) console.error("Worker Error:", e.message);
-      await new Promise(r => setTimeout(r, 5000));
+      
+      console.log(`📢 Processing Ads for Merchant: ${body.merchantId}`);
+      await processMetaSync(body);
+      
+      await sqsClient.send(new DeleteMessageCommand({ 
+        QueueUrl: metaQueueUrl, 
+        ReceiptHandle: message.ReceiptHandle 
+      }));
+      console.log(`✅ Ad Sync Success.`);
+    } catch (e) { 
+      if (!isShuttingDown) console.error("❌ Meta Worker Fatal Error:", e.message); 
+      await new Promise(r => setTimeout(r, 5000)); 
     }
   }
 };
 
+
 const processMetaSync = async (job) => {
   const { merchantId, sinceDate } = job;
   try {
-    const integration = await newDynamoDB.send(new GetCommand({
-      TableName: newTableName, Key: { PK: `MERCHANT#${merchantId}`, SK: 'INTEGRATION#META' }
+    const integration = await newDynamoDB.send(new GetCommand({ 
+      TableName: newTableName, Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#META" }
     }));
-    if (!integration.Item) return;
-
-    const decryptedToken = encryptionService.decrypt(integration.Item.accessToken);
-    let startDate = new Date(sinceDate);
-    const endDate = new Date();
     
-    while (startDate <= endDate && !isShuttingDown) {
-      const chunkEnd = new Date(startDate);
-      chunkEnd.setDate(chunkEnd.getDate() + 30);
-      const finalEnd = chunkEnd > endDate ? endDate : chunkEnd;
+    if (!integration.Item) return;
+    const token = encryptionService.decrypt(integration.Item.accessToken);
+    const adAccountId = integration.Item.adAccountId;
+    const startStr = sinceDate.split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
 
-      const response = await axios.get(`https://graph.facebook.com/v18.0/${integration.Item.adAccountId}/insights`, {
-        params: {
-          access_token: decryptedToken,
-          time_range: JSON.stringify({ 
-            'since': startDate.toISOString().split('T')[0], 
-            'until': finalEnd.toISOString().split('T')[0] 
-          }),
-          fields: 'spend,impressions,clicks',
-          time_increment: 1,
+    // 🟢 NEW: Loop for Meta Pagination
+    let nextUrl = `https://graph.facebook.com/v20.0/${adAccountId}/insights?access_token=${token}&time_range=${JSON.stringify({ since: startStr, until: todayStr })}&fields=spend,impressions,clicks,reach,actions,action_values,inline_link_click_ctr&time_increment=1&limit=50`;
+
+    while (nextUrl) {
+        const response = await axios.get(nextUrl);
+        const dailyData = response.data.data || [];
+
+        for (const day of dailyData) {
+            try {
+                const dateKey = day.date_start; 
+                const s3Key = `${merchantId}/ads/${dateKey}.json`;
+                const purchases = (day.actions || []).find(a => a.action_type === 'purchase')?.value || 0;
+                const purchaseValue = (day.action_values || []).find(a => a.action_type === 'purchase')?.value || 0;
+
+                await s3Client.send(new PutObjectCommand({
+                    Bucket: s3BucketName, Key: s3Key,
+                    Body: JSON.stringify(day), ContentType: "application/json"
+                }));
+
+                await newDynamoDB.send(new PutCommand({ 
+                    TableName: newTableName, 
+                    Item: { 
+                        PK: `MERCHANT#${merchantId}`, 
+                        SK: `ADS#${dateKey}`, 
+                        entityType: "ADS", 
+                        date: dateKey,
+                        spend: Number(day.spend || 0), 
+                        reach: Number(day.reach || 0),
+                        impressions: Number(day.impressions || 0),
+                        clicks: Number(day.clicks || 0),
+                        ctr: Number(day.inline_link_click_ctr || 0),
+                        metaPurchases: Number(purchases),
+                        metaPurchaseValue: Number(purchaseValue),
+                        s3RawUrl: `s3://${s3BucketName}/${s3Key}`,
+                        updatedAt: new Date().toISOString() 
+                    }
+                }));
+            } catch (dayErr) { console.error(`⚠️ Day save fail:`, dayErr.message); }
         }
-      });
 
-      for (const day of response.data.data) {
-        await newDynamoDB.send(new PutCommand({
-          TableName: newTableName,
-          Item: {
-            PK: `MERCHANT#${merchantId}`,
-            SK: `ADS#${day.date_start}`,
-            entityType: 'ADS',
-            spend: Number(day.spend),
-            updatedAt: new Date().toISOString()
-          }
-        }));
-      }
-
-      startDate.setDate(startDate.getDate() + 31);
-      console.log(`📊 [Meta] Synced chunk for ${merchantId}. Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
-      await new Promise(r => setTimeout(r, 1000)); 
+        // 🟢 Check if more pages exist in Meta
+        nextUrl = response.data.paging?.next || null;
+        if (nextUrl) console.log("➡️ Meta: Fetching next page of insights...");
     }
 
-    await markSyncComplete(merchantId, 'META');
-    await syncService.checkAndUnlockDashboard(merchantId);
-  } catch (error) { console.error("Meta Error:", error.message); }
-};
+    await markSyncComplete(merchantId, "META", sinceDate);
 
-const markSyncComplete = async (merchantId, platform) => {
-  await newDynamoDB.send(new UpdateCommand({
-    TableName: newTableName,
-    Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` },
-    UpdateExpression: 'SET #s = :c, percent = :p, completedAt = :t',
-    ExpressionAttributeNames: { '#s': 'status' },
-    ExpressionAttributeValues: { ':c': 'completed', ':p': 100, ':t': new Date().toISOString() }
-  }));
+  } catch (e) { throw e; }
 };
+async function markSyncComplete(merchantId, platform, sinceDate) {
+  try {
+    // 1. Update Platform Sync Progress
+    await newDynamoDB.send(new UpdateCommand({ 
+      TableName: newTableName, 
+      Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` }, 
+      UpdateExpression: "SET #s = :c, #p = :p, completedAt = :t, updatedAt = :ut", 
+      ExpressionAttributeNames: { "#s": "status", "#p": "percent" }, 
+      ExpressionAttributeValues: { ":c": "completed", ":p": 100, ":t": new Date().toISOString(), ":ut": new Date().toISOString() } 
+    }));
 
-const shutdown = () => { isShuttingDown = true; console.log("🛑 Shutting down..."); setTimeout(() => process.exit(0), 1000); };
-process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
+    // 2. Baton Pass to Shiprocket
+    await sqsClient.send(new SendMessageCommand({ 
+      QueueUrl: shiprocketQueueUrl, 
+      MessageBody: JSON.stringify({ type: "SHIPROCKET_SYNC", merchantId, sinceDate }) 
+    }));
+    
+    console.log(`🏁 Meta Sync OK for ${merchantId} -> Triggering Shiprocket.`);
+  } catch (err) { console.error("markSyncComplete Error:", err.message); }
+}
+
 pollQueue();

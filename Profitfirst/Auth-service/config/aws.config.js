@@ -1,11 +1,3 @@
-/**
- * AWS Configuration
- * 
- * Initializes AWS SDK v3 clients for Cognito and DynamoDB
- * Uses environment variables for credentials and configuration
- * Supports multiple regions for different databases
- */
-
 const { CognitoIdentityProviderClient } = require('@aws-sdk/client-cognito-identity-provider');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
@@ -14,83 +6,42 @@ const { S3Client } = require('@aws-sdk/client-s3');
 
 require('dotenv').config();
 
-// AWS SDK v3 Configuration - Main Region (for Cognito)
 const mainAwsConfig = {
-  region: process.env.AWS_REGION,
+  region: process.env.AWS_REGION, // ap-south-1
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
 };
 
-// Initialize DynamoDB Document Client - Main Region
-const mainDdbClient = new DynamoDBClient(mainAwsConfig);
-const mainDynamoDB = DynamoDBDocumentClient.from(mainDdbClient, {
-  marshallOptions: {
-    removeUndefinedValues: true
-  }
-});
-
-// Initialize Cognito Identity Provider Client - Main Region
-const cognito = new CognitoIdentityProviderClient(mainAwsConfig);
-
-
-
-
-// New Database Configuration - Asia Pacific (Singapore) Region
 const newAwsConfig = {
-  region: 'ap-southeast-1', // Asia Pacific (Singapore)
+  region: 'ap-southeast-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID_SG,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_SG
   }
 };
 
+const mainDynamoDB = DynamoDBDocumentClient.from(new DynamoDBClient(mainAwsConfig), { marshallOptions: { removeUndefinedValues: true } });
+const newDynamoDB = DynamoDBDocumentClient.from(new DynamoDBClient(newAwsConfig), { marshallOptions: { removeUndefinedValues: true } });
+const cognito = new CognitoIdentityProviderClient(mainAwsConfig);
+const sqsClient = new SQSClient(newAwsConfig);
+const s3Client = new S3Client(newAwsConfig);
 
-const sqsClient = new SQSClient({
-  region: 'ap-southeast-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
-
-// S3 Client
-const s3Client = new S3Client({
-  region: 'ap-southeast-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
-});
-
-// Initialize DynamoDB Document Client - New Region
-const newDdbClient = new DynamoDBClient(newAwsConfig);
-const newDynamoDB = DynamoDBDocumentClient.from(newDdbClient, {
-  marshallOptions: {
-    removeUndefinedValues: true
-  }
-});
-
-// Export configured clients and environment variables
 module.exports = {
-  // Main region clients (Cognito + old DynamoDB)
   mainDynamoDB,
   cognito,
+  newDynamoDB,
+  newTableName: process.env.NEW_DYNAMODB_TABLE_NAME || 'ProfitFirst_Core',
+  sqsClient,
+  s3Client,
+  shopifyQueueUrl: process.env.SHOPIFY_QUEUE_URL,
+  metaQueueUrl: process.env.META_QUEUE_URL,
+  shiprocketQueueUrl: process.env.SHIPROCKET_QUEUE_URL,
+  summaryQueueUrl: process.env.SUMMARY_QUEUE_URL,
+  productQueueUrl: process.env.PRODUCT_QUEUE_URL, // 👈 ADD THIS LINE
+  s3BucketName: process.env.S3_BUCKET_NAME,
   userPoolId: process.env.COGNITO_USER_POOL_ID,
   clientId: process.env.COGNITO_CLIENT_ID,
-  clientSecret: process.env.COGNITO_CLIENT_SECRET,
-  tableName: process.env.DYNAMODB_TABLE_NAME,
-  
-  // New region clients (new DynamoDB for all data)
-  newDynamoDB,
-  newTableName: process.env.NEW_DYNAMODB_TABLE_NAME || process.env.DYNAMODB_TABLE_NAME,
-  
-  // OAuth configuration for Cognito Hosted UI
-  cognitoDomain: process.env.COGNITO_DOMAIN,
-  redirectUri: process.env.COGNITO_REDIRECT_URI,
-   sqsClient,
-  s3Client,
-  sqsQueueUrl: process.env.SQS_QUEUE_URL,
-  s3BucketName: process.env.S3_BUCKET_NAME
+  redirectUri: process.env.COGNITO_REDIRECT_URI
 };

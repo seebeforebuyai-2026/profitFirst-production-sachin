@@ -1,34 +1,47 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "react-toastify";
-import { FiSearch, FiPercent, FiBox, FiRefreshCw } from "react-icons/fi"; // 🟢 Added Icons
+import { FiSearch, FiPercent, FiBox, FiRefreshCw } from "react-icons/fi";
 import axiosInstance from "../../axios";
 import { useProfile } from "../ProfileContext";
+import { useNavigate } from "react-router-dom";
 
 const Products = () => {
-  const { updateProfile, fetchProfile } = useProfile();
+  const { updateProfile } = useProfile();
+  const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
   const [allVariantsList, setAllVariantsList] = useState([]);
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
   const [divisor, setDivisor] = useState("");
-  const [searchTerm, setSearchTerm] = useState(""); // 🟢 Added Search
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const [syncingOrders, setSyncingOrders] = useState(false);
-
-  const [syncStatus, setSyncStatus] = useState({
-    shopify: { status: "pending", percent: 0 },
-    meta: { status: "pending", percent: 0 },
-    shiprocket: { status: "pending", percent: 0 },
-  });
+  const [isSaving, setIsSaving] = useState(false);
   const [cogs, setCogs] = useState({});
+  const [isInitialSync, setIsInitialSync] = useState(true);
 
   useEffect(() => {
+    let pollInterval;
+
     const init = async () => {
-      await triggerProductFetch();
-      await fetchProducts();
-      startSyncPolling();
+      await triggerProductFetch(); // Fire the SQS job
+
+      const found = await fetchProducts(); // Try to get data immediately
+
+      // 🟢 If nothing in DB yet, start polling
+      if (!found) {
+        pollInterval = setInterval(async () => {
+          const nowFound = await fetchProducts();
+          if (nowFound) {
+            clearInterval(pollInterval);
+          }
+        }, 5000);
+      }
     };
+
     init();
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, []);
 
   const triggerProductFetch = async () => {
@@ -40,45 +53,16 @@ const Products = () => {
   };
 
   const fetchProducts = async (isLoadMore = false) => {
-    if (!isLoadMore) setLoading(true);
+    if (!isLoadMore && !allVariantsList.length) setLoading(true);
     try {
       const response = await axiosInstance.get("/products/list", {
         params: { limit: 50, lastKey: isLoadMore ? lastEvaluatedKey : null },
       });
 
-      if (response.data.success) {
-        // const newVariants = response.data.variants || [];
-  const newVariants = (response.data.variants || []).filter(v => Number(v.salePrice) > 0);
-
-        if (isLoadMore) {
-          if (newVariants.length > 0) {
-            toast.success(`Loaded ${newVariants.length} more variants`, {
-              position: "bottom-center",
-              autoClose: 1500,
-              hideProgressBar: true,
-              style: {
-                minHeight: "50px",
-                maxHeight: "60px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "12px",
-                padding: "10px 16px",
-                fontSize: "14px",
-                fontWeight: "500",
-                textAlign: "center",
-                background: "#111",
-                color: "#fff",
-                boxShadow: "0 8px 20px rgba(0,0,0,0.2)",
-              },
-            });
-          } else {
-            toast.info("No more products to load");
-          }
-        }
-
-
-
+      if (response.data.success && response.data.variants?.length > 0) {
+        const newVariants = (response.data.variants || []).filter(
+          (v) => Number(v.salePrice) > 0,
+        );
 
         const updatedVariants = isLoadMore
           ? [...allVariantsList, ...newVariants]
@@ -97,8 +81,9 @@ const Products = () => {
           productsMap[v.productId].variants.push(v);
         });
         setProducts(Object.values(productsMap));
+        setIsInitialSync(false);
+        setLoading(false);
         setLastEvaluatedKey(response.data.lastKey);
-
         setCogs((prev) => {
           const newCogs = { ...prev };
           newVariants.forEach((v) => {
@@ -108,7 +93,9 @@ const Products = () => {
           });
           return newCogs;
         });
+        return true;
       }
+      return false;
     } catch (error) {
       toast.error("Failed to load products");
     } finally {
@@ -116,7 +103,6 @@ const Products = () => {
     }
   };
 
-  // 🟢 Performance Optimization: Filter products using useMemo
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return products;
     return products.filter((p) =>
@@ -126,7 +112,7 @@ const Products = () => {
 
   const applyGlobalFormula = () => {
     if (!divisor || divisor <= 0) {
-      toast.error("Please enter a valid number (e.g., 2 or 3)");
+      toast.error("Please enter a valid number (e.g., 2)");
       return;
     }
     const newCogs = { ...cogs };
@@ -136,30 +122,6 @@ const Products = () => {
     setCogs(newCogs);
     toast.success(`Calculated costs using 1/${divisor} of sale price`);
   };
-
-  const startSyncPolling = useCallback(() => {
-    const poll = async () => {
-      try {
-        const response = await axiosInstance.get("/sync/status");
-        if (response.data.success) {
-          setSyncStatus({
-            shopify: response.data.shopify || { status: "pending", percent: 0 },
-            meta: response.data.meta || { status: "pending", percent: 0 },
-            shiprocket: response.data.shiprocket || {
-              status: "pending",
-              percent: 0,
-            },
-          });
-          if (response.data.shopify?.status === "completed") {
-            await fetchProfile();
-          }
-        }
-      } catch (error) {}
-    };
-    poll();
-    const interval = setInterval(poll, 10000);
-    return () => clearInterval(interval);
-  }, [fetchProfile]);
 
   const handleCogsChange = (variantId, value) => {
     setCogs((prev) => ({
@@ -171,9 +133,11 @@ const Products = () => {
   const handleSaveCogs = async () => {
     const allComplete = Object.values(cogs).every((v) => v !== "" && v > 0);
     if (!allComplete) {
-      toast.error("Please enter COGS for all variants before saving");
+      toast.error("Please enter costs for all visible variants");
       return;
     }
+
+    setIsSaving(true);
     const variants = Object.entries(cogs).map(([variantId, costPrice]) => ({
       variantId,
       costPrice: Number(costPrice),
@@ -184,26 +148,14 @@ const Products = () => {
         variants,
       });
       if (response.data.success) {
-        toast.success("✅ COGS saved successfully!");
-                navigate("/dashboard/business-expenses"); 
-
-        updateProfile({ cogsCompleted: true });
-        if (syncStatus.shopify.status === "pending") await startSync();
+        toast.success("✅ Product costs saved!");
+        updateProfile({ cogsCompleted: true }); // Update global state
+        navigate("/dashboard/business-expenses"); // 🟢 Move to next step
       }
     } catch (error) {
       toast.error("Failed to save costs");
-    }
-  };
-
-  const startSync = async () => {
-    setSyncingOrders(true);
-    try {
-      await axiosInstance.post("/sync/start-initial");
-      toast.success("🔄 Background sync started!");
-    } catch (error) {
-      toast.error("Failed to start background sync");
     } finally {
-      setSyncingOrders(false);
+      setIsSaving(false);
     }
   };
 
@@ -211,8 +163,8 @@ const Products = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0D1D1E] gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
-        <p className="text-green-500 text-sm animate-pulse">
-          Initializing product catalog...
+        <p className="text-green-500 text-sm animate-pulse font-bold tracking-widest uppercase">
+          Fetching Store Products...
         </p>
       </div>
     );
@@ -222,41 +174,22 @@ const Products = () => {
     <div className="p-6 text-white max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold">Product Costs</h2>
+          <h2 className="text-3xl font-black">Step 1: Product Costs</h2>
           <p className="text-gray-400 text-sm mt-1">
-            Set your manufacturing costs to calculate accurate net profit.
+            Set your per-unit costs. This allows us to calculate your real Gross
+            Profit.
           </p>
         </div>
         <button
           onClick={() => fetchProducts()}
-          className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-400"
+          className="p-2 hover:bg-white/5 rounded-full text-gray-400"
         >
           <FiRefreshCw size={20} />
         </button>
       </div>
 
-      {/* Sync Progress Bars */}
-      <div className="p-4 bg-[#1E1E1E] rounded-xl border border-gray-800 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <ProgressBar
-          label="Shopify"
-          color="bg-green-500"
-          percent={syncStatus.shopify.percent}
-        />
-        <ProgressBar
-          label="Meta Ads"
-          color="bg-blue-500"
-          percent={syncStatus.meta.percent}
-        />
-        <ProgressBar
-          label="Shiprocket"
-          color="bg-purple-500"
-          percent={syncStatus.shiprocket.percent}
-        />
-      </div>
-
-      {/* 🟢 TOP TOOLS: Search + Magic Formula */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        {/* Search */}
+      {/* Quick Estimator Tool */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#161616] p-4 rounded-2xl border border-gray-800">
         <div className="relative w-full md:w-96">
           <FiSearch className="absolute left-3 top-3 text-gray-500" />
           <input
@@ -264,16 +197,14 @@ const Products = () => {
             placeholder="Search products..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg bg-[#1E1E1E] border border-gray-800 focus:outline-none focus:ring-1 focus:ring-green-500"
+            className="w-full pl-10 pr-4 py-2 rounded-lg bg-[#0a0a0a] border border-gray-800 focus:ring-1 focus:ring-green-500"
           />
         </div>
 
-        {/* Quick Estimator */}
-        <div className="flex items-center gap-3 bg-green-500/5 border border-green-500/20 p-2 px-4 rounded-lg">
-          <div className="flex items-center gap-2 text-green-400 text-sm font-bold">
+        <div className="flex items-center gap-3 bg-green-500/5 border border-green-500/10 p-2 px-4 rounded-xl">
+          <span className="text-green-400 text-sm font-bold flex items-center gap-2">
             <FiPercent /> Quick Estimator
-          </div>
-          <div className="h-4 w-[1px] bg-green-500/30 mx-1"></div>
+          </span>
           <div className="flex items-center gap-2">
             <span className="text-gray-500 text-xs">Sale Price /</span>
             <input
@@ -281,11 +212,11 @@ const Products = () => {
               placeholder="2"
               value={divisor}
               onChange={(e) => setDivisor(e.target.value)}
-              className="w-16 px-2 py-1 rounded bg-[#0a0a0a] border border-gray-700 text-white text-sm focus:ring-1 focus:ring-green-500"
+              className="w-16 px-2 py-1 rounded bg-[#0a0a0a] border border-gray-700 text-white text-sm"
             />
             <button
               onClick={applyGlobalFormula}
-              className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded shadow-lg transition-all"
+              className="px-3 py-1 bg-green-500 hover:bg-green-600 text-black font-bold text-xs rounded transition-all"
             >
               Apply
             </button>
@@ -293,26 +224,27 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Table Container with Sticky Header */}
-      <div className="bg-[#1E1E1E] rounded-xl overflow-hidden border border-gray-800 shadow-2xl">
-        <div className="max-h-[600px] overflow-y-auto hide-scrollbar">
+      {/* Table */}
+      <div className="bg-[#161616] rounded-2xl overflow-hidden border border-gray-800 shadow-2xl">
+        <div className="max-h-[600px] overflow-y-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-[#2A2A2A] z-10 shadow-md">
-              <tr className="text-gray-400 text-[10px] uppercase tracking-widest">
+            <thead className="sticky top-0 bg-[#222] z-10">
+              <tr className="text-gray-500 text-[10px] uppercase tracking-widest font-black">
                 <th className="p-4 w-20">Photo</th>
-                <th className="p-4">Product Details</th>
+                <th className="p-4">Product</th>
                 <th className="p-4">Variant</th>
-                <th className="p-4 w-32">Sale Price</th>
-                <th className="p-4 w-44">COGS (Per Unit)</th>
+                <th className="p-4">Sale Price</th>
+                <th className="p-4">Your Cost (COGS)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {filteredProducts.length > 0 ? (
+                // 🟢 CASE 1: Data exists, show the rows
                 filteredProducts.map((product) =>
                   product.variants?.map((variant, idx) => (
                     <tr
                       key={variant.variantId}
-                      className="hover:bg-white/[0.02] transition-colors group"
+                      className="hover:bg-white/[0.02]"
                     >
                       <td className="p-4">
                         {idx === 0 && (
@@ -321,121 +253,96 @@ const Products = () => {
                               variant.productImage ||
                               "https://via.placeholder.com/40?text=📦"
                             }
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-700"
                             alt=""
-                            className="w-12 h-12 rounded-lg object-cover border border-gray-700 shadow-inner"
                           />
                         )}
                       </td>
                       <td className="p-4">
                         {idx === 0 && (
-                          <div>
-                            <div className="font-bold text-gray-100">
-                              {product.productName}
-                            </div>
+                          <div className="font-bold text-gray-200">
+                            {product.productName}
                           </div>
                         )}
                       </td>
                       <td className="p-4 text-gray-400 text-sm">
                         {variant.variantName}
                       </td>
-                      <td className="p-4 text-gray-300 font-mono">
+                      <td className="p-4 text-gray-300">
                         ₹{variant.salePrice?.toLocaleString()}
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                          <span className="text-gray-600 text-xs font-mono">
-                            ₹
-                          </span>
-                          <input
-                            type="number"
-                            placeholder="0.00"
-                            value={cogs[variant.variantId] || ""}
-                            onChange={(e) =>
-                              handleCogsChange(
-                                variant.variantId,
-                                e.target.value,
-                              )
-                            }
-                            className="w-full px-3 py-1.5 rounded-lg bg-[#0a0a0a] border border-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-green-500 transition-all font-mono"
-                          />
-                        </div>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={cogs[variant.variantId] || ""}
+                          onChange={(e) =>
+                            handleCogsChange(variant.variantId, e.target.value)
+                          }
+                          className="w-full max-w-[120px] px-3 py-1.5 rounded-lg bg-[#0a0a0a] border border-gray-700 text-white focus:ring-1 focus:ring-green-500"
+                        />
                       </td>
                     </tr>
                   )),
                 )
               ) : (
+                // 🟢 CASE 2: No data yet - Choose between Loader or "No Products"
                 <tr>
-                  <td
-                    colSpan="5"
-                    className="p-20 text-center flex flex-col items-center gap-3"
-                  >
-                    <FiBox size={40} className="text-gray-700" />
-                    <p className="text-gray-500">
-                      {loading
-                        ? "Loading items..."
-                        : "No matching products found."}
-                    </p>
+                  <td colSpan="5" className="p-20 text-center">
+                    {loading ? (
+                      <div className="flex flex-col items-center justify-center gap-4">
+                        <PulseLoader size={10} color="#12EB8E" />
+                        <div className="space-y-1">
+                          <p className="text-green-500 font-bold animate-pulse text-sm uppercase tracking-widest">
+                            Connecting to Shopify...
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            We are fetching your product catalog. This will only
+                            take a moment.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <FiBox size={40} className="text-gray-700 mb-2" />
+                        <p className="text-gray-500 text-sm font-medium">
+                          No active products found in your store.
+                        </p>
+                        <p className="text-gray-600 text-xs">
+                          Try clicking the refresh icon above if you just added
+                          products.
+                        </p>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-
         {lastEvaluatedKey && (
           <button
             onClick={() => fetchProducts(true)}
-            disabled={loading}
-            className="w-full p-4 bg-gray-800/30 text-green-400 hover:bg-gray-800/50 text-sm font-bold border-t border-gray-800 transition-all disabled:opacity-50"
+            className="w-full p-4 text-green-400 font-bold text-xs uppercase hover:bg-white/5 border-t border-gray-800"
           >
-            {loading ? "FETCHING..." : "↓ LOAD MORE PRODUCTS"}
+            Load More Products
           </button>
         )}
       </div>
 
-      <div className="flex justify-end pt-4 pb-10">
+      <div className="flex justify-end pb-10">
         <button
-  onClick={handleSaveCogs}
-  disabled={
-    Object.values(cogs).some((v) => v === "" || v<=0 ) || syncingOrders
-  }
-  className="group px-10 py-4 
-  bg-gradient-to-r from-green-400 to-green-500 
-  hover:from-green-300 hover:to-green-400
-  disabled:opacity-30 disabled:cursor-not-allowed 
-  text-black font-black uppercase tracking-widest 
-  rounded-2xl transition-all duration-300 
-  shadow-[0_0_25px_rgba(34,197,94,0.6)] 
-  hover:shadow-[0_0_40px_rgba(34,197,94,0.9)] 
-  hover:scale-[1.02]
-  flex items-center gap-3"
->
-  {syncingOrders ? "Processing..." : "Save & Sync Dashboard"}
-
-  <span className="group-hover:translate-x-1 transition-transform duration-300">
-    →
-  </span>
-</button>
+          onClick={handleSaveCogs}
+          disabled={
+            Object.values(cogs).some((v) => v === "" || v <= 0) || isSaving
+          }
+          className="px-10 py-4 bg-green-500 hover:bg-green-400 text-black font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-green-500/20 disabled:opacity-30"
+        >
+          {isSaving ? "Saving..." : "Save & Continue →"}
+        </button>
       </div>
     </div>
   );
 };
-
-const ProgressBar = ({ label, color, percent }) => (
-  <div>
-    <div className="flex justify-between text-[10px] mb-2">
-      <span className="text-gray-500 font-black uppercase tracking-tighter">
-        {label}
-      </span>
-      <span className="font-mono text-gray-400">{percent}%</span>
-    </div>
-    <div className="h-1.5 bg-gray-900 rounded-full overflow-hidden border border-white/5">
-      <div
-        className={`h-full ${color} transition-all duration-1000 ease-in-out`}
-        style={{ width: `${percent}%` }}
-      />
-    </div>
-  </div>
-);
 
 export default Products;

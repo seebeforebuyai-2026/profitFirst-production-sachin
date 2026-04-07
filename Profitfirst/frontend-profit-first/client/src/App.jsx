@@ -204,7 +204,6 @@ function AppWrapper() {
             />
             <Route path="marketing" element={<Marketing />} />
             <Route path="shipping" element={<Shipping />} />
-            <Route path="products" element={<Products />} />
             <Route path="returns" element={<Returns />} />
             <Route path="settings" element={<Settings />} />
             <Route path="meta-ads" element={<MetaAds />} />
@@ -218,14 +217,8 @@ function AppWrapper() {
               path="meta-ads/carousel-completion"
               element={<CarouselCompletion />}
             />
-            <Route
-              path="business-expenses"
-              element={
-                <ProtectedRoute requireUnlock={true}>
-                  <BusinessExpenses />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="products" element={<Products />} />
+            <Route path="business-expenses" element={<BusinessExpenses />} />
           </Route>
           <Route path="*" element={<Homepage />} />
         </Routes>

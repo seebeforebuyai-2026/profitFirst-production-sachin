@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { HiMenuAlt3, HiX } from "react-icons/hi";
+import { useProfile } from "../ProfileContext"; // ✅ Added
 import {
   FiHome,
-  FiBarChart2,
   FiPackage,
   FiSettings,
   FiHelpCircle,
@@ -14,26 +14,25 @@ import {
   FiCpu,
   FiCheckCircle,
   FiPhoneCall,
-  FiLogOut,
+  FiLogOut
 } from "react-icons/fi";
 import logo from "../assets/logo.png";
 
 const Sidebar = ({ isLocked = false }) => {
+  const { profile } = useProfile(); // ✅ Added
   const [isOpen, setIsOpen] = useState(false);
   const [showAffiliate, setShowAffiliate] = useState(true);
   const [showAIAgentMenu, setShowAIAgentMenu] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    // Clear all local storage
     localStorage.clear();
-    // Redirect to login page
     navigate("/login");
   };
 
   return (
     <>
-      {/* Mobile Topbar - Menu Icon */}
+      {/* Mobile Topbar */}
       <div className="md:hidden absolute top-4 left-4 z-50">
         <button onClick={() => setIsOpen(true)} className="text-white">
           <HiMenuAlt3 size={28} />
@@ -42,32 +41,35 @@ const Sidebar = ({ isLocked = false }) => {
 
       <div
         className={`fixed top-0 left-0 h-screen w-56 2xl:w-64 bg-[#0a0a0a] text-white z-50 transform transition-transform duration-300 ease-in-out
-          ${isOpen ? "translate-x-0" : "-translate-x-full"} 
-          md:static md:translate-x-0 md:block border-r border-gray-800`}
+        ${isOpen ? "translate-x-0" : "-translate-x-full"} 
+        md:static md:translate-x-0 md:block border-r border-gray-800`}
       >
         <div className="p-4 2xl:p-5 flex flex-col justify-between h-full">
           <div>
-            {/* Close button (mobile only) */}
+
+            {/* Mobile Header */}
             <div className="flex justify-between items-center mb-8 md:hidden">
-              <div className="flex items-center gap-2">
-                <img src={logo} alt="Logo" className="h-8 w-auto" />
-              </div>
+              <img src={logo} alt="Logo" className="h-8 w-auto" />
               <button onClick={() => setIsOpen(false)}>
                 <HiX size={28} />
               </button>
             </div>
 
-            {/* Logo (desktop only) */}
+            {/* Desktop Logo */}
             <div className="flex items-center gap-2 mb-6 hidden md:flex">
               <img src={logo} alt="Logo" className="h-6 2xl:h-8 w-auto" />
             </div>
 
-            {/* Navigation */}
             <div className="space-y-0.5 2xl:space-y-1">
+
+              {/* Dashboard */}
               <NavLink
-                to={isLocked ? "#" : "/dashboard"} // 🟢 Fix: Redirect to # if locked
-                onClick={(e) => isLocked && e.preventDefault()} // 🟢 Fix: Stop navigation
+                to={isLocked ? "#" : "/dashboard"}
                 end
+                onClick={(e) => {
+                  if (isLocked) e.preventDefault();
+                  setIsOpen(false);
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
                     isActive && !isLocked
@@ -83,9 +85,13 @@ const Sidebar = ({ isLocked = false }) => {
                 {isLocked && <span className="ml-auto text-[10px]">🔒</span>}
               </NavLink>
 
+              {/* Chatbot */}
               <NavLink
                 to={isLocked ? "#" : "/dashboard/chatbot"}
-                onClick={(e) => isLocked && e.preventDefault()}
+                onClick={(e) => {
+                  if (isLocked) e.preventDefault();
+                  setIsOpen(false);
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
                     isActive && !isLocked
@@ -101,9 +107,13 @@ const Sidebar = ({ isLocked = false }) => {
                 {isLocked && <span className="ml-auto text-[10px]">🔒</span>}
               </NavLink>
 
+              {/* Growth */}
               <NavLink
                 to={isLocked ? "#" : "/dashboard/growth"}
-                onClick={(e) => isLocked && e.preventDefault()}
+                onClick={(e) => {
+                  if (isLocked) e.preventDefault();
+                  setIsOpen(false);
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
                     isActive && !isLocked
@@ -119,92 +129,47 @@ const Sidebar = ({ isLocked = false }) => {
                 {isLocked && <span className="ml-auto text-[10px]">🔒</span>}
               </NavLink>
 
+              {/* Customer Analytics (Soon) */}
               <div className="relative group">
-                <div
-                  className={`flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
-                    isLocked
-                      ? "text-gray-600 cursor-not-allowed opacity-50"
-                      : "text-gray-600 cursor-not-allowed opacity-60"
-                  }`}
-                >
+                <div className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg text-xs 2xl:text-sm text-gray-600 cursor-not-allowed opacity-60">
                   <FiZap className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                   <span>Customer Analytics</span>
-                  <span className="ml-auto text-[9px] bg-gray-800 px-1 py-0.5 rounded">
-                    Soon
-                  </span>
+                  <span className="ml-auto text-[9px] bg-gray-800 px-1 py-0.5 rounded">Soon</span>
                 </div>
-                {isLocked && (
-                  <span className="ml-2 text-[10px] bg-gray-800 px-1.5 py-0.5 rounded">
-                    🔒
-                  </span>
-                )}
               </div>
 
+              {/* Products */}
               <NavLink
-                to="/dashboard/products"
+                to={isLocked ? "/dashboard/products" : "/dashboard/products"}
                 onClick={() => setIsOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
                     isActive
                       ? "bg-[#1a1a1a] text-white"
-                      : isLocked
-                        ? "text-green-400 font-bold border border-green-400/20 bg-green-400/5 shadow-[0_0_10px_rgba(74,222,128,0.1)]" // 🟢 Make it stand out!
-                        : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
+                      : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                   }`
                 }
               >
                 <FiPackage className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                 <span>Products</span>
-                {isLocked && (
-                  <span className="ml-auto text-[10px] animate-pulse text-green-400">
-                    ●
-                  </span>
-                )}
               </NavLink>
 
-              {/* AI Ads - Disabled with Coming Soon tooltip */}
-              <div className="relative group">
-                <div
-                  className={`flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
-                    isLocked
-                      ? "text-gray-600 cursor-not-allowed opacity-50"
-                      : "text-gray-600 cursor-not-allowed opacity-60"
-                  }`}
-                >
-                  <FiZap className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
-                  <span>AI Ads</span>
-                  <span className="ml-auto text-[9px] bg-gray-800 px-1 py-0.5 rounded">
-                    Soon
-                  </span>
-                </div>
-                {isLocked && (
-                  <span className="ml-2 text-[10px] bg-gray-800 px-1.5 py-0.5 rounded">
-                    🔒
-                  </span>
-                )}
-              </div>
-
-              {/* AI Agent with Dropdown */}
+              {/* AI Agent */}
               <div className="relative">
                 <div
-                  onClick={() =>
-                    !isLocked && setShowAIAgentMenu(!showAIAgentMenu)
-                  }
-                  className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm text-gray-400 hover:bg-[#1a1a1a] hover:text-white cursor-pointer"
+                  onClick={() => !isLocked && setShowAIAgentMenu(!showAIAgentMenu)}
+                  className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg text-xs 2xl:text-sm text-gray-400 hover:bg-[#1a1a1a] hover:text-white cursor-pointer"
                 >
                   <FiCpu className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                   <span>AI Agent</span>
                   {isLocked ? (
                     <span className="ml-auto text-[10px]">🔒</span>
                   ) : (
-                    <FiChevronDown
-                      className={`w-3 h-3 ml-auto transition-transform ${showAIAgentMenu ? "rotate-180" : ""}`}
-                    />
+                    <FiChevronDown className={`w-3 h-3 ml-auto transition-transform ${showAIAgentMenu ? "rotate-180" : ""}`} />
                   )}
                 </div>
 
-                {/* Dropdown Menu */}
-                {showAIAgentMenu && (
+                {showAIAgentMenu && !isLocked && (
                   <div className="ml-5 mt-1 space-y-0.5">
                     <NavLink
                       to="/dashboard/ai-agent/order-confirmations"
@@ -212,30 +177,19 @@ const Sidebar = ({ isLocked = false }) => {
                         setIsOpen(false);
                         setShowAIAgentMenu(false);
                       }}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
-                          isActive
-                            ? "bg-[#1a1a1a] text-white"
-                            : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
-                        }`
-                      }
+                      className="flex items-center gap-2 p-1.5 rounded-lg text-xs text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                     >
                       <FiCheckCircle className="w-3 h-3" />
                       <span>Order Confirmations</span>
                     </NavLink>
+
                     <NavLink
                       to="/dashboard/ai-agent/abandon-calls"
                       onClick={() => {
                         setIsOpen(false);
                         setShowAIAgentMenu(false);
                       }}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
-                          isActive
-                            ? "bg-[#1a1a1a] text-white"
-                            : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
-                        }`
-                      }
+                      className="flex items-center gap-2 p-1.5 rounded-lg text-xs text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                     >
                       <FiPhoneCall className="w-3 h-3" />
                       <span>Abandon Calls</span>
@@ -244,14 +198,22 @@ const Sidebar = ({ isLocked = false }) => {
                 )}
               </div>
 
+              {/* Business Expenses */}
               <NavLink
-                to={isLocked ? "#" : "/dashboard/business-expenses"}
-                onClick={(e) => isLocked && e.preventDefault()}
+                to={
+                  isLocked && !profile?.cogsCompleted
+                    ? "#"
+                    : "/dashboard/business-expenses"
+                }
+                onClick={(e) => {
+                  if (isLocked && !profile?.cogsCompleted) e.preventDefault();
+                  setIsOpen(false);
+                }}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
-                    isActive && !isLocked
+                    isActive
                       ? "bg-[#1a1a1a] text-white"
-                      : isLocked
+                      : isLocked && !profile?.cogsCompleted
                         ? "text-gray-600 cursor-not-allowed opacity-50"
                         : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                   }`
@@ -259,58 +221,33 @@ const Sidebar = ({ isLocked = false }) => {
               >
                 <FiSettings className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                 <span>Business Expenses</span>
-                {isLocked && <span className="ml-auto text-[10px]">🔒</span>}
+                {isLocked && !profile?.cogsCompleted && (
+                  <span className="ml-auto text-[10px]">🔒</span>
+                )}
               </NavLink>
-            </div>
 
-            {/* Affiliate Program Card */}
-            {showAffiliate && (
-              <div className="mt-6 bg-[#1a1a1a] rounded-lg p-3 relative">
-                <button
-                  onClick={() => setShowAffiliate(false)}
-                  className="absolute top-1.5 right-1.5 text-gray-500 hover:text-white"
-                >
-                  <HiX size={14} />
-                </button>
-                <div className="bg-green-500/20 text-green-400 text-[10px] font-semibold px-1.5 py-0.5 rounded inline-block mb-1.5">
-                  New
-                </div>
-                <h3 className="text-white font-semibold text-sm mb-1">
-                  Partners affiliate program
-                </h3>
-                <p className="text-gray-400 text-xs mb-2">
-                  Run your own affiliate program and earn up to 100$ a month.
-                </p>
-                <a
-                  href="https://profitfirst-affiliate.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-green-400 text-xs font-medium hover:text-green-300 flex items-center gap-1"
-                >
-                  Try it out →
-                </a>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Footer Actions */}
+          {/* Footer */}
           <div className="space-y-0.5 border-t border-gray-800 pt-3 pb-4">
-            {/* Settings - Hidden for now */}
             <NavLink
               to="/dashboard/settings"
               onClick={() => setIsOpen(false)}
-              className="flex items-center gap-2 p-1.5 rounded-lg text-gray-400 hover:bg-[#1a1a1a] hover:text-white transition-colors text-xs"
+              className="flex items-center gap-2 p-1.5 rounded-lg text-gray-400 hover:bg-[#1a1a1a] hover:text-white text-xs"
             >
               <FiSettings size={14} />
               <span>Settings</span>
             </NavLink>
-            <button className="w-full flex items-center gap-2 p-1.5 rounded-lg text-gray-400 hover:bg-[#1a1a1a] hover:text-white transition-colors text-xs">
+
+            <button className="w-full flex items-center gap-2 p-1.5 rounded-lg text-gray-400 hover:bg-[#1a1a1a] hover:text-white text-xs">
               <FiHelpCircle size={14} />
               <span>Help Center</span>
             </button>
+
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2 p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-xs"
+              className="w-full flex items-center gap-2 p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 text-xs"
             >
               <FiLogOut size={14} />
               <span>Logout</span>
@@ -319,7 +256,6 @@ const Sidebar = ({ isLocked = false }) => {
         </div>
       </div>
 
-      {/* Backdrop for mobile */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"

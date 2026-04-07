@@ -64,17 +64,17 @@ app.use(helmet({
 
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for dev
-  message: 'Too many requests from this IP, please try again later.'
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 500, // Increase this to 500 requests per minute
+  message: 'Too many requests, please wait a moment.'
 });
 app.use('/api/', limiter);
 
-// Stricter rate limit for authentication endpoints
+// 🟢 FIX 3: Increase Auth Limiter (Polling hits this!)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // limit each IP to 20 auth requests per window
-  message: 'Too many authentication attempts, please try again later.'
+  windowMs: 15 * 60 * 1000,
+  max: 100, // Increase from 20 to 100
+  message: 'Too many authentication attempts.'
 });
 
 // Stricter rate limit for password reset endpoints (prevent brute force)
@@ -96,7 +96,7 @@ const oauthLimiter = rateLimit({
 // CORS configuration - allows frontend to make requests
 // Support multiple origins for development and production
 const allowedOrigins = [
-  'http://localhost:3000',
+  'http://localhost:3000',  
   'http://localhost:5173', // Vite default
   'http://localhost:5174', // Vite alternative
   'http://localhost:4200', // Angular
@@ -105,6 +105,7 @@ const allowedOrigins = [
   'https://www.profitfirstanalytics.co.in',
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
+
 
 // CORS configuration
 const corsOptions = isProduction ? {

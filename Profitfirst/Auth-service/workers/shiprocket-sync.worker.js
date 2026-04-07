@@ -1,139 +1,277 @@
-const { ReceiveMessageCommand, DeleteMessageCommand, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
-const { sqsClient, sqsQueueUrl, newDynamoDB, newTableName, s3Client, s3BucketName } = require('../config/aws.config');
-const axios = require('axios');
-const axiosRetry = require('axios-retry').default;
-
-// 🟢 Automatically retry on network errors or 5xx/429 status codes
-axiosRetry(axios, { 
-  retries: 3, 
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) => {
-    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.response.status === 429;
-  }
-});const encryptionService = require('../utils/encryption');
-const syncService = require('../services/sync.service');
+const {
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  SendMessageCommand,
+} = require("@aws-sdk/client-sqs");
+const {
+  PutCommand,
+  GetCommand,
+  UpdateCommand,
+} = require("@aws-sdk/lib-dynamodb");
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const {
+  sqsClient,
+  shiprocketQueueUrl,
+  summaryQueueUrl,
+  newDynamoDB,
+  newTableName,
+  s3Client,
+  s3BucketName,
+} = require("../config/aws.config");
+const axios = require("axios");
+const { formatInTimeZone } = require("date-fns-tz");
+const encryptionService = require("../utils/encryption");
 
 let isShuttingDown = false;
+const normalizeOrderName = (name) =>
+  name ? name.toString().replace(/^#/, "").trim().toLowerCase() : "";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 🟢 HUMAN LOGIC: Parse Shiprocket's weird dates like "18th Feb"
+const parseShiprocketDate = (str) => {
+  if (!str) return null;
+  // Format "18th Feb 2026" -> "18 Feb 2026" (Remove th, st, nd, rd)
+  const clean = str.replace(/(\d+)(st|nd|rd|th)/, "$1");
+  const d = new Date(clean);
+  return isNaN(d.getTime()) ? null : d;
+};
 
 const pollQueue = async () => {
-  console.log("🚀 Shiprocket Sync Worker started. Watching SQS...");
+  console.log("🚀 Shiprocket Worker: FINAL PRODUCTION ENGINE STARTED...");
   while (!isShuttingDown) {
     try {
-      const { Messages } = await sqsClient.send(new ReceiveMessageCommand({
-        QueueUrl: sqsQueueUrl, MaxNumberOfMessages: 1, WaitTimeSeconds: 20
-      }));
-
-      if (!Messages) continue;
+      const { Messages } = await sqsClient.send(
+        new ReceiveMessageCommand({
+          QueueUrl: shiprocketQueueUrl,
+          WaitTimeSeconds: 20,
+        }),
+      );
+      if (!Messages || Messages.length === 0) continue;
       const message = Messages[0];
       const body = JSON.parse(message.Body);
-
-      if (body.type === 'SHIPROCKET_SYNC') {
-        console.log(`📦 Processing Shiprocket for merchant: ${body.merchantId} (Page: ${body.page || 1})`);
-        await processShiprocketSync(body);
-      }
-
-      await sqsClient.send(new DeleteMessageCommand({ QueueUrl: sqsQueueUrl, ReceiptHandle: message.ReceiptHandle }));
-    } catch (e) { 
-        if (!isShuttingDown) console.error("Worker Error:", e.message); 
-        await new Promise(r => setTimeout(r, 5000)); 
+      await processShiprocketSync(body);
+      await sqsClient.send(
+        new DeleteMessageCommand({
+          QueueUrl: shiprocketQueueUrl,
+          ReceiptHandle: message.ReceiptHandle,
+        }),
+      );
+    } catch (e) {
+      console.error("❌ Worker Fatal Error:", e.message);
+      await sleep(5000);
     }
   }
 };
 
 const processShiprocketSync = async (job) => {
-  const { merchantId, sinceDate, page = 1 } = job;
+  const { merchantId, sinceDate, page = 1, globalPage = 1 } = job;
   try {
-    // 1. Get Integration
-    const integration = await newDynamoDB.send(new GetCommand({
-      TableName: newTableName, Key: { PK: `MERCHANT#${merchantId}`, SK: 'INTEGRATION#SHIPROCKET' }
-    }));
-    if (!integration.Item) return;
-
-    const decryptedToken = encryptionService.decrypt(integration.Item.token);
-
-    // 2. API Call with 100 items per page
-    const response = await axios.get('https://apiv2.shiprocket.in/v1/external/shipments', {
-      headers: { 'Authorization': `Bearer ${decryptedToken}` },
-      params: { 
-        from: sinceDate.split('T')[0], 
-        page: page, 
-        per_page: 100,
-        sort: 'created_at',
-        order: 'asc'
-      }
-    });
-
-    const shipments = response.data.data;
-    if (!shipments || shipments.length === 0) {
-      await markSyncComplete(merchantId, 'SHIPROCKET');
-      await syncService.checkAndUnlockDashboard(merchantId);
-      return;
-    }
-
-    // 3. S3 Backup
-    try {
-        await s3Client.send(new PutObjectCommand({
-          Bucket: s3BucketName,
-          Key: `${merchantId}/raw/shiprocket_pg${page}_${Date.now()}.json`,
-          Body: JSON.stringify(shipments),
-          ContentType: 'application/json'
-        }));
-    } catch (e) { console.error("S3 Error:", e.message); }
-
-    // 4. Save to DynamoDB (Idempotent)
-    for (const ship of shipments) {
-      await newDynamoDB.send(new PutCommand({
+    const integration = await newDynamoDB.send(
+      new GetCommand({
         TableName: newTableName,
-        Item: {
-          PK: `MERCHANT#${merchantId}`,
-          SK: `SHIPMENT#${ship.id}`,
-          entityType: 'SHIPMENT',
-          orderId: ship.order_id.toString(),
-          awbCode: ship.awb_code,
-          shippingFee: Number(ship.freight_charges || 0),
-          deliveryStatus: ship.status?.toLowerCase(),
-          updatedAt: new Date().toISOString()
+        Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#SHIPROCKET" },
+      }),
+    );
+    if (!integration.Item) return;
+    const token = encryptionService.decrypt(integration.Item.token);
+
+    // Window logic for 30-day Shiprocket limit
+    const startObj = new Date(sinceDate);
+    const todayObj = new Date();
+    let endObj = new Date(startObj);
+    endObj.setDate(endObj.getDate() + 29);
+    if (endObj > todayObj) endObj = todayObj;
+
+    const fromStr = startObj.toISOString().split("T")[0];
+    const toStr = endObj.toISOString().split("T")[0];
+
+    console.log(`📡 Syncing: ${fromStr} to ${toStr} | Page ${page}`);
+
+    const res = await axios.get(
+      "https://apiv2.shiprocket.in/v1/external/shipments",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { from: fromStr, to: toStr, page: page, per_page: 50 },
+      },
+    );
+
+    const shipments = res.data.data || [];
+
+    for (const ship of shipments) {
+      try {
+        const rawStatus = (ship.status || "").toUpperCase().trim();
+        let deliveryStatus =
+          rawStatus === "DELIVERED"
+            ? "delivered"
+            : rawStatus.startsWith("RTO")
+              ? "rto"
+              : "in_transit";
+
+        // 🟢 DATE FIX: Robust Parsing
+        const createdAtDate = parseShiprocketDate(ship.created_at);
+        const updatedAtDate = parseShiprocketDate(ship.updated_at);
+
+        if (!createdAtDate) {
+          console.warn(
+            `⚠️ Skipping ${ship.id} due to unparsable date: ${ship.created_at}`,
+          );
+          continue;
         }
-      }));
+
+        const orderDateIST = formatInTimeZone(
+          createdAtDate,
+          "Asia/Kolkata",
+          "yyyy-MM-dd",
+        );
+        const updatedAtIST = updatedAtDate
+          ? formatInTimeZone(updatedAtDate, "Asia/Kolkata", "yyyy-MM-dd")
+          : orderDateIST;
+
+        // 🟢 IDENTITY BRIDGE: Slow & Steady to prevent 429
+        let channelOrderId = ship.channel_order_id;
+
+        if (!channelOrderId || channelOrderId === "") {
+          try {
+            await sleep(600); // ⏱️ Increased delay to 600ms for safety
+            const detail = await axios.get(
+              `https://apiv2.shiprocket.in/v1/external/orders/show/${ship.order_id}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            channelOrderId = detail.data.data.channel_order_id;
+          } catch (err) {
+            if (err.response?.status === 429) {
+              console.warn("🚨 Rate limit! Sleeping 10s...");
+              await sleep(10000);
+            }
+          }
+        }
+
+        const charges = ship.charges || {};
+        const freight = Number(charges.freight_charges || 0);
+        const rtoFreight = Number(
+          charges.applied_weight_amount_rto || charges.rto_charges || 0,
+        );
+        const totalPaid = freight + (deliveryStatus === "rto" ? rtoFreight : 0);
+
+        // S3 Backup & DynamoDB Put
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: s3BucketName,
+            Key: `${merchantId}/shipments/${ship.id}.json`,
+            Body: JSON.stringify(ship),
+            ContentType: "application/json",
+          }),
+        );
+
+        await newDynamoDB.send(
+          new PutCommand({
+            TableName: newTableName,
+            Item: {
+              PK: `MERCHANT#${merchantId}`,
+              SK: `SHIPMENT#${ship.id}`,
+              entityType: "SHIPMENT",
+              shipmentId: ship.id.toString(),
+              orderId: ship.order_id?.toString(),
+              shopifyOrderName: channelOrderId || "",
+              normalizedOrderName: normalizeOrderName(channelOrderId),
+              shippingFee: freight,
+              returnFee: deliveryStatus === "rto" ? rtoFreight : 0,
+              totalShippingPaid: totalPaid,
+              deliveryStatus,
+              orderCreatedAtIST: orderDateIST,
+              deliveredAtIST:
+                deliveryStatus === "delivered" ? updatedAtIST : null,
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+        );
+      } catch (err) {
+        console.error(`⚠️ Skip Shipment ${ship.id}:`, err.message);
+      }
     }
 
-    // 5. Update Progress (Estimated)
-    // Shiprocket doesn't always give total count, so we increment progress
-    await updateSyncProgress(merchantId, 'SHIPROCKET', Math.min(page * 5, 99));
-
-    // 6. Message Chaining (Next Page)
-    if (shipments.length === 100) {
-      await sqsClient.send(new SendMessageCommand({
-        QueueUrl: sqsQueueUrl,
-        MessageBody: JSON.stringify({ ...job, page: page + 1 })
-      }));
-      await new Promise(r => setTimeout(r, 1000)); // Rate limit safety (1 req/sec)
+    const nextLink = res.data.meta?.pagination?.links?.next || null;
+    if (nextLink && shipments.length > 0) {
+      await updateSyncProgress(
+        merchantId,
+        "SHIPROCKET",
+        Math.min(98, globalPage * 2),
+      );
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: shiprocketQueueUrl,
+          MessageBody: JSON.stringify({
+            ...job,
+            page: page + 1,
+            globalPage: globalPage + 1,
+          }),
+        }),
+      );
+    } else if (toStr < todayObj.toISOString().split("T")[0]) {
+      const nextChunkStart = new Date(endObj);
+      nextChunkStart.setDate(nextChunkStart.getDate() + 1);
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: shiprocketQueueUrl,
+          MessageBody: JSON.stringify({
+            merchantId,
+            sinceDate: nextChunkStart.toISOString(),
+            page: 1,
+            globalPage: globalPage + 1,
+          }),
+        }),
+      );
     } else {
-      await markSyncComplete(merchantId, 'SHIPROCKET');
-      await syncService.checkAndUnlockDashboard(merchantId);
+      await markSyncComplete(merchantId, "SHIPROCKET");
     }
-
-  } catch (error) { console.error(`❌ Shiprocket Sync Failed for ${merchantId}:`, error.message); }
+  } catch (e) {
+    throw e;
+  }
 };
 
+// ... updateSyncProgress and markSyncComplete remain same ...
+
 async function updateSyncProgress(merchantId, platform, percent) {
-  await newDynamoDB.send(new UpdateCommand({
-    TableName: newTableName,
-    Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` },
-    UpdateExpression: 'SET percent = :p',
-    ExpressionAttributeValues: { ':p': percent }
-  }));
+  try {
+    await newDynamoDB.send(
+      new UpdateCommand({
+        TableName: newTableName,
+        Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` },
+        UpdateExpression: "SET #p = :p, updatedAt = :t",
+        ExpressionAttributeNames: { "#p": "percent" },
+        ExpressionAttributeValues: {
+          ":p": percent,
+          ":t": new Date().toISOString(),
+        },
+      }),
+    );
+  } catch (err) {}
 }
 
 async function markSyncComplete(merchantId, platform) {
-  await newDynamoDB.send(new UpdateCommand({
-    TableName: newTableName,
-    Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` },
-    UpdateExpression: 'SET #s = :c, percent = :p, completedAt = :t',
-    ExpressionAttributeNames: { '#s': 'status' },
-    ExpressionAttributeValues: { ':c': 'completed', ':p': 100, ':t': new Date().toISOString() }
-  }));
+  await newDynamoDB.send(
+    new UpdateCommand({
+      TableName: newTableName,
+      Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` },
+      UpdateExpression: "SET #s = :c, #p = :p, completedAt = :t",
+      ExpressionAttributeNames: { "#s": "status", "#p": "percent" },
+      ExpressionAttributeValues: {
+        ":c": "completed",
+        ":p": 100,
+        ":t": new Date().toISOString(),
+      },
+    }),
+  );
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: summaryQueueUrl,
+      MessageBody: JSON.stringify({ type: "SUMMARY_CALC", merchantId }),
+    }),
+  );
+      console.log(`🏁 Shiprocket Sync COMPLETED for ${merchantId}. Moving to Summary calulation.`);
+
 }
+
 pollQueue();

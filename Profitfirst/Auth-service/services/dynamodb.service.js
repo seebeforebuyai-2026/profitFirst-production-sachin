@@ -1,22 +1,33 @@
 /**
  * DynamoDB Service - New Single Table Design
- * 
+ *
  * Handles all database operations for ProfitFirst
  * Uses DynamoDB Document Client for simplified data operations
- * 
+ *
  * TABLE: ProfitFirst_Core
  * PK = MERCHANT#<merchantId>
  * SK = ENTITY#<entityId>
  */
 
-const { PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
-const { newDynamoDB, newTableName } = require('../config/aws.config');
-const { ENTITY_TYPES, PK_PATTERNS, SK_PATTERNS } = require('../config/dynamodb.schema');
+const {
+  PutCommand,
+  GetCommand,
+  UpdateCommand,
+  DeleteCommand,
+  QueryCommand,
+  ScanCommand,
+} = require("@aws-sdk/lib-dynamodb");
+const { newDynamoDB, newTableName } = require("../config/aws.config");
+const {
+  ENTITY_TYPES,
+  PK_PATTERNS,
+  SK_PATTERNS,
+} = require("../config/dynamodb.schema");
 
 class DynamoDBService {
   /**
    * Create or Update User
-   * 
+   *
    * @param {Object} userData - User information
    * @returns {Object} Success status and user data/error
    */
@@ -24,9 +35,11 @@ class DynamoDBService {
     try {
       // CRITICAL: Never generate new UUID - always require userId to be passed
       if (!userData.userId) {
-        throw new Error('userId is required - cannot create user without Cognito user ID');
+        throw new Error(
+          "userId is required - cannot create user without Cognito user ID",
+        );
       }
-      
+
       const userId = userData.userId; // Must be Cognito sub
       const timestamp = new Date().toISOString();
       const isVerified = userData.isVerified || false;
@@ -40,27 +53,28 @@ class DynamoDBService {
         email: userData.email,
         firstName: userData.firstName,
         lastName: userData.lastName,
-        authProvider: userData.authProvider || 'cognito',
+        authProvider: userData.authProvider || "cognito",
         isVerified: isVerified,
         onboardingCompleted: userData.onboardingCompleted || false,
         onboardingStep: userData.onboardingStep || 1,
         createdAt: timestamp,
         updatedAt: timestamp,
-        lastLogin: null
+        lastLogin: null,
       };
 
       const command = new PutCommand({
         TableName: newTableName,
         Item: user,
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+        ConditionExpression:
+          "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: user };
     } catch (error) {
-      console.error('newDynamoDB createUser error:', error);
-      if (error.name === 'ConditionalCheckFailedException') {
-        return { success: false, error: 'User already exists' };
+      console.error("newDynamoDB createUser error:", error);
+      if (error.name === "ConditionalCheckFailedException") {
+        return { success: false, error: "User already exists" };
       }
       return { success: false, error: error.message };
     }
@@ -68,7 +82,7 @@ class DynamoDBService {
 
   /**
    * Get User by Email
-   * 
+   *
    * @param {string} email - User's email address
    * @returns {Object} Success status and user data/error
    */
@@ -76,11 +90,11 @@ class DynamoDBService {
     try {
       const command = new ScanCommand({
         TableName: newTableName,
-        FilterExpression: 'email = :email',
+        FilterExpression: "email = :email",
         ExpressionAttributeValues: {
-          ':email': email
+          ":email": email,
         },
-        Limit: 1
+        Limit: 1,
       });
 
       const result = await newDynamoDB.send(command);
@@ -88,16 +102,16 @@ class DynamoDBService {
       if (result.Items && result.Items.length > 0) {
         return { success: true, data: result.Items[0] };
       }
-      return { success: false, error: 'User not found' };
+      return { success: false, error: "User not found" };
     } catch (error) {
-      console.error('newDynamoDB getUserByEmail error:', error);
+      console.error("newDynamoDB getUserByEmail error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get User by ID
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} userId - User ID
    * @returns {Object} Success status and user data/error
@@ -108,8 +122,8 @@ class DynamoDBService {
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: SK_PATTERNS.USER(userId)
-        }
+          SK: SK_PATTERNS.USER(userId),
+        },
       });
 
       const result = await newDynamoDB.send(command);
@@ -117,16 +131,16 @@ class DynamoDBService {
       if (result.Item) {
         return { success: true, data: result.Item };
       }
-      return { success: false, error: 'User not found' };
+      return { success: false, error: "User not found" };
     } catch (error) {
-      console.error('newDynamoDB getUserById error:', error);
+      console.error("newDynamoDB getUserById error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Update User Verification Status
-   * 
+   *
    * @param {string} email - User's email address
    * @param {boolean} isVerified - Verification status
    * @returns {Object} Success status and updated user data/error
@@ -135,34 +149,34 @@ class DynamoDBService {
     try {
       const userResult = await this.getUserByEmail(email);
       if (!userResult.success) {
-        return { success: false, error: 'User not found' };
+        return { success: false, error: "User not found" };
       }
 
       const command = new UpdateCommand({
         TableName: newTableName,
         Key: {
           PK: userResult.data.PK,
-          SK: userResult.data.SK
+          SK: userResult.data.SK,
         },
-        UpdateExpression: 'SET isVerified = :verified, updatedAt = :updatedAt',
+        UpdateExpression: "SET isVerified = :verified, updatedAt = :updatedAt",
         ExpressionAttributeValues: {
-          ':verified': isVerified,
-          ':updatedAt': new Date().toISOString()
+          ":verified": isVerified,
+          ":updatedAt": new Date().toISOString(),
         },
-        ReturnValues: 'ALL_NEW'
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('newDynamoDB updateUserVerification error:', error);
+      console.error("newDynamoDB updateUserVerification error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Update User Onboarding Status
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} userId - User ID
    * @param {Object} updates - Onboarding updates
@@ -174,37 +188,37 @@ class DynamoDBService {
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: SK_PATTERNS.USER(userId)
+          SK: SK_PATTERNS.USER(userId),
         },
-        UpdateExpression: 'SET #attr = :value, updatedAt = :updatedAt',
+        UpdateExpression: "SET #attr = :value, updatedAt = :updatedAt",
         ExpressionAttributeNames: {
-          '#attr': Object.keys(updates)[0]
+          "#attr": Object.keys(updates)[0],
         },
         ExpressionAttributeValues: {
-          ':value': Object.values(updates)[0],
-          ':updatedAt': new Date().toISOString()
+          ":value": Object.values(updates)[0],
+          ":updatedAt": new Date().toISOString(),
         },
-        ReturnValues: 'ALL_NEW'
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('newDynamoDB updateUserOnboarding error:', error);
+      console.error("newDynamoDB updateUserOnboarding error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Shopify Order
-   * 
+   *
    * @param {Object} orderData - Order information
    * @returns {Object} Success status and order data/error
    */
   async saveOrder(orderData) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const order = {
         PK: PK_PATTERNS.MERCHANT(orderData.merchantId),
         SK: SK_PATTERNS.ORDER(orderData.orderId),
@@ -216,31 +230,31 @@ class DynamoDBService {
         currency: orderData.currency,
         orderStatus: orderData.orderStatus,
         fulfillmentStatus: orderData.fulfillmentStatus,
-        paymentType: orderData.paymentType || 'prepaid',
+        paymentType: orderData.paymentType || "prepaid",
         products: orderData.products || [],
         cogsAtSale: orderData.cogsAtSale || 0,
         shippingFee: orderData.shippingFee || 0,
         createdAt: orderData.createdAt || timestamp,
         updatedAt: timestamp,
-        orderTimeline: orderData.orderTimeline || {}
+        orderTimeline: orderData.orderTimeline || {},
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: order
+        Item: order,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: order };
     } catch (error) {
-      console.error('newDynamoDB saveOrder error:', error);
+      console.error("newDynamoDB saveOrder error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Product
-   * 
+   *
    * @param {Object} productData - Product information
    * @returns {Object} Success status and product data/error
    */
@@ -257,25 +271,25 @@ class DynamoDBService {
         costPrice: productData.costPrice,
         variants: productData.variants || [],
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: product
+        Item: product,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: product };
     } catch (error) {
-      console.error('newDynamoDB saveProduct error:', error);
+      console.error("newDynamoDB saveProduct error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Shipment
-   * 
+   *
    * @param {Object} shipmentData - Shipment information
    * @returns {Object} Success status and shipment data/error
    */
@@ -292,28 +306,28 @@ class DynamoDBService {
         orderStatus: shipmentData.orderStatus,
         shippingFee: shipmentData.shippingFee,
         deliveryStatus: shipmentData.deliveryStatus,
-        awbCode: shipmentData.awbCode || '',
-        carrier: shipmentData.carrier || '',
+        awbCode: shipmentData.awbCode || "",
+        carrier: shipmentData.carrier || "",
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: shipment
+        Item: shipment,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: shipment };
     } catch (error) {
-      console.error('newDynamoDB saveShipment error:', error);
+      console.error("newDynamoDB saveShipment error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Meta Ads Data
-   * 
+   *
    * @param {Object} adsData - Ads information
    * @returns {Object} Success status and ads data/error
    */
@@ -332,25 +346,25 @@ class DynamoDBService {
         clicks: adsData.clicks,
         date: adsData.date,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: ads
+        Item: ads,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: ads };
     } catch (error) {
-      console.error('newDynamoDB saveAdsData error:', error);
+      console.error("newDynamoDB saveAdsData error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Business Expense
-   * 
+   *
    * @param {Object} expenseData - Expense information
    * @returns {Object} Success status and expense data/error
    */
@@ -366,27 +380,27 @@ class DynamoDBService {
         amount: expenseData.amount,
         date: expenseData.date,
         description: expenseData.description,
-        category: expenseData.category || '',
+        category: expenseData.category || "",
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: expense
+        Item: expense,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: expense };
     } catch (error) {
-      console.error('newDynamoDB saveExpense error:', error);
+      console.error("newDynamoDB saveExpense error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Daily Summary
-   * 
+   *
    * @param {Object} summaryData - Summary information
    * @returns {Object} Success status and summary data/error
    */
@@ -409,25 +423,25 @@ class DynamoDBService {
         cancelledOrders: summaryData.cancelledOrders || 0,
         businessExpenses: summaryData.businessExpenses || 0,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: summary
+        Item: summary,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: summary };
     } catch (error) {
-      console.error('newDynamoDB saveDailySummary error:', error);
+      console.error("newDynamoDB saveDailySummary error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Save Integration Status
-   * 
+   *
    * @param {Object} integrationData - Integration status
    * @returns {Object} Success status and integration data/error
    */
@@ -441,31 +455,31 @@ class DynamoDBService {
         platform: integrationData.platform,
         lastSyncTime: integrationData.lastSyncTime,
         syncStatus: integrationData.syncStatus,
-        lastError: integrationData.lastError || '',
+        lastError: integrationData.lastError || "",
         ordersSynced: integrationData.ordersSynced || 0,
         productsSynced: integrationData.productsSynced || 0,
         shipmentsSynced: integrationData.shipmentsSynced || 0,
         adsSynced: integrationData.adsSynced || 0,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: integration
+        Item: integration,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: integration };
     } catch (error) {
-      console.error('newDynamoDB saveIntegrationStatus error:', error);
+      console.error("newDynamoDB saveIntegrationStatus error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get Daily Summary
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} date - Date (YYYY-MM-DD)
    * @returns {Object} Success status and summary data/error
@@ -476,8 +490,8 @@ class DynamoDBService {
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: SK_PATTERNS.SUMMARY(date)
-        }
+          SK: SK_PATTERNS.SUMMARY(date),
+        },
       });
 
       const result = await newDynamoDB.send(command);
@@ -485,23 +499,22 @@ class DynamoDBService {
       if (result.Item) {
         return { success: true, data: result.Item };
       }
-      return { success: false, error: 'Summary not found' };
+      return { success: false, error: "Summary not found" };
     } catch (error) {
-      console.error('newDynamoDB getDailySummary error:', error);
+      console.error("newDynamoDB getDailySummary error:", error);
       return { success: false, error: error.message };
     }
   }
 
-  
   async getIntegrationStatus(merchantId, platform) {
     try {
       const command = new GetCommand({
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: `INTEGRATION#${platform.toUpperCase()}` 
+          SK: `INTEGRATION#${platform.toUpperCase()}`,
           // SK: SK_PATTERNS.INTEGRATION(platform)
-        }
+        },
       });
 
       const result = await newDynamoDB.send(command);
@@ -509,16 +522,16 @@ class DynamoDBService {
       if (result.Item) {
         return { success: true, data: result.Item };
       }
-      return { success: false, error: 'Integration status not found' };
+      return { success: false, error: "Integration status not found" };
     } catch (error) {
-      console.error('newDynamoDB getIntegrationStatus error:', error);
+      console.error("newDynamoDB getIntegrationStatus error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Orders for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {Object} options - Query options
    * @returns {Object} Success status and orders data/error
@@ -526,20 +539,20 @@ class DynamoDBService {
   async getOrdersByMerchant(merchantId, options = {}) {
     try {
       const { limit = 100, startDate, endDate } = options;
-      
+
       const params = {
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'ORDER#'
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "ORDER#",
         },
-        Limit: limit
+        Limit: limit,
       };
 
       if (startDate) {
-        params.FilterExpression = 'orderCreatedAt >= :startDate';
-        params.ExpressionAttributeValues[':startDate'] = startDate;
+        params.FilterExpression = "orderCreatedAt >= :startDate";
+        params.ExpressionAttributeValues[":startDate"] = startDate;
       }
 
       const command = new QueryCommand(params);
@@ -547,14 +560,14 @@ class DynamoDBService {
 
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getOrdersByMerchant error:', error);
+      console.error("newDynamoDB getOrdersByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Shipments for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and shipments data/error
    */
@@ -562,24 +575,24 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'SHIPMENT#'
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "SHIPMENT#",
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getShipmentsByMerchant error:', error);
+      console.error("newDynamoDB getShipmentsByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Products for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and products data/error
    */
@@ -587,24 +600,24 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'PRODUCT#'
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "PRODUCT#",
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getProductsByMerchant error:', error);
+      console.error("newDynamoDB getProductsByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Expenses for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and expenses data/error
    */
@@ -612,24 +625,24 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'EXPENSE#'
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "EXPENSE#",
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getExpensesByMerchant error:', error);
+      console.error("newDynamoDB getExpensesByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Ads Data for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
@@ -639,27 +652,27 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        FilterExpression: 'date >= :startDate AND date <= :endDate',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        FilterExpression: "date >= :startDate AND date <= :endDate",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'ADS#',
-          ':startDate': startDate,
-          ':endDate': endDate
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "ADS#",
+          ":startDate": startDate,
+          ":endDate": endDate,
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getAdsDataByMerchant error:', error);
+      console.error("newDynamoDB getAdsDataByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Daily Summaries for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
@@ -669,70 +682,70 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        FilterExpression: 'date >= :startDate AND date <= :endDate',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        FilterExpression: "date >= :startDate AND date <= :endDate",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'SUMMARY#',
-          ':startDate': startDate,
-          ':endDate': endDate
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "SUMMARY#",
+          ":startDate": startDate,
+          ":endDate": endDate,
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getSummariesByMerchant error:', error);
+      console.error("newDynamoDB getSummariesByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Create Integration Record (for onboarding)
-   * 
+   *
    * @param {Object} integrationData - Integration credentials and info
    * @returns {Object} Success status and integration data/error
    */
   async createIntegration(integrationData) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const integration = {
         PK: PK_PATTERNS.MERCHANT(integrationData.merchantId),
         SK: SK_PATTERNS.INTEGRATION(integrationData.platform.toUpperCase()),
         entityType: ENTITY_TYPES.INTEGRATION,
         merchantId: integrationData.merchantId,
         platform: integrationData.platform.toLowerCase(),
-        status: 'active',
+        status: "active",
         connectedAt: timestamp,
         createdAt: timestamp,
         updatedAt: timestamp,
-        ...integrationData.credentials // Spread platform-specific credentials
+        ...integrationData.credentials, // Spread platform-specific credentials
       };
 
       const command = new PutCommand({
         TableName: newTableName,
-        Item: integration
+        Item: integration,
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: integration };
     } catch (error) {
-      console.error('newDynamoDB createIntegration error:', error);
+      console.error("newDynamoDB createIntegration error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Create Product Record (for Step 3 - Product Info Only)
-   * 
+   *
    * @param {Object} productData - Product information (no variants)
    * @returns {Object} Success status and product data/error
    */
   async createProduct(productData) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const product = {
         PK: PK_PATTERNS.MERCHANT(productData.merchantId),
         SK: SK_PATTERNS.PRODUCT(productData.productId),
@@ -741,21 +754,22 @@ class DynamoDBService {
         productId: productData.productId,
         productName: productData.productName,
         createdAt: timestamp,
-        updatedAt: timestamp
+        updatedAt: timestamp,
       };
 
       const command = new PutCommand({
         TableName: newTableName,
         Item: product,
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+        ConditionExpression:
+          "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: product };
     } catch (error) {
-      console.error('newDynamoDB createProduct error:', error);
-      if (error.name === 'ConditionalCheckFailedException') {
-        return { success: false, error: 'Product already exists' };
+      console.error("newDynamoDB createProduct error:", error);
+      if (error.name === "ConditionalCheckFailedException") {
+        return { success: false, error: "Product already exists" };
       }
       return { success: false, error: error.message };
     }
@@ -763,14 +777,14 @@ class DynamoDBService {
 
   /**
    * Create Variant Record (for Step 3 - COGS stored here)
-   * 
+   *
    * @param {Object} variantData - Variant information with COGS
    * @returns {Object} Success status and variant data/error
    */
   async createVariant(variantData) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const variant = {
         PK: PK_PATTERNS.MERCHANT(variantData.merchantId),
         SK: SK_PATTERNS.VARIANT(variantData.variantId),
@@ -778,25 +792,26 @@ class DynamoDBService {
         merchantId: variantData.merchantId,
         productId: variantData.productId,
         variantId: variantData.variantId,
-        variantName: variantData.variantName || '', // Size S, Size M, etc.
+        variantName: variantData.variantName || "", // Size S, Size M, etc.
         salePrice: variantData.salePrice, // Reference only - NOT used for revenue
         costPrice: variantData.costPrice, // COGS - this is what matters
         createdAt: timestamp,
-        updatedAt: timestamp
+        updatedAt: timestamp,
       };
 
       const command = new PutCommand({
         TableName: newTableName,
         Item: variant,
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+        ConditionExpression:
+          "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       });
 
       await newDynamoDB.send(command);
       return { success: true, data: variant };
     } catch (error) {
-      console.error('newDynamoDB createVariant error:', error);
-      if (error.name === 'ConditionalCheckFailedException') {
-        return { success: false, error: 'Variant already exists' };
+      console.error("newDynamoDB createVariant error:", error);
+      if (error.name === "ConditionalCheckFailedException") {
+        return { success: false, error: "Variant already exists" };
       }
       return { success: false, error: error.message };
     }
@@ -804,7 +819,7 @@ class DynamoDBService {
 
   /**
    * Get All Variants for a Product
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} productId - Product ID
    * @returns {Object} Success status and variants data/error
@@ -813,26 +828,26 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-        FilterExpression: 'productId = :productId',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        FilterExpression: "productId = :productId",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'VARIANT#',
-          ':productId': productId
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "VARIANT#",
+          ":productId": productId,
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getVariantsByProduct error:', error);
+      console.error("newDynamoDB getVariantsByProduct error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Variants for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and variants data/error
    */
@@ -840,24 +855,24 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'VARIANT#'
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "VARIANT#",
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getVariantsByMerchant error:', error);
+      console.error("newDynamoDB getVariantsByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Get All Integrations for Merchant
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and integrations data/error
    */
@@ -865,24 +880,24 @@ class DynamoDBService {
     try {
       const command = new QueryCommand({
         TableName: newTableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
-          ':pk': PK_PATTERNS.MERCHANT(merchantId),
-          ':sk': 'INTEGRATION#'
-        }
+          ":pk": PK_PATTERNS.MERCHANT(merchantId),
+          ":sk": "INTEGRATION#",
+        },
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Items || [] };
     } catch (error) {
-      console.error('newDynamoDB getIntegrationsByMerchant error:', error);
+      console.error("newDynamoDB getIntegrationsByMerchant error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Update Integration Record
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} platform - Integration platform (shopify, meta, shiprocket)
    * @param {Object} updates - Fields to update
@@ -891,12 +906,12 @@ class DynamoDBService {
   async updateIntegration(merchantId, platform, updates) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       // Build update expression dynamically
       const updateExpressions = [];
       const expressionAttributeNames = {};
       const expressionAttributeValues = {
-        ':updatedAt': timestamp
+        ":updatedAt": timestamp,
       };
 
       // Add updatedAt to updates
@@ -907,7 +922,7 @@ class DynamoDBService {
         if (value !== undefined && value !== null) {
           const attrName = `#attr${index}`;
           const valueName = `:value${index}`;
-          
+
           updateExpressions.push(`${attrName} = ${valueName}`);
           expressionAttributeNames[attrName] = key;
           expressionAttributeValues[valueName] = value;
@@ -915,46 +930,48 @@ class DynamoDBService {
       });
 
       if (updateExpressions.length === 0) {
-        return { success: false, error: 'No valid updates provided' };
+        return { success: false, error: "No valid updates provided" };
       }
 
       const command = new UpdateCommand({
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: `INTEGRATION#${platform.toUpperCase()}`
+          SK: `INTEGRATION#${platform.toUpperCase()}`,
         },
-        UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+        UpdateExpression: `SET ${updateExpressions.join(", ")}`,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,
-        ReturnValues: 'ALL_NEW'
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('newDynamoDB updateIntegration error:', error);
+      console.error("newDynamoDB updateIntegration error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Create User Profile (change SK from USER# to PROFILE)
-   * 
+   *
    * @param {Object} userData - User information
    * @returns {Object} Success status and user data/error
    */
-async createUserProfile(userData) {
+  async createUserProfile(userData) {
     try {
       // 🚨 DEFENSIVE CHECK
       if (!userData.userId) {
-        console.error("CRITICAL: Cannot create DynamoDB profile without a valid Cognito userId.");
+        console.error(
+          "CRITICAL: Cannot create DynamoDB profile without a valid Cognito userId.",
+        );
         return { success: false, error: "Missing Cognito user ID" };
       }
-      
+
       const merchantId = userData.userId; // Cognito sub ID
       const timestamp = new Date().toISOString();
-      
+
       const params = {
         TableName: newTableName, // 👈 FIX 1: Use the New Singapore Table
         Item: {
@@ -963,27 +980,28 @@ async createUserProfile(userData) {
           entityType: "PROFILE",
           merchantId: merchantId,
           userId: merchantId,
-          email: userData.email || '',
-          firstName: userData.firstName || '',
-          lastName: userData.lastName || '',
-          authProvider: userData.authProvider || 'cognito',
+          email: userData.email || "",
+          firstName: userData.firstName || "",
+          lastName: userData.lastName || "",
+          authProvider: userData.authProvider || "cognito",
           isVerified: userData.isVerified || false,
           onboardingCompleted: false,
           onboardingStep: 1,
           createdAt: timestamp,
-          updatedAt: timestamp
+          updatedAt: timestamp,
         },
         // Prevent duplicate profiles
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+        ConditionExpression:
+          "attribute_not_exists(PK) AND attribute_not_exists(SK)",
       };
-      
+
       try {
         // 👈 FIX 2: Use the newDynamoDB client
-        await newDynamoDB.send(new PutCommand(params)); 
+        await newDynamoDB.send(new PutCommand(params));
         console.log(`✅ User profile created with Cognito ID: ${merchantId}`);
         return { success: true, data: { merchantId, userId: merchantId } };
       } catch (error) {
-        if (error.name === 'ConditionalCheckFailedException') {
+        if (error.name === "ConditionalCheckFailedException") {
           console.log(`ℹ️  User profile already exists for ${merchantId}`);
           return { success: true, data: { merchantId, userId: merchantId } };
         }
@@ -991,13 +1009,13 @@ async createUserProfile(userData) {
         return { success: false, error: error.message };
       }
     } catch (error) {
-      console.error('createUserProfile error:', error);
+      console.error("createUserProfile error:", error);
       return { success: false, error: error.message };
     }
   }
   /**
    * Get User Profile (using PROFILE SK)
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and user data/error
    */
@@ -1007,8 +1025,8 @@ async createUserProfile(userData) {
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: 'PROFILE'
-        }
+          SK: "PROFILE",
+        },
       });
 
       const result = await newDynamoDB.send(command);
@@ -1016,107 +1034,100 @@ async createUserProfile(userData) {
       if (result.Item) {
         return { success: true, data: result.Item };
       }
-      return { success: false, error: 'User profile not found' };
+      return { success: false, error: "User profile not found" };
     } catch (error) {
-      console.error('newDynamoDB getUserProfile error:', error);
+      console.error("newDynamoDB getUserProfile error:", error);
       return { success: false, error: error.message };
     }
   }
 
   /**
    * Update User Profile Onboarding
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {Object} updates - Onboarding updates
    * @returns {Object} Success status and updated user data/error
    */
   async updateUserProfileOnboarding(merchantId, updates) {
     try {
-      // Filter out undefined values
       const validUpdates = {};
-      Object.keys(updates).forEach(key => {
+      // 1. Filter out empty values
+      Object.keys(updates).forEach((key) => {
         if (updates[key] !== undefined && updates[key] !== null) {
           validUpdates[key] = updates[key];
         }
       });
 
-      if (Object.keys(validUpdates).length === 0) {
-        return { success: false, error: 'No valid updates provided' };
-      }
+      if (Object.keys(validUpdates).length === 0) return { success: true };
 
-      // Build dynamic update expression
+      // 2. Build the Expression Dynamically
       const updateExpressions = [];
-      const expressionAttributeNames = {};
-      const expressionAttributeValues = {
-        ':updatedAt': new Date().toISOString()
-      };
+      const attrNames = {};
+      const attrValues = { ":updatedAt": new Date().toISOString() };
 
-      // Add each valid update field
       Object.keys(validUpdates).forEach((key, index) => {
-        const attrName = `#attr${index}`;
-        const attrValue = `:value${index}`;
-        
-        updateExpressions.push(`${attrName} = ${attrValue}`);
-        expressionAttributeNames[attrName] = key;
-        expressionAttributeValues[attrValue] = validUpdates[key];
+        const nameKey = `#field${index}`;
+        const valKey = `:val${index}`;
+
+        updateExpressions.push(`${nameKey} = ${valKey}`);
+        attrNames[nameKey] = key;
+        attrValues[valKey] = validUpdates[key];
       });
 
-      // Add updatedAt
-      updateExpressions.push('updatedAt = :updatedAt');
+      // 3. Add the updatedAt to the string and values
+      updateExpressions.push("#updatedAtField = :updatedAt");
+      attrNames["#updatedAtField"] = "updatedAt";
 
       const command = new UpdateCommand({
         TableName: newTableName,
-        Key: {
-          PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: 'PROFILE'
-        },
-        UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-        ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: expressionAttributeValues,
-        ReturnValues: 'ALL_NEW'
+        Key: { PK: `MERCHANT#${merchantId}`, SK: "PROFILE" },
+        UpdateExpression: `SET ${updateExpressions.join(", ")}`,
+        ExpressionAttributeNames: attrNames,
+        ExpressionAttributeValues: attrValues,
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('newDynamoDB updateUserProfileOnboarding error:', error);
-      return { success: false, error: error.message };
+      console.error("Safe Update Error:", error.message);
+      throw error;
     }
   }
-
   /**
    * Update User Last Login Time
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @returns {Object} Success status and updated user data/error
    */
   async updateLastLogin(merchantId) {
     try {
+      const timestamp = new Date().toISOString();
       const command = new UpdateCommand({
         TableName: newTableName,
-        Key: {
-          PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: 'PROFILE'
+        Key: { PK: `MERCHANT#${merchantId}`, SK: "PROFILE" },
+        UpdateExpression: "SET #ll = :lastLogin, #ua = :updatedAt",
+        ExpressionAttributeNames: {
+          "#ll": "lastLogin",
+          "#ua": "updatedAt",
         },
-        UpdateExpression: 'SET lastLogin = :lastLogin, updatedAt = :updatedAt',
         ExpressionAttributeValues: {
-          ':lastLogin': new Date().toISOString(),
-          ':updatedAt': new Date().toISOString()
+          ":lastLogin": timestamp,
+          ":updatedAt": timestamp,
         },
-        ReturnValues: 'ALL_NEW'
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('newDynamoDB updateLastLogin error:', error);
+      console.error("Update LastLogin Error:", error.message);
       return { success: false, error: error.message };
     }
   }
-
   /**
    * Migrate temporary user to Cognito ID
-   * 
+   *
    * @param {string} email - User's email
    * @param {string} cognitoUserId - Cognito user ID (sub)
    * @returns {Object} Success status and user data/error
@@ -1125,25 +1136,27 @@ async createUserProfile(userData) {
     try {
       // Find user by email
       const userResult = await this.getUserByEmail(email);
-      
+
       if (!userResult.success) {
-        return { success: false, error: 'User not found' };
+        return { success: false, error: "User not found" };
       }
-      
+
       const oldUser = userResult.data;
-      
+
       // If user already has correct Cognito ID, no migration needed
       if (oldUser.userId === cognitoUserId) {
         return { success: true, data: oldUser, migrated: false };
       }
-      
-      console.log(`🔄 Migrating user from ${oldUser.userId} to ${cognitoUserId}`);
-      
+
+      console.log(
+        `🔄 Migrating user from ${oldUser.userId} to ${cognitoUserId}`,
+      );
+
       // Create new record with Cognito ID
       const newUser = {
         PK: PK_PATTERNS.MERCHANT(cognitoUserId),
-        SK: 'PROFILE',
-        entityType: 'PROFILE',
+        SK: "PROFILE",
+        entityType: "PROFILE",
         merchantId: cognitoUserId,
         userId: cognitoUserId,
         email: oldUser.email,
@@ -1159,25 +1172,59 @@ async createUserProfile(userData) {
         whatsapp: oldUser.whatsapp,
         createdAt: oldUser.createdAt,
         updatedAt: new Date().toISOString(),
-        lastLogin: null
+        lastLogin: null,
       };
-      
+
       const command = new PutCommand({
         TableName: newTableName,
-        Item: newUser
+        Item: newUser,
       });
-      
+
       await newDynamoDB.send(command);
-      
+
       // Delete old record
       await this.deleteUser(oldUser.merchantId, oldUser.userId);
-      
-      console.log(`✅ User migrated successfully to Cognito ID: ${cognitoUserId}`);
-      
+
+      console.log(
+        `✅ User migrated successfully to Cognito ID: ${cognitoUserId}`,
+      );
+
       return { success: true, data: newUser, migrated: true };
     } catch (error) {
-      console.error('Migrate temporary user error:', error);
+      console.error("Migrate temporary user error:", error);
       return { success: false, error: error.message };
+    }
+  }
+
+async queryAll(merchantId, prefix) {
+    let items = [];
+    let lastKey = null;
+    try {
+      do {
+        // 🟢 FIX: Build params object dynamically
+        const params = {
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":sk": prefix,
+          }
+        };
+
+        // 🟢 Only add the key if it exists (avoids the null object crash)
+        if (lastKey) {
+          params.ExclusiveStartKey = lastKey;
+        }
+
+        const res = await newDynamoDB.send(new QueryCommand(params));
+        items.push(...(res.Items || []));
+        lastKey = res.LastEvaluatedKey;
+      } while (lastKey);
+      
+      return items;
+    } catch (error) {
+      console.error(`❌ [queryAll] Error for ${prefix}:`, error.message);
+      return []; 
     }
   }
 
@@ -1188,12 +1235,12 @@ async createUserProfile(userData) {
   async updateBusinessOverheads(merchantId, overheads) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const command = new UpdateCommand({
         TableName: newTableName,
-        Key: { 
-          PK: `MERCHANT#${merchantId}`, 
-          SK: 'PROFILE' 
+        Key: {
+          PK: `MERCHANT#${merchantId}`,
+          SK: "PROFILE",
         },
         // We save all 6 categories directly into the Profile
         UpdateExpression: `SET 
@@ -1206,28 +1253,28 @@ async createUserProfile(userData) {
           expensesCompleted = :ec,
           updatedAt = :t`,
         ExpressionAttributeValues: {
-          ':af': Number(overheads.agencyFees || 0),
-          ':sf': Number(overheads.staffFees || 0),
-          ':or': Number(overheads.officeRent || 0),
-          ':oe': Number(overheads.otherExpenses || 0),
-          ':rf': Number(overheads.rtoHandlingFees || 0),
-          ':pg': Number(overheads.paymentGatewayFeePercent || 2.5),
-          ':ec': true,
-          ':t': timestamp
+          ":af": Number(overheads.agencyFees || 0),
+          ":sf": Number(overheads.staffFees || 0),
+          ":or": Number(overheads.officeRent || 0),
+          ":oe": Number(overheads.otherExpenses || 0),
+          ":rf": Number(overheads.rtoHandlingFees || 0),
+          ":pg": Number(overheads.paymentGatewayFeePercent || 2.5),
+          ":ec": true,
+          ":t": timestamp,
         },
-        ReturnValues: 'ALL_NEW'
+        ReturnValues: "ALL_NEW",
       });
 
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error('Update Overheads Error:', error);
+      console.error("Update Overheads Error:", error);
       throw error;
     }
   }
   /**
    * Delete User
-   * 
+   *
    * @param {string} merchantId - Merchant ID
    * @param {string} userId - User ID
    * @returns {Object} Success status and message/error
@@ -1238,14 +1285,14 @@ async createUserProfile(userData) {
         TableName: newTableName,
         Key: {
           PK: PK_PATTERNS.MERCHANT(merchantId),
-          SK: SK_PATTERNS.USER(userId)
-        }
+          SK: SK_PATTERNS.USER(userId),
+        },
       });
 
       await newDynamoDB.send(command);
-      return { success: true, message: 'User deleted successfully' };
+      return { success: true, message: "User deleted successfully" };
     } catch (error) {
-      console.error('DynamoDB deleteUser error:', error);
+      console.error("DynamoDB deleteUser error:", error);
       return { success: false, error: error.message };
     }
   }

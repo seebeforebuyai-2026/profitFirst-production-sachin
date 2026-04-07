@@ -42,31 +42,40 @@ class UserController {
    * 🟢 POST /api/user/business-expenses
    * Saves overheads to PROFILE and triggers the Summary Engine.
    */
-  async updateBusinessExpenses(req, res) {
+ async updateBusinessExpenses(req, res) {
     try {
       const merchantId = req.user.userId;
       const { expenses } = req.body;
 
-      if (!expenses) {
-        return res.status(400).json({ error: "Expense data is required" });
-      }
+      console.log(`📡 [API] Save Expenses request for: ${merchantId}`);
 
-      // 1. Save to DynamoDB Service (The function you added in Step 1)
+      // 1. Save expenses
       await dynamodbService.updateBusinessOverheads(merchantId, expenses);
+      console.log("✅ [API] Overheads saved to Profile.");
 
-       const syncService = require('../services/sync.service');
-      await syncService.startInitialSync(merchantId);
-     
-
-       res.json({
-        success: true,
-        message: "Final setup complete. Your dashboard is now syncing!",
-        expensesCompleted: true
+      // 2. Fetch profile to check flags
+      const profile = await dynamodbService.getUserProfile(merchantId);
+      
+      // 🟢 LOGGING: Check what the database actually says
+      console.log("📊 [API] Current Flags:", {
+        initialSyncCompleted: profile.data?.initialSyncCompleted,
+        expensesCompleted: profile.data?.expensesCompleted
       });
 
+      // 3. Trigger Sync logic
+      if (profile.data?.initialSyncCompleted !== true) {
+        console.log("🚀 [API] Triggering NEW Initial 1-Year Sync...");
+        const syncService = require('../services/sync.service');
+        await syncService.startInitialSync(merchantId);
+      } else {
+        console.log("🔄 [API] Sync already exists. Sending RECALCULATE message.");
+      }
+
+      res.json({ success: true, expensesCompleted: true });
     } catch (error) {
-      console.error('Update Expenses Error:', error);
-      res.status(500).json({ error: "Failed to save expenses" });
+      // 🔴 CRITICAL: Log the actual error message!
+      console.error(`❌ [API] updateBusinessExpenses FAILED:`, error.message);
+      res.status(500).json({ error: error.message });
     }
   }
 }

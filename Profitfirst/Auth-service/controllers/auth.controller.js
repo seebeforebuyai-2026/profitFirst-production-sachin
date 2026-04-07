@@ -918,6 +918,7 @@ class AuthController {
           onboardingStep: data.onboardingStep || 1,
           onboardingCompleted: data.onboardingCompleted || false,
           cogsCompleted: data.cogsCompleted || false,
+          expensesCompleted: data.expensesCompleted || false,
           initialSyncCompleted: data.initialSyncCompleted || false,
           dashboardUnlocked: data.dashboardUnlocked || false,
           createdAt: data.createdAt,
