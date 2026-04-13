@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axiosInstance from '../axios';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import axiosInstance from "../axios";
 
 const ProfileContext = createContext();
 
 export const useProfile = () => {
   const context = useContext(ProfileContext);
   if (!context) {
-    throw new Error('useProfile must be used within a ProfileProvider');
+    throw new Error("useProfile must be used within a ProfileProvider");
   }
   return context;
 };
@@ -19,23 +19,26 @@ export const ProfileProvider = ({ children }) => {
     fetchProfile();
   }, []);
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const response = await axiosInstance.get('/auth/profile');
+      const response = await axiosInstance.get("/auth/profile");
       setProfile(response.data.user);
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      console.error("Failed to fetch profile:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const updateProfile = (updates) => {
-    setProfile(prev => ({ ...prev, ...updates }));
+    setProfile((prev) => ({ ...prev, ...updates }));
   };
 
   return (
-    <ProfileContext.Provider value={{ profile, loading, updateProfile, fetchProfile }}>
+    <ProfileContext.Provider
+      value={{ profile, loading, updateProfile, fetchProfile }}
+    >
       {children}
     </ProfileContext.Provider>
   );

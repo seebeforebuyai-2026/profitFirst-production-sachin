@@ -9,8 +9,7 @@ import { PulseLoader } from "react-spinners";
 function MainDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, loading } = useProfile();
-
+const { profile, loading, fetchProfile } = useProfile();
   // -------------------------------
   // 🔐 Lock Logic
   // -------------------------------
@@ -20,9 +19,23 @@ function MainDashboard() {
 
   const cogsDone = profile?.cogsCompleted === true;
   const expensesDone = profile?.expensesCompleted === true;
+
+
   const syncDone = profile?.initialSyncCompleted === true;
 
   const setupFinished = cogsDone && expensesDone && syncDone;
+
+ useEffect(() => {
+    let interval;
+    if (isDashboardLocked) {
+      // Har 5 second mein profile refresh karo jab tak dashboard locked hai
+      interval = setInterval(() => {
+        fetchProfile(true); // true = silent refresh (no loader)
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isDashboardLocked]);
+
 
   // -------------------------------
   // 🔄 Auto Redirect Logic

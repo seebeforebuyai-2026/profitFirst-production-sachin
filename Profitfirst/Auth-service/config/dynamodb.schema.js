@@ -1,34 +1,3 @@
-/**
- * DynamoDB Schema Configuration
- * 
- * Single Table Design for ProfitFirst
- * 
- * TABLE: ProfitFirst_Core (New Database)
- * 
- * PARTITION KEY (PK): MERCHANT#<merchantId>
- * SORT KEY (SK): ENTITY#<entityId>
- * 
- * ENTITY TYPES:
- * - PROFILE - User account data (replaces USER#<userId>)
- * - INTEGRATION#<platform> - Platform connections (Shopify, Meta, Shiprocket)
- * - PRODUCT#<productId> - Product info only (no COGS)
- * - VARIANT#<variantId> - Variant-level COGS (where cost is stored)
- * - ORDER#<orderId> - Shopify order data
- * - SHIPMENT#<shipmentId> - Shiprocket shipment data
- * - ADS#<campaignId> - Meta Ads campaign data
- * - EXPENSE#<expenseId> - Business expense data
- * - SUMMARY#<date> - Daily summary record
- * - METADATA - Merchant metadata
- * 
- * ONBOARDING STRUCTURE:
- * MERCHANT#123 / PROFILE              - User profile & onboarding progress
- * MERCHANT#123 / INTEGRATION#SHOPIFY  - Step 2: Shopify credentials
- * MERCHANT#123 / PRODUCT#P1           - Step 3: Product info
- * MERCHANT#123 / VARIANT#V1           - Step 3: Variant COGS (Size S)
- * MERCHANT#123 / VARIANT#V2           - Step 3: Variant COGS (Size M)
- * MERCHANT#123 / INTEGRATION#META     - Step 4: Meta Ads credentials
- * MERCHANT#123 / INTEGRATION#SHIPROCKET - Step 5: Shiprocket credentials
- */
 
 // Entity Type Constants
 const ENTITY_TYPES = {

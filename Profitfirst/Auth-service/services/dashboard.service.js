@@ -21,7 +21,7 @@ class DashboardService {
             ":pk": `MERCHANT#${merchantId}`,
             ":start": `SUMMARY#${startDate}`,
             ":end": `SUMMARY#${endDate}`,
-          }
+          },
         };
         if (lastKey) params.ExclusiveStartKey = lastKey;
 
@@ -48,7 +48,7 @@ class DashboardService {
         inTransitOrders: 0,
         prepaidOrders: 0,
         codOrders: 0,
-        rtoRevenueLost: 0
+        rtoRevenueLost: 0,
       };
 
       // 3. Raw Summation of all days
@@ -62,33 +62,89 @@ class DashboardService {
 
       // 4. WEIGHTED RATIO CALCULATIONS (Crucial for Accuracy)
       // We calculate these based on the SUMMED totals, not average of daily averages.
-      const profitMargin = totals.revenueEarned > 0 ? (totals.moneyKept / totals.revenueEarned) * 100 : 0;
-      const roas = totals.adsSpend > 0 ? totals.revenueGenerated / totals.adsSpend : 0;
+      const profitMargin =
+        totals.revenueEarned > 0
+          ? (totals.moneyKept / totals.revenueEarned) * 100
+          : 0;
+      const roas =
+        totals.adsSpend > 0 ? totals.revenueGenerated / totals.adsSpend : 0;
       const poas = totals.adsSpend > 0 ? totals.moneyKept / totals.adsSpend : 0;
-      const aov = totals.totalOrders > 0 ? totals.revenueGenerated / totals.totalOrders : 0;
-      const profitPerOrder = totals.deliveredOrders > 0 ? (totals.moneyKept / totals.deliveredOrders) : 0;
-      const shippingPerOrder = totals.deliveredOrders > 0 ? (totals.shippingSpend / totals.deliveredOrders) : 0;
+      const aov =
+        totals.totalOrders > 0
+          ? totals.revenueGenerated / totals.totalOrders
+          : 0;
+      const profitPerOrder =
+        totals.deliveredOrders > 0
+          ? totals.moneyKept / totals.deliveredOrders
+          : 0;
+      const shippingPerOrder =
+        totals.deliveredOrders > 0
+          ? totals.shippingSpend / totals.deliveredOrders
+          : 0;
 
       // 5. PERIOD FORECASTING (Merchant Specific)
       const totalDecided = totals.deliveredOrders + totals.rtoOrders;
-      const successRate = totalDecided > 0 ? (totals.deliveredOrders / totalDecided) * 100 : 0;
+      const successRate =
+        totalDecided > 0 ? (totals.deliveredOrders / totalDecided) * 100 : 0;
       const rtoRate = 100 - successRate;
-
+      const totalCost =
+        totals.cogs +
+        totals.adsSpend +
+        totals.shippingSpend +
+        totals.gatewayFees +
+        totals.rtoHandlingFees +
+        totals.businessExpenses;
       // Expected realization from currently in-transit orders
-      const expectedDelivered = Math.round(totals.inTransitOrders * (successRate / 100));
+      const expectedDelivered = Math.round(
+        totals.inTransitOrders * (successRate / 100),
+      );
       const expectedRevenue = expectedDelivered * aov;
 
       // 6. TOP PRODUCTS (Delivered Only Profitability)
-      const topProducts = await this.calculateTopProducts(merchantId, startDate, endDate);
+      const topProducts = await this.calculateTopProducts(
+        merchantId,
+        startDate,
+        endDate,
+      );
 
       // 7. BUILD MONEY FLOW DATA (For Recharts in Frontend)
       const moneyFlowData = [
-        { name: "Revenue", value: Number(totals.revenueEarned.toFixed(0)), type: "positive" },
-        { name: "COGS", value: -Number(totals.cogs.toFixed(0)), type: "negative" },
-        { name: "Marketing", value: -Number(totals.adsSpend.toFixed(0)), type: "negative" },
-        { name: "Shipping", value: -Number(totals.shippingSpend.toFixed(0)), type: "negative" },
-        { name: "Expenses/Fees", value: -Number((totals.businessExpenses + totals.gatewayFees + totals.rtoHandlingFees).toFixed(0)), type: "negative" },
-        { name: "Net Profit", value: Number(totals.moneyKept.toFixed(0)), type: "positive" }
+        {
+          name: "Revenue",
+          value: Number(totals.revenueEarned.toFixed(0)),
+          type: "positive",
+        },
+        {
+          name: "COGS",
+          value: -Number(totals.cogs.toFixed(0)),
+          type: "negative",
+        },
+        {
+          name: "Marketing",
+          value: -Number(totals.adsSpend.toFixed(0)),
+          type: "negative",
+        },
+        {
+          name: "Shipping",
+          value: -Number(totals.shippingSpend.toFixed(0)),
+          type: "negative",
+        },
+        {
+          name: "Expenses/Fees",
+          value: -Number(
+            (
+              totals.businessExpenses +
+              totals.gatewayFees +
+              totals.rtoHandlingFees
+            ).toFixed(0),
+          ),
+          type: "negative",
+        },
+        {
+          name: "Net Profit",
+          value: Number(totals.moneyKept.toFixed(0)),
+          type: "positive",
+        },
       ];
 
       return {
@@ -103,18 +159,24 @@ class DashboardService {
           profitPerOrder: Number(profitPerOrder.toFixed(0)),
           shippingPerOrder: Number(shippingPerOrder.toFixed(0)),
           poasDecision: this.getPoasDecision(poas),
-          rtoRate: Number(rtoRate.toFixed(2))
+          totalCost: Number(totalCost.toFixed(2)),
+          rtoRate: Number(rtoRate.toFixed(2)),
         },
         forecast: {
           successRate: Number(successRate.toFixed(2)),
           inTransit: totals.inTransitOrders,
           expectedDelivered,
           expectedRevenue: Number(expectedRevenue.toFixed(0)),
-          riskLevel: rtoRate > 30 ? "High Risk" : rtoRate > 15 ? "Medium Risk" : "Low Risk"
+          riskLevel:
+            rtoRate > 30
+              ? "High Risk"
+              : rtoRate > 15
+                ? "Medium Risk"
+                : "Low Risk",
         },
         topProducts,
         moneyFlowData, // Simplified for Recharts
-        chartData: days.sort((a, b) => a.date.localeCompare(b.date)) // Sorted for the chart
+        chartData: days.sort((a, b) => a.date.localeCompare(b.date)), // Sorted for the chart
       };
     } catch (error) {
       console.error("❌ Dashboard Aggregator Error:", error.message);
@@ -124,14 +186,15 @@ class DashboardService {
 
   getPoasDecision(poas) {
     if (poas < 1.2) return "🚨 High Risk: Ad spend is eating your profit.";
-    if (poas <= 2.5) return "✅ Sustainable: Ads are profitable. Monitor closely.";
+    if (poas <= 2.5)
+      return "✅ Sustainable: Ads are profitable. Monitor closely.";
     return "🚀 Scale Now: You earn great profit for every ad dollar spent!";
   }
 
   async calculateTopProducts(merchantId, start, end) {
     try {
-       const sDate = new Date(start);
-      sDate.setUTCHours(0, 0, 0, 0); 
+      const sDate = new Date(start);
+      sDate.setUTCHours(0, 0, 0, 0);
 
       const eDate = new Date(end);
       eDate.setUTCHours(23, 59, 59, 999);
@@ -150,7 +213,7 @@ class DashboardService {
             ":sk": "ORDER#",
             ":start": sDate.toISOString(),
             ":end": eDate.toISOString(),
-          }
+          },
         };
         if (lastKey) params.ExclusiveStartKey = lastKey;
 
@@ -171,9 +234,11 @@ class DashboardService {
             if (!productMap[name]) {
               productMap[name] = { name, deliveredQty: 0, revenue: 0, cogs: 0 };
             }
-            productMap[name].deliveredQty += (item.quantity || 0);
-            productMap[name].revenue += (item.price || 0) * (item.quantity || 0);
-            productMap[name].cogs += (item.cogsAtSale || 0) * (item.quantity || 0);
+            productMap[name].deliveredQty += item.quantity || 0;
+            productMap[name].revenue +=
+              (item.price || 0) * (item.quantity || 0);
+            productMap[name].cogs +=
+              (item.cogsAtSale || 0) * (item.quantity || 0);
           });
         }
       });
@@ -183,7 +248,7 @@ class DashboardService {
           ...p,
           profit: Number((p.revenue - p.cogs).toFixed(0)),
           revenue: Number(p.revenue.toFixed(0)),
-          cogs: Number(p.cogs.toFixed(0))
+          cogs: Number(p.cogs.toFixed(0)),
         }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5);

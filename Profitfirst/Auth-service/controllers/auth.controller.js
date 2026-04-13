@@ -10,14 +10,7 @@ const cognitoService = require("../services/cognito.service");
 const dynamoDBService = require("../services/dynamodb.service");
 
 class AuthController {
-  /**
-   * Render Error Page
-   * Helper method to render consistent error pages for OAuth flows
-   *
-   * @param {Object} res - Express response object
-   * @param {string} message - Error message to display
-   * @param {string} errorCode - Error code for logging
-   */
+ 
   renderErrorPage = (res, message, errorCode = "unknown") => {
     const errorHtml = `
 <!DOCTYPE html>
@@ -103,13 +96,7 @@ class AuthController {
     return res.status(400).send(errorHtml);
   };
 
-  /**
-   * User Signup
-   * Creates new user account with email verification
-   *
-   * @route POST /api/auth/signup
-   * @access Public
-   */
+ 
   async signup(req, res) {
     try {
       const { firstName, lastName, email, password } = req.body;
@@ -154,16 +141,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Verify Email with OTP
-   * Confirms user email using 6-digit code sent to their email
-   *
-   * @route POST /api/auth/verify-otp
-   * @access Public
-   */
-  /**
-   * Verify Email with OTP (Cognito Only)
-   */
+  
   async verifyOTP(req, res) {
     try {
       const { email, otp } = req.body;
@@ -198,13 +176,7 @@ class AuthController {
       res.status(500).json({ error: "Verification failed. Please try again." });
     }
   }
-  /**
-   * Resend OTP Code
-   * Sends a new verification code to user's email
-   *
-   * @route POST /api/auth/resend-otp
-   * @access Public
-   */
+ 
   async resendOTP(req, res) {
     try {
       const { email } = req.body;
@@ -227,16 +199,7 @@ class AuthController {
     }
   }
 
-  /**
-   * User Login
-   * Authenticates user and returns JWT tokens or redirects to dashboard
-   *
-   * @route POST /api/auth/login
-   * @access Public
-   */
-  /**
-   * User Login (Check & Create PROFILE)
-   */
+ 
   async login(req, res) {
     try {
       const { email, password } = req.body;
@@ -315,13 +278,7 @@ class AuthController {
       res.status(500).json({ error: "Login failed. Please try again." });
     }
   }
-  /**
-   * Check User Status
-   * Checks if user exists and their verification status
-   *
-   * @route POST /api/auth/check-user
-   * @access Public
-   */
+ 
   async checkUserStatus(req, res) {
     try {
       const { email } = req.body;
@@ -366,13 +323,7 @@ class AuthController {
     }
   }
 
-  /**
-   * User Logout
-   * Invalidates all user tokens globally
-   *
-   * @route POST /api/auth/logout
-   * @access Protected
-   */
+ 
   async logout(req, res) {
     try {
       const authHeader = req.headers.authorization;
@@ -395,13 +346,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Refresh Access Token
-   * Gets new access token using refresh token
-   *
-   * @route POST /api/auth/refresh-token
-   * @access Public
-   */
+ 
   async refreshToken(req, res) {
     try {
       const { refreshToken } = req.body;
@@ -456,13 +401,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Change Password
-   * Updates password for authenticated user
-   *
-   * @route POST /api/auth/change-password
-   * @access Protected
-   */
+ 
   async changePassword(req, res) {
     try {
       const { oldPassword, newPassword } = req.body;
@@ -525,13 +464,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Forgot Password
-   * Initiates password reset by sending code to email
-   *
-   * @route POST /api/auth/forgot-password
-   * @access Public
-   */
+ 
   async forgotPassword(req, res) {
     try {
       const { email } = req.body;
@@ -623,13 +556,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Verify Forgot Password OTP
-   * Verifies the OTP code with AWS Cognito and returns a temporary access token
-   *
-   * @route POST /api/auth/verify-reset-otp
-   * @access Public
-   */
+  
   async verifyResetOTP(req, res) {
     try {
       const { email, code } = req.body;
@@ -714,13 +641,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Resend Password Reset OTP
-   * Resends the OTP code for password reset
-   *
-   * @route POST /api/auth/resend-reset-otp
-   * @access Public
-   */
+  
   async resendResetOTP(req, res) {
     try {
       const { email } = req.body;
@@ -743,13 +664,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Reset Password with Access Token
-   * Sets the final password using the access token from OTP verification
-   *
-   * @route POST /api/auth/reset-password
-   * @access Public (requires reset token)
-   */
+  
   async resetPassword(req, res) {
     try {
       const { newPassword } = req.body;
@@ -845,13 +760,7 @@ class AuthController {
     }
   }
 
-  /**
-   * Confirm Forgot Password (Legacy - kept for backward compatibility)
-   * Completes password reset using code from email
-   *
-   * @route POST /api/auth/confirm-forgot-password
-   * @access Public
-   */
+ 
   async confirmForgotPassword(req, res) {
     try {
       const { email, code, newPassword } = req.body;
@@ -884,16 +793,6 @@ class AuthController {
     }
   }
 
-  /**
-   * Get User Profile
-   * Returns current user's profile information
-   *
-   * @route GET /api/auth/profile
-   * @access Protected
-   */
-  /**
-   * Get Authenticated User Profile
-   */
   async getProfile(req, res) {
     try {
       // req.user comes from your Auth Middleware (decoded JWT)
@@ -930,13 +829,7 @@ class AuthController {
       res.status(500).json({ error: "Failed to fetch profile." });
     }
   }
-  /**
-   * Get OAuth Login URL
-   * Returns Cognito Hosted UI URL for social login
-   *
-   * @route GET /api/auth/oauth/url
-   * @access Public
-   */
+ 
   getOAuthUrl = async (req, res) => {
     try {
       const { provider } = req.query;
@@ -962,13 +855,7 @@ class AuthController {
     }
   };
 
-  /**
-   * Verify OAuth Tokens
-   * Validates tokens and creates/updates user
-   *
-   * @route POST /api/auth/oauth/verify
-   * @access Public
-   */
+ 
   verifyOAuthTokens = async (req, res) => {
     try {
       const { accessToken, idToken, refreshToken } = req.body;
@@ -1053,14 +940,7 @@ class AuthController {
     }
   };
 
-  /**
-   * Handle OAuth Callback
-   * Processes OAuth callback from Cognito Hosted UI
-   * Exchanges authorization code for tokens and creates/updates user in DynamoDB
-   *
-   * @route GET /api/auth/oauth/callback
-   * @access Public
-   */
+  
   handleOAuthCallback = async (req, res) => {
     try {
       const { code, error, error_description, state } = req.query;

@@ -1,21 +1,8 @@
-/**
- * Onboarding Controller
- * 
- * Handles onboarding-related HTTP requests
- */
 
 const onboardingService = require('../services/onboarding.service');
 
 class OnboardingController {
-  /**
-   * Get Current Onboarding Step.
-   * Retrieves the current progress of the user's onboarding process.
-   *
-   * @route GET /api/onboard/step
-   * @access Protected
-   * @param {object} req - Express request object.
-   * @param {object} res - Express response object.
-   */
+  
   async getCurrentStep(req, res) {
     try {
       const userId = req.user.userId;
@@ -40,16 +27,6 @@ class OnboardingController {
     }
   }
 
-  /**
-   * Update Onboarding Step.
-   * Saves the user's progress and data for a specific onboarding step.
-   * Uses new production-ready structure with separate records.
-   *
-   * @route POST /api/onboard/step
-   * @access Protected
-   * @param {object} req - Express request (body: { step, data }).
-   * @param {object} res - Express response.
-   */
   async updateStep(req, res) {
     try {
       const userId = req.user.userId;
@@ -99,16 +76,7 @@ class OnboardingController {
     }
   }
 
-  /**
-   * Complete Onboarding.
-   * Marks the onboarding process as finished for the user.
-   * NOTE: Onboarding completes automatically in Step 5.
-   *
-   * @route POST /api/onboard/complete
-   * @access Protected
-   * @param {object} req - Express request.
-   * @param {object} res - Express response.
-   */
+ 
   async completeOnboarding(req, res) {
     try {
       const userId = req.user.userId;
@@ -130,15 +98,7 @@ class OnboardingController {
     }
   }
 
-  /**
-   * Get Onboarding Data.
-   * Retrieves all data collected during the onboarding process.
-   *
-   * @route GET /api/onboard/data
-   * @access Protected
-   * @param {object} req - Express request.
-   * @param {object} res - Express response.
-   */
+  
   async getOnboardingData(req, res) {
     try {
       const userId = req.user.userId;
@@ -157,15 +117,7 @@ class OnboardingController {
     }
   }
 
-  /**
-   * Proxy to get Shopify access token from external service.
-   * Securely exchanges shop parameters for an access token via a proxy.
-   *
-   * @route GET /api/onboard/proxy/token
-   * @access Protected
-   * @param {object} req - Express request (query: { shop, password }).
-   * @param {object} res - Express response.
-   */
+ 
   async getProxyToken(req, res) {
     try {
       const { shop, password } = req.query;
@@ -235,15 +187,6 @@ class OnboardingController {
     }
   }
 
-  /**
-   * Handle Shopify OAuth Callback
-   * Processes the callback from Shopify after app installation
-   *
-   * @route GET /api/onboard/shopify/callback
-   * @access Public (but secured with state parameter)
-   * @param {object} req - Express request (query: { code, shop, state }).
-   * @param {object} res - Express response.
-   */
   async handleShopifyCallback(req, res) {
     try {
       const { code, shop, state } = req.query;

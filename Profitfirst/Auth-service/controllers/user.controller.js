@@ -1,6 +1,8 @@
 const dynamodbService = require('../services/dynamodb.service');
 const { SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { sqsClient, sqsQueueUrl } = require('../config/aws.config');
+const { sqsClient, sqsQueueUrl , newDynamoDB, newTableName} = require('../config/aws.config');
+const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+
 
 class UserController {
   /**
@@ -37,6 +39,69 @@ class UserController {
       res.status(500).json({ error: "Internal server error" });
     }
   }
+
+
+
+
+  async getFullProfile(req, res) {
+    try {
+      const merchantId = req.user.userId; // From JWT Token
+
+      // 🟢 Logic: Query all records for this merchant (PK = MERCHANT#ID)
+      const result = await newDynamoDB.send(new QueryCommand({
+        TableName: newTableName,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: { ":pk": `MERCHANT#${merchantId}` }
+      }));
+
+      const items = result.Items || [];
+
+      // 🟢 Logic: Segregate data into clean buckets for Frontend
+      const profile = items.find(i => i.SK === "PROFILE") || {};
+      const shopify = items.find(i => i.SK === "INTEGRATION#SHOPIFY") || {};
+      const meta = items.find(i => i.SK === "INTEGRATION#META") || {};
+      const shiprocket = items.find(i => i.SK === "INTEGRATION#SHIPROCKET") || {};
+
+      // 🟢 Logic: Calculate Days Left for Meta/Shiprocket
+      const getDaysLeft = (expiryDate) => {
+        if (!expiryDate) return 0;
+        const diff = new Date(expiryDate) - new Date();
+        return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+      };
+
+      res.status(200).json({
+        success: true,
+        basic: {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email,
+          businessName: profile.businessName
+        },
+        shopify: {
+          store: shopify.shopifyStore,
+          status: shopify.status || 'inactive',
+          connectedAt: shopify.connectedAt
+        },
+        meta: {
+          adAccountId: meta.adAccountId,
+          status: meta.status || 'inactive',
+          daysLeft: getDaysLeft(meta.expiresAt),
+          isExpired: new Date() > new Date(meta.expiresAt)
+        },
+        shiprocket: {
+          email: shiprocket.email,
+          status: shiprocket.status || 'inactive',
+          daysLeft: getDaysLeft(shiprocket.expiresAt),
+          connectedAt: shiprocket.connectedAt
+        }
+      });
+
+    } catch (error) {
+      console.error("❌ Full Profile Error:", error.message);
+      res.status(500).json({ error: "Failed to fetch settings data" });
+    }
+  }
+
 
   /**
    * 🟢 POST /api/user/business-expenses

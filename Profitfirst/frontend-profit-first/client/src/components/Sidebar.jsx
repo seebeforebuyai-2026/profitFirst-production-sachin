@@ -14,7 +14,7 @@ import {
   FiCpu,
   FiCheckCircle,
   FiPhoneCall,
-  FiLogOut
+  FiLogOut,
 } from "react-icons/fi";
 import logo from "../assets/logo.png";
 
@@ -24,6 +24,9 @@ const Sidebar = ({ isLocked = false }) => {
   const [showAffiliate, setShowAffiliate] = useState(true);
   const [showAIAgentMenu, setShowAIAgentMenu] = useState(false);
   const navigate = useNavigate();
+
+  const cogsDone = profile?.cogsCompleted === true; 
+
 
   const handleLogout = () => {
     localStorage.clear();
@@ -46,7 +49,6 @@ const Sidebar = ({ isLocked = false }) => {
       >
         <div className="p-4 2xl:p-5 flex flex-col justify-between h-full">
           <div>
-
             {/* Mobile Header */}
             <div className="flex justify-between items-center mb-8 md:hidden">
               <img src={logo} alt="Logo" className="h-8 w-auto" />
@@ -61,7 +63,6 @@ const Sidebar = ({ isLocked = false }) => {
             </div>
 
             <div className="space-y-0.5 2xl:space-y-1">
-
               {/* Dashboard */}
               <NavLink
                 to={isLocked ? "#" : "/dashboard"}
@@ -134,7 +135,9 @@ const Sidebar = ({ isLocked = false }) => {
                 <div className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg text-xs 2xl:text-sm text-gray-600 cursor-not-allowed opacity-60">
                   <FiZap className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                   <span>Customer Analytics</span>
-                  <span className="ml-auto text-[9px] bg-gray-800 px-1 py-0.5 rounded">Soon</span>
+                  <span className="ml-auto text-[9px] bg-gray-800 px-1 py-0.5 rounded">
+                    Soon
+                  </span>
                 </div>
               </div>
 
@@ -157,7 +160,9 @@ const Sidebar = ({ isLocked = false }) => {
               {/* AI Agent */}
               <div className="relative">
                 <div
-                  onClick={() => !isLocked && setShowAIAgentMenu(!showAIAgentMenu)}
+                  onClick={() =>
+                    !isLocked && setShowAIAgentMenu(!showAIAgentMenu)
+                  }
                   className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg text-xs 2xl:text-sm text-gray-400 hover:bg-[#1a1a1a] hover:text-white cursor-pointer"
                 >
                   <FiCpu className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
@@ -165,7 +170,9 @@ const Sidebar = ({ isLocked = false }) => {
                   {isLocked ? (
                     <span className="ml-auto text-[10px]">🔒</span>
                   ) : (
-                    <FiChevronDown className={`w-3 h-3 ml-auto transition-transform ${showAIAgentMenu ? "rotate-180" : ""}`} />
+                    <FiChevronDown
+                      className={`w-3 h-3 ml-auto transition-transform ${showAIAgentMenu ? "rotate-180" : ""}`}
+                    />
                   )}
                 </div>
 
@@ -200,14 +207,13 @@ const Sidebar = ({ isLocked = false }) => {
 
               {/* Business Expenses */}
               <NavLink
-                to={
-                  isLocked && !profile?.cogsCompleted
-                    ? "#"
-                    : "/dashboard/business-expenses"
-                }
+                to={!cogsDone ? "#" : "/dashboard/business-expenses"} // 🟢 Simplified logic
                 onClick={(e) => {
-                  if (isLocked && !profile?.cogsCompleted) e.preventDefault();
-                  setIsOpen(false);
+                  if (!cogsDone) {
+                    e.preventDefault();
+                    toast.info("Please complete product costs first!");
+                  }
+                  setIsOpen(false); 
                 }}
                 className={({ isActive }) =>
                   `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
@@ -225,7 +231,6 @@ const Sidebar = ({ isLocked = false }) => {
                   <span className="ml-auto text-[10px]">🔒</span>
                 )}
               </NavLink>
-
             </div>
           </div>
 
