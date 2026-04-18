@@ -65,8 +65,6 @@ class DynamoDBService {
       return { success: false, error: error.message };
     }
   }
-
- 
    async getUserByEmail(email) {
     try {
       const command = new QueryCommand({
