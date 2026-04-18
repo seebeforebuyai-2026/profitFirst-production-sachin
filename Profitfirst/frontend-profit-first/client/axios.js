@@ -1,12 +1,17 @@
-import axios from 'axios';
+import axios from "axios";
 import { isTokenValid, logout } from "./src/utils/auth";
 
 // Use full URL for development, relative for production
-const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE_URL = isDev ? 'http://localhost:3000/api' : '/api';
+const isDev =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1";
+// const API_BASE_URL = isDev ? 'http://localhost:3000/api' : '/api'; devlopemnt face
+const API_BASE_URL = isDev
+  ? "http://localhost:3000/api"
+  : "https://api.profitfirstanalytics.co.in/api";
 
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL, 
 });
 
 axiosInstance.interceptors.request.use((config) => {
@@ -14,7 +19,7 @@ axiosInstance.interceptors.request.use((config) => {
   const accessToken = localStorage.getItem("accessToken");
   const legacyToken = localStorage.getItem("token");
   const token = accessToken || legacyToken;
-  
+
   if (token) {
     if (!isTokenValid(token)) {
       logout(); // auto-logout if token expired
@@ -30,16 +35,19 @@ axiosInstance.interceptors.request.use((config) => {
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
+const originalRequest = error.config || {};
     // If 401 and we haven't retried yet, try to refresh token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url.includes("/auth/refresh-token")
+    ) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem("refreshToken");
         if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
+          const response = await axiosInstance.post(`/auth/refresh-token`, {
             refreshToken,
           });
 
@@ -59,7 +67,7 @@ axiosInstance.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default axiosInstance;

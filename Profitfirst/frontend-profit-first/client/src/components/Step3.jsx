@@ -111,7 +111,7 @@ const Step3 = ({ onComplete }) => {
 
       if (response.data?.authUrl) {
         console.log("✅ Redirecting to Facebook OAuth...");
-        window.location.href = response.data.authUrl;
+        window.location.href = response.data.authUrl; 
       }
     } catch (err) {
       console.error("❌ Meta connect error:", err);
@@ -287,14 +287,7 @@ const Step3 = ({ onComplete }) => {
               </button>
             </div>
             
-            {/* Skip Button */}
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="w-full px-6 py-2.5 rounded-full bg-transparent border border-gray-500 text-gray-400 text-sm font-semibold transition hover:bg-gray-800 hover:text-white"
-            >
-              Skip for Now →
-            </button>
+           
           </div>
         </div>
         {/* RIGHT VIDEO SECTION */}

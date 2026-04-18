@@ -25,7 +25,12 @@ const isProduction = process.env.NODE_ENV === 'production';
 // HTTPS enforcement for production
 if (isProduction) {
   app.use((req, res, next) => {
-    // Skip HTTPS check if behind reverse proxy (Nginx)
+    // 🟢 CRITICAL PRODUCTION FIX: Health check ko bypass karo
+    // Taaki AWS Load Balancer ise "Healthy" maan sake
+    if (req.path === '/health') {
+      return next();
+    }
+
     const forwardedProto = req.headers['x-forwarded-proto'];
     const isSecure = req.secure || forwardedProto === 'https' || req.headers.host?.includes('localhost');
     
@@ -245,6 +250,7 @@ app.use('/api/expenses', require('./routes/expense.routes'));
 
 // Shopify routes (requires authentication)
 app.use('/api/shopify', shopifyRoutes);
+app.use('/api/meta', metaRoutes); 
 
 // User profile routes (requires authentication)
 app.use('/api/user', userRoutes);

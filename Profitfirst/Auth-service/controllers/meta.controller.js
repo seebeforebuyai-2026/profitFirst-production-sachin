@@ -3,17 +3,17 @@
  * Handles Facebook OAuth and ad account connection with production security features
  */
 
-const axios = require('axios');
-const dynamodbService = require('../services/dynamodb.service');
-const sessionService = require('../services/session.service');
-const encryptionService = require('../utils/encryption');
-const MetaErrorHandler = require('../utils/meta-errors');
+const axios = require("axios");
+const dynamodbService = require("../services/dynamodb.service");
+const sessionService = require("../services/session.service");
+const encryptionService = require("../utils/encryption");
+const MetaErrorHandler = require("../utils/meta-errors");
 
 // Meta/Facebook API Configuration
 const FB_APP_ID = process.env.FB_APP_ID;
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
 const FB_REDIRECT_URI = process.env.FB_REDIRECT_URI;
-const FB_API_VERSION = 'v23.0';
+const FB_API_VERSION = "v23.0";
 
 class MetaController {
   /**
@@ -26,18 +26,19 @@ class MetaController {
       const userId = req.user.userId;
 
       // Create secure session using DynamoDB
-      const state = await sessionService.createOAuthSession(userId, 'meta');
+      const state = await sessionService.createOAuthSession(userId, "meta");
 
       // Build OAuth URL with required scopes
       const scopes = [
-        'public_profile',
-        'email',
-        'ads_read',
-        'ads_management',
-        'business_management'
-      ].join(',');
+        "public_profile",
+        "email",
+        "ads_read",
+        "ads_management",
+        "business_management",
+      ].join(",");
 
-      const authUrl = `https://www.facebook.com/${FB_API_VERSION}/dialog/oauth?` +
+      const authUrl =
+        `https://www.facebook.com/${FB_API_VERSION}/dialog/oauth?` +
         `client_id=${FB_APP_ID}&` +
         `redirect_uri=${encodeURIComponent(FB_REDIRECT_URI)}&` +
         `scope=${encodeURIComponent(scopes)}&` +
@@ -47,13 +48,13 @@ class MetaController {
       res.json({
         success: true,
         authUrl: authUrl,
-        message: 'Redirect to Facebook for authorization'
+        message: "Redirect to Facebook for authorization",
       });
     } catch (error) {
-      console.error('❌ OAuth initiation error:', error);
+      console.error("❌ OAuth initiation error:", error);
       res.status(500).json({
-        error: 'Failed to initiate OAuth',
-        message: error.message
+        error: "Failed to initiate OAuth",
+        message: error.message,
       });
     }
   }
@@ -69,16 +70,21 @@ class MetaController {
 
       // Check for OAuth errors
       if (error) {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        return res.redirect(`${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error_description || error)}`);
+        const frontendUrl =
+          process.env.FRONTEND_URL || "https://profitfirstanalytics.co.in";
+        return res.redirect(
+          `${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error_description || error)}`,
+        );
       }
 
       // Validate session using secure session service
       const session = await sessionService.getOAuthSession(state);
 
       if (!session) {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        return res.redirect(`${frontendUrl}/onboarding?meta=error&message=Invalid or expired session`);
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        return res.redirect(
+          `${frontendUrl}/onboarding?meta=error&message=Invalid or expired session`,
+        );
       }
 
       const { userId } = session;
@@ -91,9 +97,9 @@ class MetaController {
             client_id: FB_APP_ID,
             redirect_uri: FB_REDIRECT_URI,
             client_secret: FB_APP_SECRET,
-            code
-          }
-        }
+            code,
+          },
+        },
       );
 
       const shortLivedToken = tokenResponse.data.access_token;
@@ -103,12 +109,12 @@ class MetaController {
         `https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`,
         {
           params: {
-            grant_type: 'fb_exchange_token',
+            grant_type: "fb_exchange_token",
             client_id: FB_APP_ID,
             client_secret: FB_APP_SECRET,
-            fb_exchange_token: shortLivedToken
-          }
-        }
+            fb_exchange_token: shortLivedToken,
+          },
+        },
       );
 
       const accessToken = longLivedResponse.data.access_token;
@@ -120,9 +126,9 @@ class MetaController {
         {
           params: {
             access_token: accessToken,
-            fields: 'id,name,email'
-          }
-        }
+            fields: "id,name,email",
+          },
+        },
       );
 
       const profile = profileResponse.data;
@@ -133,9 +139,9 @@ class MetaController {
         {
           params: {
             access_token: accessToken,
-            fields: 'id,account_id,name,currency'
-          }
-        }
+            fields: "id,account_id,name,currency",
+          },
+        },
       );
 
       const adAccounts = adAccountsResponse.data.data || [];
@@ -147,13 +153,16 @@ class MetaController {
       await sessionService.deleteOAuthSession(state);
 
       // Redirect to frontend
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/onboarding?meta=connected&accounts=${adAccounts.length}`);
-
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      res.redirect(
+        `${frontendUrl}/onboarding?meta=connected&accounts=${adAccounts.length}`,
+      );
     } catch (error) {
-      console.error('❌ OAuth callback error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error.message)}`);
+      console.error("❌ OAuth callback error:", error);
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      res.redirect(
+        `${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error.message)}`,
+      );
     }
   }
 
@@ -168,24 +177,25 @@ class MetaController {
       const merchantId = userId;
 
       // Get integration using new service
-      const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+      const integrationResult =
+        await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
         return res.status(404).json({
           connected: false,
-          message: 'No Meta connection found'
+          message: "No Meta connection found",
         });
       }
 
       // Find Meta integration
-      const metaIntegration = integrationResult.data.find(integration => 
-        integration.platform === 'meta'
+      const metaIntegration = integrationResult.data.find(
+        (integration) => integration.platform === "meta",
       );
 
       if (!metaIntegration) {
         return res.status(404).json({
           connected: false,
-          message: 'No Meta connection found'
+          message: "No Meta connection found",
         });
       }
 
@@ -198,16 +208,16 @@ class MetaController {
         selectedAdAccountId: metaIntegration.credentials?.selectedAdAccountId,
         selectedAdAccount: metaIntegration.credentials?.selectedAdAccount,
         profileName: metaIntegration.credentials?.profileName,
-        profileId: metaIntegration.credentials?.profileId
+        profileId: metaIntegration.credentials?.profileId,
       };
 
       res.json({
         connected: true,
-        connection: safeConnection
+        connection: safeConnection,
       });
     } catch (error) {
-      console.error('Get Meta connection error:', error);
-      res.status(500).json({ error: 'Failed to get connection' });
+      console.error("Get Meta connection error:", error);
+      res.status(500).json({ error: "Failed to get connection" });
     }
   }
 
@@ -224,27 +234,28 @@ class MetaController {
 
       if (!adAccountId) {
         return res.status(400).json({
-          error: 'Ad account ID is required'
+          error: "Ad account ID is required",
         });
       }
 
       // Get existing integration using new service
-      const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+      const integrationResult =
+        await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
         return res.status(404).json({
-          error: 'No Meta connection found. Please connect first.'
+          error: "No Meta connection found. Please connect first.",
         });
       }
 
       // Find Meta integration
-      const metaIntegration = integrationResult.data.find(integration => 
-        integration.platform === 'meta'
+      const metaIntegration = integrationResult.data.find(
+        (integration) => integration.platform === "meta",
       );
 
       if (!metaIntegration) {
         return res.status(404).json({
-          error: 'No Meta connection found. Please connect first.'
+          error: "No Meta connection found. Please connect first.",
         });
       }
 
@@ -252,12 +263,14 @@ class MetaController {
 
       // Verify ad account exists in user's accounts
       const selectedAccount = adAccounts.find(
-        acc => acc.accountId === adAccountId || acc.id === `act_${adAccountId}`
+        (acc) =>
+          acc.accountId === adAccountId || acc.id === `act_${adAccountId}`,
       );
 
       if (!selectedAccount) {
         return res.status(400).json({
-          error: 'Invalid ad account ID. Account not found in your connected accounts.'
+          error:
+            "Invalid ad account ID. Account not found in your connected accounts.",
         });
       }
 
@@ -265,18 +278,22 @@ class MetaController {
       const updatedCredentials = {
         ...metaIntegration.credentials,
         selectedAdAccountId: adAccountId,
-        selectedAdAccount: selectedAccount
+        selectedAdAccount: selectedAccount,
       };
 
       // Update the integration record
-      const updateResult = await dynamodbService.updateIntegration(merchantId, 'meta', {
-        credentials: updatedCredentials,
-        status: 'active'
-      });
+      const updateResult = await dynamodbService.updateIntegration(
+        merchantId,
+        "meta",
+        {
+          credentials: updatedCredentials,
+          status: "active",
+        },
+      );
 
       if (!updateResult.success) {
         return res.status(500).json({
-          error: 'Failed to update Meta integration'
+          error: "Failed to update Meta integration",
         });
       }
 
@@ -290,7 +307,11 @@ class MetaController {
           } else {
             decryptedAccessToken = accessToken; // Legacy plain text token
           }
-          metaSyncService.startHybridSync(userId, `act_${adAccountId}`, decryptedAccessToken);
+          metaSyncService.startHybridSync(
+            userId,
+            `act_${adAccountId}`,
+            decryptedAccessToken,
+          );
         } catch (decryptError) {
           // Continue without sync - user can manually sync later
         }
@@ -298,13 +319,13 @@ class MetaController {
 
       res.json({
         success: true,
-        message: 'Ad account selected successfully',
-        selectedAccount
+        message: "Ad account selected successfully",
+        selectedAccount,
       });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to select ad account',
-        message: error.message
+        error: "Failed to select ad account",
+        message: error.message,
       });
     }
   }
@@ -322,22 +343,23 @@ class MetaController {
       const { startDate, endDate } = req.query;
 
       // Get integration using new service
-      const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+      const integrationResult =
+        await dynamodbService.getIntegrationsByMerchant(merchantId);
 
       if (!integrationResult.success) {
         return res.status(404).json({
-          error: 'No Meta connection found'
+          error: "No Meta connection found",
         });
       }
 
       // Find Meta integration
-      const metaIntegration = integrationResult.data.find(integration => 
-        integration.platform === 'meta'
+      const metaIntegration = integrationResult.data.find(
+        (integration) => integration.platform === "meta",
       );
 
       if (!metaIntegration) {
         return res.status(404).json({
-          error: 'No Meta connection found'
+          error: "No Meta connection found",
         });
       }
 
@@ -346,7 +368,7 @@ class MetaController {
 
       if (!accessToken) {
         return res.status(400).json({
-          error: 'Access token not found. Please reconnect your Meta account.'
+          error: "Access token not found. Please reconnect your Meta account.",
         });
       }
 
@@ -361,24 +383,28 @@ class MetaController {
         }
       } catch (decryptError) {
         return res.status(400).json({
-          error: 'Invalid access token. Please reconnect your Meta account.'
+          error: "Invalid access token. Please reconnect your Meta account.",
         });
       }
 
       // Fetch ad account insights from Facebook API
-      const adAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
+      const adAccountId = accountId.startsWith("act_")
+        ? accountId
+        : `act_${accountId}`;
 
       // Calculate date range
       let timeRange;
       if (startDate && endDate) {
         timeRange = {
           since: startDate,
-          until: endDate
+          until: endDate,
         };
       } else {
         timeRange = {
-          since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          until: new Date().toISOString().split('T')[0]
+          since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split("T")[0],
+          until: new Date().toISOString().split("T")[0],
         };
       }
 
@@ -387,10 +413,10 @@ class MetaController {
         {
           params: {
             access_token: decryptedAccessToken, // ✅ NEW: Use decrypted token
-            fields: 'spend,impressions,clicks,cpc,cpm,ctr,reach',
-            time_range: JSON.stringify(timeRange)
-          }
-        }
+            fields: "spend,impressions,clicks,cpc,cpm,ctr,reach",
+            time_range: JSON.stringify(timeRange),
+          },
+        },
       );
 
       const insights = insightsResponse.data.data[0] || {};
@@ -399,32 +425,38 @@ class MetaController {
         success: true,
         accountId,
         insights,
-        currency: selectedAccount?.currency || 'USD'
+        currency: selectedAccount?.currency || "USD",
       });
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to fetch ad account data',
-        message: error.message
+        error: "Failed to fetch ad account data",
+        message: error.message,
       });
     }
   }
-
 }
 
 /**
  * Save Meta connection to database with encrypted tokens
  */
-async function saveConnection(userId, accessToken, profile, adAccounts, expiresIn) {
+async function saveConnection(
+  userId,
+  accessToken,
+  profile,
+  adAccounts,
+  expiresIn,
+) {
   const merchantId = userId;
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
   // Check for existing integration to preserve user preferences
   let existingCredentials = {};
   try {
-    const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+    const integrationResult =
+      await dynamodbService.getIntegrationsByMerchant(merchantId);
     if (integrationResult.success) {
-      const metaIntegration = integrationResult.data.find(integration => 
-        integration.platform === 'meta'
+      const metaIntegration = integrationResult.data.find(
+        (integration) => integration.platform === "meta",
       );
       if (metaIntegration) {
         existingCredentials = metaIntegration.credentials || {};
@@ -439,24 +471,24 @@ async function saveConnection(userId, accessToken, profile, adAccounts, expiresI
   try {
     encryptedAccessToken = encryptionService.encrypt(accessToken);
   } catch (encryptError) {
-    throw new Error('Failed to secure access token');
+    throw new Error("Failed to secure access token");
   }
 
   // Use new createIntegration method
   const integrationData = {
     merchantId: merchantId,
-    platform: 'meta',
+    platform: "meta",
     credentials: {
       accessToken: encryptedAccessToken, // Store encrypted token
       facebookId: profile.id,
       profileName: profile.name,
       profileId: profile.id,
       email: profile.email,
-      adAccounts: adAccounts.map(acc => ({
+      adAccounts: adAccounts.map((acc) => ({
         id: acc.id,
         accountId: acc.account_id,
         name: acc.name,
-        currency: acc.currency
+        currency: acc.currency,
       })),
       expiresAt: expiresAt,
       apiVersion: FB_API_VERSION,
@@ -466,12 +498,12 @@ async function saveConnection(userId, accessToken, profile, adAccounts, expiresI
       lastSyncAt: existingCredentials.lastSyncAt,
       // Add security metadata
       tokenEncrypted: true,
-      tokenCreatedAt: new Date().toISOString()
-    }
+      tokenCreatedAt: new Date().toISOString(),
+    },
   };
 
   const result = await dynamodbService.createIntegration(integrationData);
-  
+
   if (!result.success) {
     throw new Error(`Failed to save Meta integration: ${result.error}`);
   }

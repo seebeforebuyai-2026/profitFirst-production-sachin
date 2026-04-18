@@ -8,7 +8,7 @@ class SyncService {
     try {
       const timestamp = new Date().toISOString();
       const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - 90);
+      sinceDate.setDate(sinceDate.getDate() - 365);
       const sinceDateStr = sinceDate.toISOString();
 
       // 1. Initialize all records to in_progress
