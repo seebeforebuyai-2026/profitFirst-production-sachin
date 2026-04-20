@@ -17,6 +17,7 @@ const productsRoutes = require('./routes/products.routes');
 const syncRoutes = require('./routes/sync.routes');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 

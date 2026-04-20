@@ -599,22 +599,21 @@ class DynamoDBService {
           expiresAt = now.toISOString();
       }
 
-
-      const integration = {
-        PK: PK_PATTERNS.MERCHANT(integrationData.merchantId),
-        SK: SK_PATTERNS.INTEGRATION(integrationData.platform.toUpperCase()),
-        entityType: ENTITY_TYPES.INTEGRATION,
-        merchantId: integrationData.merchantId,
-        platform: integrationData.platform.toLowerCase(),
-        status: "active",
-        GSI1PK: "INTEGRATION", 
-        GSI1SK: expiresAt || timestamp, 
-        expiresAt: expiresAt,
-        connectedAt: timestamp,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        ...integrationData.credentials, 
-      };
+const integration = {
+  ...integrationData.credentials, // 1. Pehle credentials dalo
+  PK: PK_PATTERNS.MERCHANT(integrationData.merchantId), // 2. Phir primary keys (Ye overwrite nahi honi chahiye)
+  SK: SK_PATTERNS.INTEGRATION(integrationData.platform.toUpperCase()),
+  entityType: ENTITY_TYPES.INTEGRATION,
+  merchantId: integrationData.merchantId,
+  platform: integrationData.platform.toLowerCase(),
+  status: "active",
+  GSI1PK: "INTEGRATION", 
+  GSI1SK: expiresAt || timestamp, 
+  expiresAt: expiresAt || integrationData.credentials.expiresAt, // Logic check
+  connectedAt: timestamp,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+};
 
       const command = new PutCommand({
         TableName: newTableName,
@@ -630,44 +629,31 @@ class DynamoDBService {
   }
 
     
-  async updateIntegration(merchantId, platform, updates) {
+async updateIntegration(merchantId, platform, updates) {
     try {
       const timestamp = new Date().toISOString();
+      if (updates.expiresAt) updates.GSI1SK = updates.expiresAt;
 
-if (updates.expiresAt) {
-          updates.GSI1SK = updates.expiresAt;
-      }
+      // 🟢 Logic: Start with updatedAt, then add other fields
+      const updateExpressions = ["#ua = :updatedAt"];
+      const expressionAttributeNames = { "#ua": "updatedAt" };
+      const expressionAttributeValues = { ":updatedAt": timestamp };
 
-      // Build update expression dynamically
-      const updateExpressions = [];
-      const expressionAttributeNames = {};
-      const expressionAttributeValues = {
-        ":updatedAt": timestamp,
-      };
-
-      // Add updatedAt to updates
-      updates.updatedAt = timestamp;
-
-      // Process each update field
       Object.entries(updates).forEach(([key, value], index) => {
-        if (value !== undefined && value !== null) {
+        // Skip keys that are already handled or should not be updated directly
+        if (value !== undefined && value !== null && key !== 'updatedAt') {
           const attrName = `#attr${index}`;
           const valueName = `:value${index}`;
-
           updateExpressions.push(`${attrName} = ${valueName}`);
           expressionAttributeNames[attrName] = key;
           expressionAttributeValues[valueName] = value;
         }
       });
 
-      if (updateExpressions.length === 0) {
-        return { success: false, error: "No valid updates provided" };
-      }
-
       const command = new UpdateCommand({
         TableName: newTableName,
         Key: {
-          PK: PK_PATTERNS.MERCHANT(merchantId),
+          PK: `MERCHANT#${merchantId}`,
           SK: `INTEGRATION#${platform.toUpperCase()}`,
         },
         UpdateExpression: `SET ${updateExpressions.join(", ")}`,
@@ -679,11 +665,10 @@ if (updates.expiresAt) {
       const result = await newDynamoDB.send(command);
       return { success: true, data: result.Attributes };
     } catch (error) {
-      console.error("newDynamoDB updateIntegration error:", error);
+      console.error("❌ DynamoDB Engine Error:", error.message);
       return { success: false, error: error.message };
     }
   }
-
  
   async createProduct(productData) {
     try {

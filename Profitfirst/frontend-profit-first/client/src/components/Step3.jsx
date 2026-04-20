@@ -37,54 +37,27 @@ useEffect(() => {
     }
   }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!selectedAdAccountId) {
-      toast.error("Please select your Ad account.");
-      return;
-    }
+const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedAdAccountId) return toast.error("Please select your Ad account.");
 
     setSubmitting(true);
-
     try {
-      console.log("💾 Saving ad account selection:", selectedAdAccountId);
+      console.log("💾 Step 3 Finalizing: Saving account", selectedAdAccountId);
 
-      // Save selected account
-      const res1 = await axiosInstance.post("/meta/select-account", {
+      // 🚀 Just one call. The backend will save the account AND move to step 4.
+      const res = await axiosInstance.post("/meta/select-account", {
         adAccountId: selectedAdAccountId,
       });
 
-      if (!res1?.data?.success) {
-        throw new Error("Failed to save ad account");
+      if (res.data.success) {
+        toast.success("✅ Meta Setup Complete!");
+        // Small delay for smooth UI transition
+        setTimeout(() => onComplete(), 1000);
       }
-
-      // Update onboarding
-      await axiosInstance.post("/onboard/step", {
-        step: 3,
-        data: {
-          adAccountId: selectedAdAccountId,
-          platform,
-          completedAt: new Date().toISOString(),
-        },
-      });
-
-      toast.success("✅ Ad account connected!", { autoClose: 1500 });
-
-      setTimeout(() => {
-        toast.info("🎯 Loading premium plans...", { autoClose: 1000 });
-        setTimeout(() => onComplete(), 500);
-      }, 1000);
     } catch (err) {
       console.error("❌ Submission error:", err);
-
-      const errorMessage =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to connect ad account.";
-
-      toast.error(errorMessage);
+      toast.error(err.response?.data?.error || "Failed to save selection");
     } finally {
       setSubmitting(false);
     }

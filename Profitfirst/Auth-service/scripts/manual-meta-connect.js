@@ -43,7 +43,7 @@ async function injectMetaIntegration() {
 
     try {
         const timestamp = new Date().toISOString();
-        const expiresAt = new Date();
+        const expiresAt = new Date(); 
         expiresAt.setDate(expiresAt.getDate() + 60);
 
         // 🔒 Encrypt only AFTER validation passes
