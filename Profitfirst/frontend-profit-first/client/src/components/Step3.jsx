@@ -10,46 +10,31 @@ const Step3 = ({ onComplete }) => {
   const [fetchingAccounts, setFetchingAccounts] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-
+useEffect(() => {
     const checkConnection = async () => {
       setFetchingAccounts(true);
       try {
         const response = await axiosInstance.get("/meta/connection");
-
-        const accounts = response.data?.connection?.adAccounts || [];
-
-        if (isMounted) {
+        if (response.data.connected && response.data.connection) {
+          const accounts = response.data.connection.adAccounts || [];
+          console.log("📥 Accounts received from API:", accounts.length);
           setAdAccounts(accounts);
         }
       } catch (err) {
-        console.error("Meta connection check failed:", err);
-        toast.error("Failed to load ad accounts");
+        console.error("Fetch failed");
       } finally {
-        if (isMounted) {
-          setFetchingAccounts(false);
-        }
+        setFetchingAccounts(false);
       }
     };
 
     const urlParams = new URLSearchParams(window.location.search);
-
     if (urlParams.get("meta") === "connected") {
-      const accCount = urlParams.get("accounts") || 0;
-      toast.success(`Meta Connected! Found ${accCount} accounts.`);
-
-      checkConnection();
-
-      // Clean URL
+      // 🟢 Add a 1-second delay to allow DynamoDB to finish writing (Eventual Consistency)
+      setTimeout(() => checkConnection(), 1000);
       window.history.replaceState({}, "", window.location.pathname);
     } else {
       checkConnection();
     }
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const handleSubmit = async (e) => {

@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 4. Install production dependencies only (Fast & Small)
-RUN npm install --production
+RUN npm install --omit=dev --legacy-peer-deps
 
 # 5. Copy Source Code: Baaki saara code box mein dalo
 COPY . .
