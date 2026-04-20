@@ -22,11 +22,13 @@ const Onboarding = () => {
     }
 
     // Check if coming back from Meta OAuth
-    const metaStatus = searchParams.get('meta');
+
+      const metaStatus = searchParams.get('meta');
     if (metaStatus === 'connected' || metaStatus === 'error') {
-      // Force step 4 for Meta callback
-      console.log('📥 Meta OAuth callback detected, forcing Step 4');
-      setCurrentStep(4);
+      // ❌ Purana: setCurrentStep(4); 
+      // ✅ Naya Fix: Stay on Step 3 to allow account selection
+      console.log('📥 Meta OAuth callback detected, staying on Step 3 for selection');
+      setCurrentStep(3); 
       setLoading(false);
       return;
     }

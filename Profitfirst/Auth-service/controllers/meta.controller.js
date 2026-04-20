@@ -171,268 +171,118 @@ class MetaController {
    * @route GET /api/meta/connection
    * @access Protected
    */
-  async getConnection(req, res) {
-    try {
-      const userId = req.user.userId;
-      const merchantId = userId;
-
-      // Get integration using new service
-      const integrationResult =
-        await dynamodbService.getIntegrationsByMerchant(merchantId);
-
-      if (!integrationResult.success) {
-        return res.status(404).json({
-          connected: false,
-          message: "No Meta connection found",
-        });
-      }
-
-      // Find Meta integration
-      const metaIntegration = integrationResult.data.find(
-        (integration) => integration.platform === "meta",
-      );
-
-      if (!metaIntegration) {
-        return res.status(404).json({
-          connected: false,
-          message: "No Meta connection found",
-        });
-      }
-
-      // Don't expose access token - return safe connection data
-      const safeConnection = {
-        platform: metaIntegration.platform,
-        status: metaIntegration.status,
-        connectedAt: metaIntegration.connectedAt,
-        adAccounts: metaIntegration.credentials?.adAccounts || [],
-        selectedAdAccountId: metaIntegration.credentials?.selectedAdAccountId,
-        selectedAdAccount: metaIntegration.credentials?.selectedAdAccount,
-        profileName: metaIntegration.credentials?.profileName,
-        profileId: metaIntegration.credentials?.profileId,
-      };
-
-      res.json({
-        connected: true,
-        connection: safeConnection,
-      });
-    } catch (error) {
-      console.error("Get Meta connection error:", error);
-      res.status(500).json({ error: "Failed to get connection" });
+async getConnection(req, res) {
+  try {
+    // ✅ Auth check
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
+
+    const merchantId = req.user.userId;
+
+    const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+
+    // ✅ Validate DB response
+    if (!integrationResult.success || !integrationResult.data) {
+      return res.status(200).json({ connected: false });
+    }
+
+    const metaIntegration = integrationResult.data.find(
+      (i) => i.platform === "meta"
+    );
+
+    if (!metaIntegration) {
+      return res.status(200).json({ connected: false });
+    }
+
+    // ✅ Safe normalized response
+    const safeConnection = {
+      platform: metaIntegration.platform,
+      status: metaIntegration.status || "inactive",
+      connectedAt: metaIntegration.connectedAt || null,
+      adAccounts: metaIntegration.adAccounts || [],
+      selectedAdAccountId: metaIntegration.selectedAdAccountId || null,
+      selectedAdAccount: metaIntegration.selectedAdAccount || null,
+      profileName: metaIntegration.profileName || null,
+      profileId: metaIntegration.profileId || null,
+    };
+
+    return res.json({
+      connected: true,
+      connection: safeConnection,
+    });
+
+  } catch (error) {
+    console.error("getConnection error:", error); // ✅ logging
+    return res.status(500).json({ error: "Internal server error" });
   }
+}
 
   /**
    * Update selected ad account
    * @route POST /api/meta/select-account
    * @access Protected
    */
-  async selectAdAccount(req, res) {
-    try {
-      const userId = req.user.userId;
-      const merchantId = userId;
-      const { adAccountId } = req.body;
-
-      if (!adAccountId) {
-        return res.status(400).json({
-          error: "Ad account ID is required",
-        });
-      }
-
-      // Get existing integration using new service
-      const integrationResult =
-        await dynamodbService.getIntegrationsByMerchant(merchantId);
-
-      if (!integrationResult.success) {
-        return res.status(404).json({
-          error: "No Meta connection found. Please connect first.",
-        });
-      }
-
-      // Find Meta integration
-      const metaIntegration = integrationResult.data.find(
-        (integration) => integration.platform === "meta",
-      );
-
-      if (!metaIntegration) {
-        return res.status(404).json({
-          error: "No Meta connection found. Please connect first.",
-        });
-      }
-
-      const adAccounts = metaIntegration.credentials?.adAccounts || [];
-
-      // Verify ad account exists in user's accounts
-      const selectedAccount = adAccounts.find(
-        (acc) =>
-          acc.accountId === adAccountId || acc.id === `act_${adAccountId}`,
-      );
-
-      if (!selectedAccount) {
-        return res.status(400).json({
-          error:
-            "Invalid ad account ID. Account not found in your connected accounts.",
-        });
-      }
-
-      // ✅ CHANGE: Update integration using new service
-      const updatedCredentials = {
-        ...metaIntegration.credentials,
-        selectedAdAccountId: adAccountId,
-        selectedAdAccount: selectedAccount,
-      };
-
-      // Update the integration record
-      const updateResult = await dynamodbService.updateIntegration(
-        merchantId,
-        "meta",
-        {
-          credentials: updatedCredentials,
-          status: "active",
-        },
-      );
-
-      if (!updateResult.success) {
-        return res.status(500).json({
-          error: "Failed to update Meta integration",
-        });
-      }
-
-      // Trigger Hybrid Sync (Fast Preview + Background Full History)
-      const accessToken = metaIntegration.credentials?.accessToken;
-      if (accessToken) {
-        try {
-          let decryptedAccessToken;
-          if (metaIntegration.credentials?.tokenEncrypted) {
-            decryptedAccessToken = encryptionService.decrypt(accessToken);
-          } else {
-            decryptedAccessToken = accessToken; // Legacy plain text token
-          }
-          metaSyncService.startHybridSync(
-            userId,
-            `act_${adAccountId}`,
-            decryptedAccessToken,
-          );
-        } catch (decryptError) {
-          // Continue without sync - user can manually sync later
-        }
-      }
-
-      res.json({
-        success: true,
-        message: "Ad account selected successfully",
-        selectedAccount,
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to select ad account",
-        message: error.message,
-      });
+async selectAdAccount(req, res) {
+  try {
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-  }
 
-  /**
-   * Get ad account data with access token
-   * @route GET /api/meta/ad-account/:accountId
-   * @access Protected
-   */
-  async getAdAccountData(req, res) {
-    try {
-      const userId = req.user.userId;
-      const merchantId = userId;
-      const { accountId } = req.params;
-      const { startDate, endDate } = req.query;
+    const merchantId = req.user.userId;
+    const { adAccountId } = req.body;
 
-      // Get integration using new service
-      const integrationResult =
-        await dynamodbService.getIntegrationsByMerchant(merchantId);
-
-      if (!integrationResult.success) {
-        return res.status(404).json({
-          error: "No Meta connection found",
-        });
-      }
-
-      // Find Meta integration
-      const metaIntegration = integrationResult.data.find(
-        (integration) => integration.platform === "meta",
-      );
-
-      if (!metaIntegration) {
-        return res.status(404).json({
-          error: "No Meta connection found",
-        });
-      }
-
-      const accessToken = metaIntegration.credentials?.accessToken;
-      const selectedAccount = metaIntegration.credentials?.selectedAdAccount;
-
-      if (!accessToken) {
-        return res.status(400).json({
-          error: "Access token not found. Please reconnect your Meta account.",
-        });
-      }
-
-      // Decrypt access token before use
-      let decryptedAccessToken;
-      try {
-        // Check if token is encrypted (new format) or plain text (legacy)
-        if (metaIntegration.credentials?.tokenEncrypted) {
-          decryptedAccessToken = encryptionService.decrypt(accessToken);
-        } else {
-          decryptedAccessToken = accessToken; // Legacy plain text token
-        }
-      } catch (decryptError) {
-        return res.status(400).json({
-          error: "Invalid access token. Please reconnect your Meta account.",
-        });
-      }
-
-      // Fetch ad account insights from Facebook API
-      const adAccountId = accountId.startsWith("act_")
-        ? accountId
-        : `act_${accountId}`;
-
-      // Calculate date range
-      let timeRange;
-      if (startDate && endDate) {
-        timeRange = {
-          since: startDate,
-          until: endDate,
-        };
-      } else {
-        timeRange = {
-          since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split("T")[0],
-          until: new Date().toISOString().split("T")[0],
-        };
-      }
-
-      const insightsResponse = await axios.get(
-        `https://graph.facebook.com/${FB_API_VERSION}/${adAccountId}/insights`,
-        {
-          params: {
-            access_token: decryptedAccessToken, // ✅ NEW: Use decrypted token
-            fields: "spend,impressions,clicks,cpc,cpm,ctr,reach",
-            time_range: JSON.stringify(timeRange),
-          },
-        },
-      );
-
-      const insights = insightsResponse.data.data[0] || {};
-
-      res.json({
-        success: true,
-        accountId,
-        insights,
-        currency: selectedAccount?.currency || "USD",
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to fetch ad account data",
-        message: error.message,
-      });
+    if (!adAccountId) {
+      return res.status(400).json({ error: "adAccountId is required" });
     }
+
+    const integrationResult = await dynamodbService.getIntegrationsByMerchant(merchantId);
+
+    if (!integrationResult.success || !integrationResult.data) {
+      return res.status(404).json({ error: "No integrations found" });
+    }
+
+    const metaIntegration = integrationResult.data.find(i => i.platform === "meta");
+
+    if (!metaIntegration) {
+      return res.status(404).json({ error: "No Meta connection found" });
+    }
+
+    const adAccounts = metaIntegration.adAccounts || [];
+
+    const selectedAccount = adAccounts.find(
+      acc => acc.accountId === adAccountId || acc.id === adAccountId
+    );
+
+    if (!selectedAccount) {
+      return res.status(400).json({ error: "Invalid ad account ID" });
+    }
+
+    const safeAccount = {
+      id: selectedAccount.id,
+      accountId: selectedAccount.accountId,
+      name: selectedAccount.name,
+    };
+
+    const updateResult = await dynamodbService.updateIntegration(merchantId, "meta", {
+      selectedAdAccountId: adAccountId,
+      selectedAdAccount: safeAccount,
+      status: "active",
+    });
+
+    if (!updateResult.success) {
+      return res.status(500).json({ error: "Failed to update integration" });
+    }
+
+    await dynamodbService.updateUserProfileOnboarding(merchantId, {
+      onboardingStep: 4
+    });
+
+    res.json({ success: true, message: "Ad account selected", selectedAccount: safeAccount });
+
+  } catch (error) {
+    console.error("selectAdAccount error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 

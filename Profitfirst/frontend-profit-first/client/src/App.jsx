@@ -39,11 +39,20 @@ import { isTokenValid } from "./utils/auth";
 import { useState, useEffect } from "react";
 import { ProfileProvider } from "./ProfileContext";
 import ProtectedRoute from "./ProtectedRoute";
+import MetaBridge from "./components/MetaBridge";
+
+
+
 function AppWrapper() {
+
+
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // STEP 1: Check for OAuth tokens in URL hash FIRST
     // OAuth callback redirects with tokens in hash: #auth={...}
     const hash = window.location.hash;
+
+    
 
     if (hash.includes("#auth=")) {
       try {
@@ -79,6 +88,10 @@ function AppWrapper() {
     const isValid = isTokenValid();
     return isValid;
   });
+
+
+
+ 
 
   useEffect(() => {
     const checkAuth = () => {
@@ -130,6 +143,7 @@ function AppWrapper() {
           }}
         />
         <Routes>
+          <Route path="/api/meta/callback/" element={<MetaBridge />} />
           <Route path="/" element={<Homepage />} />
           <Route path="/ourstorys" element={<Customerstory />} />
           <Route path="/Profitcalculater" element={<Profitcalculater />} />
@@ -143,6 +157,7 @@ function AppWrapper() {
           <Route path="/retry" element={<RetryPage />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/verify-email/:token" element={<VerifyEmail />} />
+
           <Route
             path="/onboarding"
             element={(() => {
@@ -222,6 +237,8 @@ function AppWrapper() {
           </Route>
           <Route path="*" element={<Homepage />} />
         </Routes>
+
+        
       </ProfileProvider>
     </>
   );
