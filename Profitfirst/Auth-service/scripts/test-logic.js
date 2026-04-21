@@ -7,7 +7,7 @@ const encryption = require("../utils/encryption");
 const axios = require("axios");
 
 const MERCHANT_ID = "41037dca-f0a1-7005-fcfe-6841ff1fc07b";
-const TARGET_DATE = "2026-02-21";
+const TARGET_DATE = "2026-02-19";
 const DUMP_FILE   = path.join(__dirname, `audit-dump-${TARGET_DATE}.json`);
 
 const r2 = (n) => Math.round(n * 100) / 100;

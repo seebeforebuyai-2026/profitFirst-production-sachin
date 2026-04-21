@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 
 class ExpenseService {
   /**
-   * Adds a new business expense and triggers a summary recalculation
+   * Adds a new business expense and triggers a summary recalculations
    */
   async addExpense(merchantId, expenseData) {
     try {

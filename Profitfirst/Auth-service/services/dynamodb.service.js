@@ -761,8 +761,7 @@ async updateIntegration(merchantId, platform, updates) {
       return { success: false, error: error.message };
     }
   }
-
- 
+  
   async getVariantsByMerchant(merchantId) {
     try {
       const command = new QueryCommand({ 
