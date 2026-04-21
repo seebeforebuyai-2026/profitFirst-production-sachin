@@ -44,113 +44,78 @@ class MetaController {
   // =========================
   // HANDLE CALLBACK
   // =========================
-  async handleCallback(req, res) {
-    const frontendUrl =
-      process.env.FRONTEND_URL || "https://profitfirstanalytics.co.in";
+async handleCallback(req, res) {
+  const frontendUrl = process.env.FRONTEND_URL || "https://profitfirstanalytics.co.in";
 
-    try {
-      const { code, state, error, error_description } = req.query;
+  try {
+    // 🟢 1. isAjax flag ko query se pakdo
+    const { code, state, error, error_description, isAjax } = req.query;
 
-      if (error) {
-        return res.redirect(
-          `${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(
-            error_description || error
-          )}`
-        );
-      }
-
-      const session = await sessionService.getOAuthSession(state);
-      if (!session) {
-        return res.redirect(
-          `${frontendUrl}/onboarding?meta=error&message=Invalid or expired session`
-        );
-      }
-
-      const { userId } = session;
-
-      // =========================
-      // STEP 1: SHORT TOKEN
-      // =========================
-      const tokenRes = await axios.get(
-        `https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`,
-        {
-          params: {
-            client_id: FB_APP_ID,
-            redirect_uri: FB_REDIRECT_URI,
-            client_secret: FB_APP_SECRET,
-            code,
-          },
-        }
-      );
-
-      const shortToken = tokenRes.data.access_token;
-      if (!shortToken) throw new Error("Failed to get short-lived token");
-
-      // =========================
-      // STEP 2: LONG TOKEN
-      // =========================
-      const longLivedRes = await axios.get(
-        `https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`,
-        {
-          params: {
-            grant_type: "fb_exchange_token",
-            client_id: FB_APP_ID,
-            client_secret: FB_APP_SECRET,
-            fb_exchange_token: shortToken,
-          },
-        }
-      );
-
-      const accessToken = longLivedRes.data.access_token;
-      const expiresIn = longLivedRes.data.expires_in;
-
-      if (!accessToken) throw new Error("Failed to get long-lived token");
-
-      // =========================
-      // STEP 3: PROFILE + ACCOUNTS
-      // =========================
-      const [profileRes, adAccountsRes] = await Promise.all([
-        axios.get(`https://graph.facebook.com/${FB_API_VERSION}/me`, {
-          params: {
-            access_token: accessToken,
-            fields: "id,name,email",
-          },
-        }),
-        axios.get(`https://graph.facebook.com/${FB_API_VERSION}/me/adaccounts`, {
-          params: {
-            access_token: accessToken,
-            fields: "id,account_id,name,currency",
-          },
-        }),
-      ]);
-
-      const adAccounts = adAccountsRes.data?.data || [];
-
-      // =========================
-      // STEP 4: SAVE
-      // =========================
-      await saveConnection(
-        userId,
-        accessToken,
-        profileRes.data,
-        adAccounts,
-        expiresIn
-      );
-
-      await sessionService.deleteOAuthSession(state);
+    if (error) {
+      // 🟢 2. Error handling for AJAX
+      if (isAjax) return res.status(400).json({ success: false, error: error_description || error });
 
       return res.redirect(
-        `${frontendUrl}/onboarding?meta=connected&accounts=${adAccounts.length}`
-      );
-    } catch (error) {
-      console.error("❌ OAuth callback error:", error);
-
-      return res.redirect(
-        `${frontendUrl}/onboarding?meta=error&message=Internal Server Error`
+        `${frontendUrl}/onboarding?meta=error&message=${encodeURIComponent(error_description || error)}`
       );
     }
-  }
 
+    const session = await sessionService.getOAuthSession(state);
+    if (!session) {
+      if (isAjax) return res.status(400).json({ success: false, error: "Invalid session" });
+      return res.redirect(`${frontendUrl}/onboarding?meta=error&message=Invalid or expired session`);
+    }
+
+    const { userId } = session;
+
+    // --- STEP 1 & 2: Token Exchange (Aapka logic same rahega) ---
+    const tokenRes = await axios.get(`https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`, {
+      params: { client_id: FB_APP_ID, redirect_uri: FB_REDIRECT_URI, client_secret: FB_APP_SECRET, code }
+    });
+    const shortToken = tokenRes.data.access_token;
+    
+    const longLivedRes = await axios.get(`https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`, {
+      params: { grant_type: "fb_exchange_token", client_id: FB_APP_ID, client_secret: FB_APP_SECRET, fb_exchange_token: shortToken }
+    });
+    const accessToken = longLivedRes.data.access_token;
+    const expiresIn = longLivedRes.data.expires_in;
+
+    // --- STEP 3: Profile + Accounts (Aapka logic same rahega) ---
+    const [profileRes, adAccountsRes] = await Promise.all([
+      axios.get(`https://graph.facebook.com/${FB_API_VERSION}/me`, { params: { access_token: accessToken, fields: "id,name,email" } }),
+      axios.get(`https://graph.facebook.com/${FB_API_VERSION}/me/adaccounts`, { params: { access_token: accessToken, fields: "id,account_id,name,currency" } })
+    ]);
+
+    const adAccounts = adAccountsRes.data?.data || [];
+
+    // --- STEP 4: Save ---
+    await saveConnection(userId, accessToken, profileRes.data, adAccounts, expiresIn);
+    await sessionService.deleteOAuthSession(state);
+
+    // 🟢 3. CRITICAL CHANGE: Redirect vs JSON Response
+    if (isAjax) {
+      // Jab MetaBridge background mein call karega, toh hum sirf JSON bhejenge
+      // Isse browser domain switch nahi karega aur Phishing Warning NAHI aayegi.
+      return res.json({ 
+        success: true, 
+        message: "Meta connected successfully", 
+        accounts: adAccounts.length 
+      });
+    }
+
+    // Normal browser redirect (Fallback)
+    return res.redirect(`${frontendUrl}/onboarding?meta=connected&accounts=${adAccounts.length}`);
+
+  } catch (error) {
+    console.error("❌ OAuth callback error:", error);
+    
+    if (req.query.isAjax) {
+      return res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+
+    return res.redirect(`${frontendUrl}/onboarding?meta=error&message=Internal Server Error`);
+  }
+}
   // =========================
   // GET CONNECTION
   // =========================

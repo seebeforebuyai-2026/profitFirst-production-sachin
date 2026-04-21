@@ -1,32 +1,49 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axiosInstance from "../../axios";
+import { PulseLoader } from "react-spinners";
 
 const MetaBridge = () => {
-  useEffect(() => {
-    console.log("MetaBridge HIT");
-    const params = window.location.search;
+  const navigate = useNavigate();
+  const [status, setStatus] = useState("Connecting to Meta Ads...");
 
-    if (params && params.includes("code")) {
-      // redirect to backend
-      window.location.replace(
-        `https://api.profitfirstanalytics.co.in/api/meta/callback${params}`
-      );
-    } else {
-      console.error("Meta callback params missing");
-    }
-  }, []);
+  useEffect(() => {
+    const processCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("code");
+      const state = urlParams.get("state");
+
+      if (code && state) {
+        try {
+          setStatus("Verifying credentials with Meta...");
+          
+          // 🟢 SILENT CALL: Backend ko code bhejo background mein
+          // Hum backend ka wahi callback endpoint use karenge par usey redirect nahi karne denge
+          const response = await axiosInstance.get(`/meta/callback`, {
+            params: { code, state, isAjax: true } // isAjax flag helps backend know not to redirect
+          });
+
+          if (response.data.success) {
+            // Success! Ab onboarding ke agle step par navigate karo
+            navigate("/onboarding?meta=connected");
+          }
+        } catch (err) {
+          console.error("Meta Bridge Error:", err);
+          navigate("/onboarding?meta=error&message=Authentication Failed");
+        }
+      } else {
+        navigate("/onboarding?meta=error&message=Missing Parameters");
+      }
+    };
+
+    processCallback();
+  }, [navigate]);
 
   return (
-    <div
-      style={{
-        backgroundColor: "#0a0a0a",
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "white",
-      }}
-    >
-      <h2>Connecting to Meta Ads... Please wait...</h2>
+    <div className="h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white gap-4">
+      <PulseLoader color="#22c55e" size={12} />
+      <h2 className="text-xl font-bold tracking-tight">{status}</h2>
+      <p className="text-gray-500 text-sm">Please do not refresh this page.</p>
     </div>
   );
 };
