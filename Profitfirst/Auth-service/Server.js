@@ -107,6 +107,9 @@ const allowedOrigins = [
   'http://localhost:8080', // Vue CLI
   'https://profitfirstanalytics.co.in',
   'https://www.profitfirstanalytics.co.in',
+  'https://api.profitfirstanalytics.co.in',
+  "*",
+  'https://www.api.profitfirstanalytics.co.in',
   process.env.FRONTEND_URL
 ].filter(Boolean); // Remove undefined values
 

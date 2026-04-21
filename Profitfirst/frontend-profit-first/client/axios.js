@@ -5,10 +5,10 @@ import { isTokenValid, logout } from "./src/utils/auth";
 const isDev =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
-const API_BASE_URL = isDev ? 'http://localhost:3000/api' : '/api'; 
-// const API_BASE_URL = isDev
-//   ? "http://localhost:3000/api"
-//   : "https://api.profitfirstanalytics.co.in/api";
+// const API_BASE_URL = isDev ? 'http://localhost:3000/api' : '/api'; 
+const API_BASE_URL = isDev
+  ? "http://localhost:3000/api"
+  : "https://api.profitfirstanalytics.co.in/api";
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL, 
