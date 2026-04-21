@@ -11,7 +11,7 @@ class UserController {
    */
   async getBusinessExpenses(req, res) {
     try {
-      const merchantId = req.user.userId;
+      const merchantId = req.user.userId; 
       
       // We use our existing getUserProfile method
       const result = await dynamodbService.getUserProfile(merchantId);
@@ -26,7 +26,7 @@ class UserController {
         success: true,
         expenses: {
           agencyFees: data.agencyFees || 0,
-          staffFees: data.staffFees || 0,
+          staffSalary: data.staffSalary || 0,
           officeRent: data.officeRent || 0,
           otherExpenses: data.otherExpenses || 0,
           rtoHandlingFees: data.rtoHandlingFees || 0,
@@ -118,7 +118,7 @@ class UserController {
       await dynamodbService.updateBusinessOverheads(merchantId, expenses);
       console.log("✅ [API] Overheads saved to Profile.");
 
-      // 2. Fetch profile to check flags
+      // 2. Fetch profile to check flags 
       const profile = await dynamodbService.getUserProfile(merchantId);
       
       // 🟢 LOGGING: Check what the database actually says

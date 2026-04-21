@@ -79,10 +79,12 @@ class ShopifyUtil {
     }
   }
 
-  async fetchShopifyOrders(shop, encryptedToken, sinceDate, cursor = null) {
+  // 🟢 CHANGE: sinceDate ki jagah queryStr parameter accept karein
+  async fetchShopifyOrders(shop, encryptedToken, queryStr, cursor = null) {
     try {
       const accessToken = encryptionService.decrypt(encryptedToken);
       const url = `https://${shop}/admin/api/2024-04/graphql.json`;
+      
       const query = `
       query getOrders($cursor: String, $query: String) {
         orders(
@@ -101,12 +103,11 @@ class ShopifyUtil {
               test
               displayFinancialStatus
               paymentGatewayNames
-              # FIX: subtotalPriceSet added to calculate exact Gross Sales (Audit logic)
               subtotalPriceSet    { shopMoney { amount } }
               totalPriceSet       { shopMoney { amount } }
               totalDiscountsSet   { shopMoney { amount } }
               totalTaxSet         { shopMoney { amount } }
-              totalShippingPriceSet { shopMoney { amount } } # Added for full breakdown
+              totalShippingPriceSet { shopMoney { amount } }
               lineItems(first: 50) {
                 edges {
                   node {
@@ -122,7 +123,7 @@ class ShopifyUtil {
                   edges {
                     node {
                       quantity
-                      subtotalSet { shopMoney { amount } } # Important for "Returns"
+                      subtotalSet { shopMoney { amount } }
                     }
                   }
                 }
@@ -132,11 +133,18 @@ class ShopifyUtil {
         }
       }
     `;
-      // Logic Check: test:false filter and date filter combined
+
+      // Logic: variables.query ab wahi queryStr use karega jo Worker se aayi hai
       const variables = {
         cursor,
-        query: `created_at:>=${sinceDate} AND test:false`,
+        query: queryStr, 
       };
+
+      console.log("-------------------------------------------------");
+      console.log("📡 API REQUEST LOG:");
+      console.log("Query Filter ->", variables.query);
+      console.log("-------------------------------------------------");
+
       const response = await axios.post(
         url,
         { query, variables },
@@ -147,16 +155,17 @@ class ShopifyUtil {
           },
         },
       );
+
       if (response.data.errors) {
         throw new Error(response.data.errors[0].message);
       }
-      // Rate Limit Logic: Production-ready cooling system
+
       const throttle = response.data.extensions?.cost?.throttleStatus;
       if (throttle && throttle.currentlyAvailable < 200) {
-        // Increased to 200 for safety
         console.warn("⏳ Shopify GraphQL budget low. Cooling down 2s...");
         await new Promise((res) => setTimeout(res, 2000));
       }
+
       return response.data.data.orders;
     } catch (error) {
       console.error("❌ fetchShopifyOrders Error:", error.message);

@@ -93,6 +93,8 @@ const BusinessExpenses = () => {
           officeRent: ex.officeRent || 0,
           otherExpenses: ex.otherExpenses || 0,
         });
+        console.log("expense is ",response.data.expenses);
+        
       }
     } catch (error) {
       console.error("Error fetching expenses:", error);

@@ -765,7 +765,7 @@ async updateIntegration(merchantId, platform, updates) {
  
   async getVariantsByMerchant(merchantId) {
     try {
-      const command = new QueryCommand({
+      const command = new QueryCommand({ 
         TableName: newTableName,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues: {
@@ -1055,6 +1055,7 @@ async queryAll(merchantId, prefix) {
   async updateBusinessOverheads(merchantId, overheads) {
     try {
       const timestamp = new Date().toISOString();
+console.log("expence details ", overheads);
 
       const command = new UpdateCommand({
         TableName: newTableName,
@@ -1065,7 +1066,7 @@ async queryAll(merchantId, prefix) {
         // We save all 6 categories directly into the Profile
         UpdateExpression: `SET 
           agencyFees = :af,
-          staffFees = :sf,
+          staffSalary = :sf,
           officeRent = :or,
           otherExpenses = :oe,
           rtoHandlingFees = :rf,
@@ -1074,7 +1075,7 @@ async queryAll(merchantId, prefix) {
           updatedAt = :t`,
         ExpressionAttributeValues: {
           ":af": Number(overheads.agencyFees || 0),
-          ":sf": Number(overheads.staffFees || 0),
+          ":sf": Number(overheads.staffSalary || 0), 
           ":or": Number(overheads.officeRent || 0),
           ":oe": Number(overheads.otherExpenses || 0),
           ":rf": Number(overheads.rtoHandlingFees || 0),

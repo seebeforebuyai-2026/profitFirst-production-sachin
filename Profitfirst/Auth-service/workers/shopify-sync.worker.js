@@ -1,15 +1,5 @@
-const {
-  ReceiveMessageCommand,
-  DeleteMessageCommand,
-  SendMessageCommand,
-} = require("@aws-sdk/client-sqs");
-
-const {
-  PutCommand,
-  GetCommand,
-  QueryCommand,
-} = require("@aws-sdk/lib-dynamodb");
-
+const { ReceiveMessageCommand, DeleteMessageCommand, SendMessageCommand } = require("@aws-sdk/client-sqs");
+const { PutCommand, GetCommand, QueryCommand, UpdateCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { formatInTimeZone } = require("date-fns-tz");
 
@@ -30,10 +20,10 @@ const dynamoDBService = require("../services/dynamodb.service");
 let isShuttingDown = false;
 
 /**
- * 🟢 SQS POLLER
+ * 🟢 SQS POLLING LOOP
  */
 const pollQueue = async () => {
-  console.log("🚀 [ShopifyWorker] Sync Engine Active...");
+  console.log("🚀 [ShopifyWorker] Sync Engine Active and Listening...");
 
   while (!isShuttingDown) {
     try {
@@ -48,8 +38,6 @@ const pollQueue = async () => {
       if (!Messages || Messages.length === 0) continue;
 
       const message = Messages[0];
-
-      // ✅ SAFE JSON PARSE
       let body;
       try {
         body = JSON.parse(message.Body);
@@ -74,7 +62,7 @@ const pollQueue = async () => {
 
     } catch (e) {
       if (!isShuttingDown) {
-        console.error("❌ Worker Error:", e);
+        console.error("❌ Worker Error:", e.message);
         await new Promise((r) => setTimeout(r, 5000));
       }
     }
@@ -82,12 +70,11 @@ const pollQueue = async () => {
 };
 
 /**
- * 🕵️ MANAGER: Fetch all active Shopify integrations
+ * 🕵️ MANAGER: Start Sync for all active merchants
  */
 async function startIncrementalSyncForAll() {
   try {
-    console.log("📡 [Manager] Querying GSI1...");
-
+    console.log("📡 [Manager] Querying GSI1 for active integrations...");
     let lastKey = undefined;
     let count = 0;
 
@@ -96,173 +83,110 @@ async function startIncrementalSyncForAll() {
         TableName: newTableName,
         IndexName: "GSI1",
         KeyConditionExpression: "GSI1PK = :pk",
-        FilterExpression: "entityType = :type AND platform = :p AND #s = :active",
-        ExpressionAttributeNames: {
-          "#s": "status",
-        },
+        FilterExpression: "platform = :p AND #s = :active",
+        ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":pk": "INTEGRATION",
-          ":type": "INTEGRATION",
           ":p": "shopify",
           ":active": "active",
         },
+        ...(lastKey && { ExclusiveStartKey: lastKey })
       };
-
-      if (lastKey) params.ExclusiveStartKey = lastKey;
 
       const res = await newDynamoDB.send(new QueryCommand(params));
       const items = res?.Items || [];
 
-      console.log("Items count:", items.length);
-
       for (const item of items) {
-        if (!item?.PK || !item.PK.startsWith("MERCHANT#")) continue;
-
+        if (!item?.PK) continue;
         const merchantId = item.PK.split("#")[1];
 
-        await sqsClient.send(
-          new SendMessageCommand({
-            QueueUrl: shopifyQueueUrl,
-            MessageBody: JSON.stringify({
-              type: "SHOPIFY_SYNC",
-              merchantId,
-              mode: "incremental",
-              sinceDate: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-            }),
-          })
-        );
-
+        await sqsClient.send(new SendMessageCommand({
+          QueueUrl: shopifyQueueUrl,
+          MessageBody: JSON.stringify({
+            type: "SHOPIFY_SYNC",
+            merchantId,
+            mode: "incremental",
+            sinceDate: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+          }),
+        }));
         count++;
       }
-
       lastKey = res.LastEvaluatedKey;
-
     } while (lastKey);
 
     console.log(`✅ Dispatched sync for ${count} merchants`);
-
   } catch (err) {
-    console.error("❌ Manager Error:", err);
-    logger.logError("SYSTEM", "MANAGER", err, "DISPATCH_DAILY_SYNC");
+    console.error("❌ Manager Error:", err.message);
   }
 }
 
 /**
- * 🛠️ WORKER: Process Shopify Orders
+ * 🛠️ WORKER LOGIC
  */
 const processOrders = async (job) => {
   const syncStartTime = new Date().toISOString();
-
-  const {
-    merchantId,
-    sinceDate,
-    cursor = null,
-    mode = "full",
-    pageCount = 1,
-    currentAffectedDates = [],
-  } = job;
+  const { merchantId, sinceDate, cursor = null, mode = "full", pageCount = 1, currentAffectedDates = [] } = job;
 
   try {
-    const [variants, integrationRes] = await Promise.all([
+    console.log(`🔍 [DEBUG] Processing ${merchantId} | Page: ${pageCount}`);
+
+    const [variantsRes, integrationRes] = await Promise.all([
       dynamoDBService.getVariantsByMerchant(merchantId),
-      newDynamoDB.send(
-        new GetCommand({
-          TableName: newTableName,
-          Key: {
-            PK: `MERCHANT#${merchantId}`,
-            SK: "INTEGRATION#SHOPIFY",
-          },
-        })
-      ),
+      newDynamoDB.send(new GetCommand({
+        TableName: newTableName,
+        Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#SHOPIFY" },
+      })),
     ]);
 
     const integration = integrationRes.Item;
-    if (!integration) {
-      console.warn(`⚠️ No integration for ${merchantId}`);
-      return;
-    }
+    if (!integration) return;
 
     const costMap = {};
-    variants?.data?.forEach((v) => {
+    variantsRes.data?.forEach((v) => {
       const id = v.variantId?.split("/").pop();
       if (id) costMap[id] = v.costPrice || 0;
     });
 
     let queryStr = `created_at:>=${sinceDate}`;
-
     if (mode === "incremental" && integration.lastSyncTime) {
-      const buffer = new Date(
-        new Date(integration.lastSyncTime).getTime() - 15 * 60000
-      ).toISOString();
-
+      const buffer = new Date(new Date(integration.lastSyncTime).getTime() - 15 * 60000).toISOString();
       queryStr = `updated_at:>=${buffer}`;
     }
-
     queryStr += " AND test:false";
 
-    const data = await shopifyUtil.fetchShopifyOrders(
-      integration.shopifyStore,
-      integration.accessToken,
-      queryStr,
-      cursor
-    );
-
+    const data = await shopifyUtil.fetchShopifyOrders(integration.shopifyStore, integration.accessToken, queryStr, cursor);
     if (!data?.edges) return;
 
     const affectedDates = new Set(currentAffectedDates);
 
     for (const { node: order } of data.edges) {
       try {
-        const orderId = order?.id?.split("/").pop();
-        if (!orderId) continue;
-
-        const dateIST = formatInTimeZone(
-          new Date(order.createdAt),
-          "Asia/Kolkata",
-          "yyyy-MM-dd"
-        );
-
+        const orderId = order.id.split("/").pop();
+        const dateIST = formatInTimeZone(new Date(order.createdAt), "Asia/Kolkata", "yyyy-MM-dd");
         affectedDates.add(dateIST);
 
-        // S3 backup
-        await s3Client.send(
-          new PutObjectCommand({
-            Bucket: s3BucketName,
-            Key: `${merchantId}/orders/${orderId}.json`,
-            Body: JSON.stringify(order),
-            ContentType: "application/json",
-          })
-        );
+        await s3Client.send(new PutObjectCommand({
+          Bucket: s3BucketName,
+          Key: `${merchantId}/orders/${orderId}.json`,
+          Body: JSON.stringify(order),
+          ContentType: "application/json",
+        }));
 
         const totalPrice = Number(order.totalPriceSet?.shopMoney?.amount || 0);
         const discounts = Number(order.totalDiscountsSet?.shopMoney?.amount || 0);
-
         const refunds = (order.refunds || []).reduce((sum, r) => {
           const items = r.refundLineItems?.edges || r.refundLineItems || [];
-          return sum + items.reduce(
-            (rs, item) =>
-              rs + Number((item.node || item).subtotalSet?.shopMoney?.amount || 0),
-            0
-          );
+          return sum + items.reduce((rs, item) => rs + Number((item.node || item).subtotalSet?.shopMoney?.amount || 0), 0);
         }, 0);
 
         let totalCogs = 0;
-
         const lineItems = order.lineItems.edges.map(({ node: li }) => {
           const vId = li.variant?.id?.split("/").pop();
           const cost = costMap[vId] || 0;
-
           totalCogs += cost * li.quantity;
-
-          return {
-            variantId: vId,
-            quantity: li.quantity,
-            cogsAtSale: cost,
-            price: Number(li.discountedUnitPriceSet?.shopMoney?.amount || 0),
-          };
+          return { variantId: vId, quantity: li.quantity, cogsAtSale: cost, price: Number(li.discountedUnitPriceSet?.shopMoney?.amount || 0) };
         });
 
-        // ✅ SAFE ITEM (NO undefined)
         const safeItem = JSON.parse(JSON.stringify({
           PK: `MERCHANT#${merchantId}`,
           SK: `ORDER#${orderId}`,
@@ -271,76 +195,97 @@ const processOrders = async (job) => {
           orderName: order.name || "",
           totalPrice,
           discounts,
+          tax: Number(order.totalTaxSet?.shopMoney?.amount || 0),
           refunds,
           netRevenue: totalPrice - discounts - refunds,
-          paymentType: (order.paymentGatewayNames || []).some((g) =>
-            g?.toLowerCase().includes("cash")
-          )
-            ? "cod"
-            : "prepaid",
-          status: order.displayFinancialStatus
-            ? order.displayFinancialStatus.toLowerCase()
-            : "unknown",
+          paymentType: (order.paymentGatewayNames || []).some((g) => g?.toLowerCase().includes("cash") || g?.toLowerCase() === "cod") ? "cod" : "prepaid",
+          status: order.displayFinancialStatus?.toLowerCase() || "unknown",
           isCancelled: !!order.cancelledAt,
           totalCogs: Number(totalCogs.toFixed(2)),
           lineItems,
-          orderCreatedAt: order.createdAt || null,
+          orderCreatedAt: order.createdAt,
           updatedAt: new Date().toISOString(),
+          s3RawUrl: `s3://${s3BucketName}/${merchantId}/orders/${orderId}.json`
         }));
 
-        await newDynamoDB.send(
-          new PutCommand({
-            TableName: newTableName,
-            Item: safeItem,
-          })
-        );
-
-      } catch (err) {
-        console.error("⚠️ Order skip:", err.message);
-      }
+        await newDynamoDB.send(new PutCommand({ TableName: newTableName, Item: safeItem }));
+      } catch (err) { console.error(`⚠️ Order skip:`, err.message); }
     }
 
     const datesArray = Array.from(affectedDates);
 
     if (data.pageInfo.hasNextPage) {
-      await sqsClient.send(
-        new SendMessageCommand({
-          QueueUrl: shopifyQueueUrl,
-          MessageBody: JSON.stringify({
-            ...job,
-            cursor: data.pageInfo.endCursor,
-            pageCount: pageCount + 1,
-            currentAffectedDates: datesArray,
-          }),
-        })
-      );
+      // 🟢 UPDATE PROGRESS HERE
+      await updateSyncProgress(merchantId, "SHOPIFY", Math.min(95, pageCount * 10));
+
+      await sqsClient.send(new SendMessageCommand({
+        QueueUrl: shopifyQueueUrl,
+        MessageBody: JSON.stringify({ 
+          ...job, 
+          cursor: data.pageInfo.endCursor, 
+          pageCount: pageCount + 1, 
+          currentAffectedDates: datesArray 
+        }),
+      }));
     } else {
-      await dynamoDBService.updateSyncWatermark(merchantId, "SHOPIFY", {
-        lastOrderId: data.edges[data.edges.length - 1]?.node.id.split("/").pop(),
-        syncTime: syncStartTime,
-      });
-
-      await sqsClient.send(
-        new SendMessageCommand({
-          QueueUrl: metaQueueUrl,
-          MessageBody: JSON.stringify({
-            type: "META_SYNC",
-            merchantId,
-            sinceDate,
-            mode,
-            affectedDates: datesArray,
-          }),
-        })
-      );
-
-      console.log(`✅ [Shopify] Done. Dates: ${datesArray.length}`);
+      // 🟢 MARK AS COMPLETE HERE
+      await markSyncComplete(merchantId, "SHOPIFY", syncStartTime, datesArray, sinceDate, mode);
     }
 
   } catch (e) {
-    logger.logError(merchantId, "SHOPIFY", e, "INCREMENTAL_SYNC");
+    logger.logError(merchantId, "SHOPIFY", e, "SYNC_PROCESS");
     throw e;
   }
 };
 
-// 🚀 START
+/**
+ * 🟢 HELPER: Update Sync Progress in DynamoDB
+ */
+async function updateSyncProgress(merchantId, platform, percent) {
+  try {
+    await newDynamoDB.send(new UpdateCommand({ 
+      TableName: newTableName, 
+      Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` }, 
+      UpdateExpression: "SET #p = :p, updatedAt = :t", 
+      ExpressionAttributeNames: { "#p": "percent" }, 
+      ExpressionAttributeValues: { ":p": percent, ":t": new Date().toISOString() } 
+    }));
+  } catch (err) { console.error("Update Progress Error:", err.message); }
+}
+
+/**
+ * 🟢 HELPER: Finalize Sync and pass baton
+ */
+async function markSyncComplete(merchantId, platform, syncStartTime, affectedDates, sinceDate, mode) {
+  try {
+    // 1. Update Sync Record
+    await newDynamoDB.send(new UpdateCommand({ 
+      TableName: newTableName, 
+      Key: { PK: `MERCHANT#${merchantId}`, SK: `SYNC#${platform}` }, 
+      UpdateExpression: "SET #s = :c, #p = :p, completedAt = :t", 
+      ExpressionAttributeNames: { "#s": "status", "#p": "percent" }, 
+      ExpressionAttributeValues: { ":c": "completed", ":p": 100, ":t": new Date().toISOString() } 
+    }));
+
+    // 2. Update Watermark
+    await dynamoDBService.updateSyncWatermark(merchantId, platform, {
+        syncTime: syncStartTime
+    });
+
+    // 3. Pass baton to Meta Sync
+    await sqsClient.send(new SendMessageCommand({ 
+      QueueUrl: metaQueueUrl, 
+      MessageBody: JSON.stringify({ 
+          type: "META_SYNC", 
+          merchantId, 
+          sinceDate, 
+          mode, 
+          affectedDates 
+      }) 
+    }));
+    
+    console.log(`🏁 Shopify Sync COMPLETED for ${merchantId}. Moving to Meta Ads.`);
+  } catch (err) { console.error("Complete Sync Error:", err.message); }
+}
+
 pollQueue();

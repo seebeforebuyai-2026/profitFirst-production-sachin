@@ -6,5 +6,6 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 // 🟢 Point strictly to the controller
 router.post('/start-initial', authenticateToken, syncController.triggerSync);
 router.get('/status', authenticateToken, syncController.getStatus);
+router.post('/manual', authenticateToken, syncController.triggerManualSync);
 
 module.exports = router;
