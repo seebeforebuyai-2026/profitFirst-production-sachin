@@ -22,6 +22,7 @@
     "@langchain/aws": "^1.0.1",
     "@langchain/community": "^1.0.2",
     "@langchain/core": "^1.0.4",
+    "@pinecone-database/pinecone": "^7.2.0",
     "axios": "^1.13.6",
     "axios-retry": "^4.5.0",
     "compression": "^1.8.1",

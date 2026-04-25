@@ -1132,6 +1132,101 @@ console.log("expence details ", overheads);
       console.error(`❌ [Watermark Error] ${platform}:`, error.message);
     }
   }
+
+
+  /**
+ * 💾 CHAT MEMORY: Save a single message to DynamoDB
+ */
+async saveChatMessage(merchantId, role, content) {
+    try {
+        const timestamp = new Date().toISOString();
+        const params = {
+            TableName: newTableName,
+            Item: {
+                PK: `MERCHANT#${merchantId}`,
+                SK: `MESSAGE#${timestamp}`, // 🟢 Unique & Sorted by time
+                entityType: "MESSAGE",
+                role: role, // 'user' or 'assistant'
+                content: content,
+                createdAt: timestamp
+            }
+        };
+        await newDynamoDB.send(new PutCommand(params));
+        return { success: true };
+    } catch (error) {
+        console.error("❌ Error saving chat:", error.message);
+        return { success: false };
+    }
+}
+
+
+async clearChatHistory(merchantId) {
+    try {
+        // 1. Pehle saare messages fetch karein
+        const params = {
+            TableName: newTableName,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+                ":pk": `MERCHANT#${merchantId}`,
+                ":sk": "MESSAGE#"
+            }
+        };
+
+        const result = await newDynamoDB.send(new QueryCommand(params));
+        const items = result.Items || [];
+
+        if (items.length === 0) return { success: true };
+
+        // 2. Loop karke har message ko delete karein
+        // Production Tip: Agar messages bhot zyada hain (>25), toh BatchWrite use karna chahiye.
+        // Abhi ke liye hum simple loop use kar rahe hain.
+        const deletePromises = items.map(item => 
+            newDynamoDB.send(new DeleteCommand({
+                TableName: newTableName,
+                Key: { PK: item.PK, SK: item.SK }
+            }))
+        );
+
+        await Promise.all(deletePromises);
+        return { success: true };
+    } catch (error) {
+        console.error("❌ Clear Chat Error:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * 🧠 LONG-TERM MEMORY: Get last N messages for AI context
+ */
+async getChatHistory(merchantId, limit = 10) {
+    try {
+        const params = {
+            TableName: newTableName,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+                ":pk": `MERCHANT#${merchantId}`,
+                ":sk": "MESSAGE#"
+            },
+            Limit: limit,
+            ScanIndexForward: false // 🟢 Get newest messages first
+        };
+
+        const result = await newDynamoDB.send(new QueryCommand(params));
+        
+        // AI ko bhejte waqt history ko wapas Seedha (Chronological) karna zaroori hai
+        const history = result.Items.map(item => ({
+            role: item.role,
+            content: item.content
+        })).reverse();
+
+        return history;
+    } catch (error) {
+        console.error("❌ Error fetching chat history:", error.message);
+        return [];
+    }
+}
+
+
 }
 
 module.exports = new DynamoDBService();

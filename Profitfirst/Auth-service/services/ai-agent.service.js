@@ -1,116 +1,135 @@
 const Groq = require("groq-sdk");
 const tools = require("../agents/tools");
-const { format } = require("date-fns"); // To give AI the date context
+const { format } = require("date-fns");
+const { searchKnowledge } = require("../agents/knowledge"); // 🟢 Imported correctly
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 class AIAgentService {
-  async chat(merchantId, userMessage, chatHistory = []) {
+  async chatStream(merchantId, userMessage, chatHistory = [], contextStr = "") {
     try {
-      // 🟢 STEP 1: Date Context (Bina iske AI relative dates nahi samajh payega)
       const today = format(new Date(), "EEEE, MMMM do, yyyy");
-
+      
       const systemMessage = {
-        role: "system",
-        content: `You are "ProfitFirst AI", a professional D2C Financial Analyst.
-                STRICT RULES:
-                1. Today is ${today}. Use this to calculate dates like yesterday or last month.
-                2. Use tools for numbers. NEVER guess.
-                3. If profit is negative, suggest checking RTO or Ads.
-                4. Currency is INR (₹). Format using Bold and Tables.`,
-      };
+  role: "system",
+  content: `You are "ProfitFirst AI", a Senior D2C Business Consultant and Financial Analyst. 
+    You are an expert in scaling Indian e-commerce brands on Shopify, Meta Ads, and Shiprocket.
+    ${contextStr}
 
-      const messages = [
+    PERSONALITY & TONE:
+    - Confident, professional, and data-driven. 
+    - Respond in "Hinglish" (Mix of Hindi and English) if the user speaks Hindi, to keep it natural and human-like.
+    - NEVER mention internal tool names like 'getFinancialSummary' or 'searchBusinessStrategy' to the user.
+
+    CORE OPERATING RULES:
+    1. NUMBERS ARE SACRED: Use your data tools for any financial query. ALWAYS format currency and key metrics in **Bold** (e.g., **₹5,38,638** or **74.01% RTO**).
+    2. DATA -> INSIGHT -> ACTION: Don't just give numbers. Tell them what it means. 
+       (e.g., "Sir, aapka Net Profit negative hai because your **₹8,371** shipping cost is too high compared to your earned revenue.")
+    3. DATE REFERENCE: Today is ${format(new Date(), "EEEE, MMMM do, yyyy")}.
+
+    HANDLING UNKNOWN QUESTIONS (The Expert Way):
+    - If a user asks something outside your data or knowledge base (e.g., personal advice or unrelated topics), do not say "I don't know."
+    - Instead, pivot back to your expertise as a Business Analyst. 
+    - Example: "As your D2C growth partner, my focus is on your business profitability. While I can't advise on [unrelated topic], I can tell you that focusing on fixing your current **74% RTO rate** is the most critical move for your business right now. Should we look at a strategy for that?"
+    - Always sound like a CFO who is protective of the merchant's capital.
+
+    FORMATTING:
+    - Use Markdown tables for any comparison.
+    - Use bullet points for action items.
+    - Keep responses concise but high-impact.`
+};
+
+      // 🧠 Memory Management: Keep context but save tokens
+      const limitedHistory = chatHistory.slice(-10);
+
+      let messages = [
         systemMessage,
-        ...chatHistory,
+        ...limitedHistory,
         { role: "user", content: userMessage },
       ];
 
-      // 🟢 STEP 2: Initial Call (AI deciding strategy)
-      const response = await groq.chat.completions.create({
-        model: "llama3-70b-8192",
+      // 🟢 STEP 1: INITIAL ANALYSIS (Non-Streaming)
+      const initialResponse = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
         messages,
         tools: this.getToolDefinitions(),
         tool_choice: "auto",
-        temperature: 0, // Keep it deterministic (no random answers)
+        temperature: 0,
       });
 
-      let responseMessage = response.choices[0].message;
+      const responseMessage = initialResponse.choices[0].message;
       const toolCalls = responseMessage.tool_calls;
 
-      // 🟢 STEP 3: Multi-Tool Execution (Handles multiple tool requests)
+      // 🟢 STEP 2: MULTI-TOOL EXECUTION
       if (toolCalls) {
-        // Add the AI's tool request to history
         messages.push(responseMessage);
+        const toolNames = toolCalls.map((tc) => tc.function.name);
 
         for (const toolCall of toolCalls) {
           const functionName = toolCall.function.name;
           const args = JSON.parse(toolCall.function.arguments);
 
-          console.log(`🤖 AI calling Tool: ${functionName} with args:`, args);
-
-          let content;
+          let toolContent;
           try {
             if (functionName === "getFinancialSummary") {
-              content = await tools.getFinancialSummary(
-                merchantId,
-                args.startDate,
-                args.endDate,
-              );
+              toolContent = await tools.getFinancialSummary(merchantId, args.startDate, args.endDate);
             } else if (functionName === "getPerformanceSummary") {
-              content = await tools.getPerformanceSummary(
-                merchantId,
-                args.days,
-              );
+              toolContent = await tools.getPerformanceSummary(merchantId, args.days);
             } else if (functionName === "getProductAnalytics") {
-              content = await tools.getProductAnalytics(
-                merchantId,
-                args.startDate,
-                args.endDate,
-              );
+              toolContent = await tools.getProductAnalytics(merchantId, args.startDate, args.endDate);
+            } else if (functionName === "searchBusinessStrategy") {
+              // 🟢 FIXED: Calling the imported function directly
+              console.log(`🧠 AI searching Strategy for: ${args.query}`);
+              toolContent = await searchKnowledge(args.query); 
             } else {
-              // 🟢 SAFETY: Agar AI ne koi aisa tool mang liya jo exist nahi karta
-              content = "Tool not implemented yet.";
+              toolContent = "Tool not found.";
             }
           } catch (err) {
-            content = `Error in data engine: ${err.message}`;
+            toolContent = `Error: ${err.message}`;
           }
 
-          // Push each tool response into messages
           messages.push({
             tool_call_id: toolCall.id,
             role: "tool",
             name: functionName,
-            content: content,
+            content: toolContent,
           });
         }
 
-        // 🟢 STEP 4: Final Synthesis (AI explains the numbers)
-        const finalResponse = await groq.chat.completions.create({
-          model: "llama3-70b-8192",
+        // 🟢 STEP 3: FINAL SYNTHESIS (Streaming)
+        const stream = await groq.chat.completions.create({
+          model: "llama-3.3-70b-versatile",
           messages,
-          temperature: 0,
+          stream: true,
+          temperature: 0.2,
         });
 
-        return finalResponse.choices[0].message.content;
+        return { stream, usedTools: toolNames };
       }
 
-      return responseMessage.content;
+      // 🟢 STEP 4: NO TOOL REQUIRED
+      const stream = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [systemMessage, ...limitedHistory, { role: "user", content: userMessage }],
+        stream: true,
+        temperature: 0.5,
+      });
+
+      return { stream, usedTools: [] };
+
     } catch (error) {
       console.error("❌ AIAgentService Fatal Error:", error.message);
-      return "I'm having a technical glitch. My team is on it! Please ask again in a few seconds.";
+      throw error;
     }
   }
 
-  // Define tools in a separate method for cleanliness
   getToolDefinitions() {
     return [
       {
         type: "function",
         function: {
           name: "getFinancialSummary",
-          description:
-            "Get aggregated profit, revenue, and leakage data for a date range.",
+          description: "Get aggregated profit, revenue, and leakage data for a date range.",
           parameters: {
             type: "object",
             properties: {
@@ -128,9 +147,7 @@ class AIAgentService {
           description: "Get day-by-day stats to show trends (past X days).",
           parameters: {
             type: "object",
-            properties: {
-              days: { type: "number", description: "Default is 7." },
-            },
+            properties: { days: { type: "number", description: "Default 7." } },
           },
         },
       },
@@ -138,13 +155,27 @@ class AIAgentService {
         type: "function",
         function: {
           name: "getProductAnalytics",
-          description: "Get top 5 products by revenue and their profit.",
+          description: "Get top 5 products by revenue and profit.",
           parameters: {
             type: "object",
             properties: {
               startDate: { type: "string" },
               endDate: { type: "string" },
             },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "searchBusinessStrategy",
+          description: "Search for expert advice on reducing RTO, improving profit, or marketing tips.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "The business problem (e.g. 'how to reduce RTO')" },
+            },
+            required: ["query"],
           },
         },
       },

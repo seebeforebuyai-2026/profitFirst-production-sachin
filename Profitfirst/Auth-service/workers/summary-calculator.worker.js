@@ -22,7 +22,7 @@ const pollQueue = async () => {
 
       if (body.type === "SUMMARY_CALC") {
         console.log(`📊 Processing Summary Job for Merchant: ${body.merchantId}`);
-        await calculateProfitSummaries(body); // Accept full body for affectedDates
+        await calculateProfitSummaries(body); 
         
         await sqsClient.send(new DeleteMessageCommand({
           QueueUrl: summaryQueueUrl, ReceiptHandle: message.ReceiptHandle
@@ -44,7 +44,7 @@ const calculateProfitSummaries = async (job) => {
     }));
     const profile = profileRes?.Item || {};
     const gatewayRate = (profile.paymentGatewayFeePercent || 2.5) / 100;
-    const rtoFee = Number(profile.rtoHandlingFee || 0);
+    const rtoFee = Number(profile.rtoHandlingFee || 60);
     const dailyOverhead = ((Number(profile.agencyFees) || 0) + (Number(profile.staffSalary) || 0) + (Number(profile.officeRent) || 0) + (Number(profile.otherExpenses) || 0)) / 30;
 
     let datesToCalculate = [];
@@ -141,7 +141,7 @@ const calculateProfitSummaries = async (job) => {
               businessExpenses: Number(dailyOverhead.toFixed(2)),
               updatedAt: new Date().toISOString()
             }
-          }));
+          })); 
       }
     }
 

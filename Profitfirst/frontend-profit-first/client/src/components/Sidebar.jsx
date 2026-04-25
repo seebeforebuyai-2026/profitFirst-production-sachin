@@ -75,8 +75,8 @@ const Sidebar = ({ isLocked = false }) => {
                     isActive && !isLocked
                       ? "bg-[#1a1a1a] text-white"
                       : isLocked
-                      ? "text-gray-600 cursor-not-allowed opacity-50"
-                      : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
+                        ? "text-gray-600 cursor-not-allowed opacity-50"
+                        : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                   }`
                 }
               >
@@ -85,13 +85,19 @@ const Sidebar = ({ isLocked = false }) => {
                 {isLocked && <span className="ml-auto text-[10px]">🔒</span>}
               </NavLink>
 
-              {/* Chatbot (DISABLED) */}
-              <NavLink
-                to="#"
-                onClick={(e) => e.preventDefault()}
-                className="flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg text-xs 2xl:text-sm text-gray-600 cursor-not-allowed opacity-50 pointer-events-none"
+            
+               <NavLink
+                to="/dashboard/chatbot"
+                onClick={() => setIsOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 p-1.5 2xl:p-2 rounded-lg transition-colors text-xs 2xl:text-sm ${
+                    isActive
+                      ? "bg-[#1a1a1a] text-white"
+                      : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
+                  }`
+                }
               >
-                <FiMessageSquare className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
+                <FiPackage className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                 <span>Chatbot</span>
               </NavLink>
 
@@ -155,8 +161,8 @@ const Sidebar = ({ isLocked = false }) => {
                     isActive
                       ? "bg-[#1a1a1a] text-white"
                       : isLocked && !profile?.cogsCompleted
-                      ? "text-gray-600 cursor-not-allowed opacity-50"
-                      : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
+                        ? "text-gray-600 cursor-not-allowed opacity-50"
+                        : "text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
                   }`
                 }
               >

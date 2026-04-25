@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -153,28 +151,10 @@ app.use(compression({
     }
     return compression.filter(req, res);
   },
-  level: 6 // Balance between speed and compression
+  level: 6 
 }));
 
-// Body parsing middleware with size limits and error handling
-// app.use(express.json({ 
-//   limit: '10kb',
-//   verify: (req, res, buf, encoding) => {
-//     // Verify JSON payload size
-//     if (buf.length > 10240) { // 10KB in bytes
-//       throw new Error('Request body too large');
-//     }
-//   }
-// }));
-// app.use(express.urlencoded({ 
-//   extended: true, 
-//   limit: '10kb',
-//   verify: (req, res, buf, encoding) => {
-//     if (buf.length > 10240) {
-//       throw new Error('Request body too large');
-//     }
-//   }
-// }));
+
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -239,11 +219,9 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Authentication routes with rate limiting
-// OAuth routes have stricter limits
 app.use('/api/auth/oauth', oauthLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
-
+app.use('/api/ai', require('./routes/ai-chat.routes')); // AI chat routes (protected by auth middleware)
 // Onboarding routes (requires authentication)
 app.use('/api/onboard', onboardingRoutes);
 
