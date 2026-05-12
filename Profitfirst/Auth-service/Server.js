@@ -19,11 +19,8 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-// HTTPS enforcement for production
 if (isProduction) {
   app.use((req, res, next) => {
-    // 🟢 CRITICAL PRODUCTION FIX: Health check ko bypass karo
-    // Taaki AWS Load Balancer ise "Healthy" maan sake
     if (req.path === '/health') {
       return next();
     }
@@ -53,7 +50,6 @@ if (missingEnvVars.length > 0) {
   console.error('See .env.example for reference.');
   process.exit(1);
 }
-
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -95,8 +91,6 @@ const oauthLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// CORS configuration - allows frontend to make requests
-// Support multiple origins for development and production
 const allowedOrigins = [
   'http://localhost:3000',  
   'http://localhost:5173', // Vite default
@@ -112,10 +106,8 @@ const allowedOrigins = [
 ].filter(Boolean); // Remove undefined values
 
 
-// CORS configuration
 const corsOptions = isProduction ? {
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
     if (!origin) {
       return callback(null, true);
     }
@@ -133,7 +125,7 @@ const corsOptions = isProduction ? {
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   maxAge: 600
 } : {
-  origin: true, // Allow all origins in development
+  origin: true, 
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'x-shopify-access-token'],
@@ -143,7 +135,6 @@ const corsOptions = isProduction ? {
 
 app.use(cors(corsOptions));
 
-// Compression middleware - gzip responses for faster transfer
 app.use(compression({
   filter: (req, res) => {
     if (req.headers['x-no-compression']) {
@@ -159,7 +150,6 @@ app.use(compression({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 🟢 ALSO UPDATE THE VERIFY FUNCTION (Crucial!)
 app.use(express.json({ 
   limit: '10mb', 
   verify: (req, res, buf, encoding) => {
@@ -207,12 +197,10 @@ app.use((req, _res, next) => {
   const logMessage = `[${timestamp}] ${req.method} ${req.path} - IP: ${req.ip}`;
   
   if (isProduction) {
-    // Production: Log only important requests
     if (req.method !== 'GET' || req.path.includes('/auth/')) {
       console.log(logMessage);
     }
   } else {
-    // Development: Log all requests
     console.log(logMessage);
   }
   
@@ -221,7 +209,7 @@ app.use((req, _res, next) => {
 
 app.use('/api/auth/oauth', oauthLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/ai', require('./routes/ai-chat.routes')); // AI chat routes (protected by auth middleware)
+app.use('/api/ai', require('./routes/ai-chat.routes')); 
 // Onboarding routes (requires authentication)
 app.use('/api/onboard', onboardingRoutes);
 

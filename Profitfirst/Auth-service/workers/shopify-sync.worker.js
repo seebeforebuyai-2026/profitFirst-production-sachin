@@ -136,6 +136,7 @@ async function startIncrementalSyncForAll() {
 /**
  * 🛠️ WORKER LOGIC
  */
+
 const processOrders = async (job) => {
   const syncStartTime = new Date().toISOString();
   const {
@@ -148,7 +149,7 @@ const processOrders = async (job) => {
   } = job;
 
   try {
-    console.log(`🔍 [DEBUG] Processing ${merchantId} | Page: ${pageCount}`);
+    console.log(`🔍 [ShopifyWorker] Processing ${merchantId} | Mode: ${mode}`);
 
     const [variantsRes, integrationRes] = await Promise.all([
       dynamoDBService.getVariantsByMerchant(merchantId),
@@ -198,40 +199,87 @@ const processOrders = async (job) => {
         );
         affectedDates.add(dateIST);
 
-        await s3Client.send(
-          new PutObjectCommand({
-            Bucket: s3BucketName,
-            Key: `${merchantId}/orders/${orderId}.json`,
-            Body: JSON.stringify(order),
-            ContentType: "application/json",
-          }),
+        // 1. Financial Constants from API
+        const totalPrice = Number(order.totalPriceSet?.shopMoney?.amount || 0);
+
+        const amountPaidAtOrder = Number(
+          order.totalReceivedSet?.shopMoney?.amount || 0,
         );
 
-        const totalPrice = Number(order.totalPriceSet?.shopMoney?.amount || 0);
+        const outstanding = Number(
+          order.totalOutstandingSet?.shopMoney?.amount || 0,
+        );
+
         const discounts = Number(
           order.totalDiscountsSet?.shopMoney?.amount || 0,
         );
-        const refunds = (order.refunds || []).reduce((sum, r) => {
+
+        const financialStatus =
+          order.displayFinancialStatus?.toLowerCase() || "unknown";
+
+        // 2. Refund Logic
+        const refundsProductOnly = (order.refunds || []).reduce((sum, r) => {
           const items = r.refundLineItems?.edges || r.refundLineItems || [];
+
           return (
             sum +
             items.reduce(
-              (rs, item) =>
-                rs +
+              (rSum, item) =>
+                rSum +
                 Number((item.node || item).subtotalSet?.shopMoney?.amount || 0),
               0,
             )
           );
         }, 0);
+        const netAmount = totalPrice - discounts - refundsProductOnly;
 
+        let prepaidAmount = 0;
+        let codAmount = 0;
+        let paymentType = "COD";
+
+        const statusUpper = (order.displayFinancialStatus || "").toUpperCase();
+        const gateways = (order.paymentGatewayNames || [])
+          .join(" ")
+          .toLowerCase();
+
+        const isPPCOD = gateways.includes("ppcod") || gateways.includes("cod");
+
+        if (statusUpper === "PAID") {
+          paymentType = "PREPAID";
+          prepaidAmount = netAmount;
+          codAmount = 0;
+        } else if (statusUpper === "PARTIALLY_PAID") {
+          paymentType = "PARTIAL_COD";
+          codAmount = outstanding > 0 ? outstanding : netAmount * 0.85; // fallback 85%
+          prepaidAmount = netAmount - codAmount;
+        } else if (statusUpper === "PENDING") {
+          paymentType = "COD";
+          prepaidAmount = 0;
+          codAmount = netAmount;
+        } else if (statusUpper === "REFUNDED" || statusUpper === "VOIDED") {
+          paymentType = "REFUNDED";
+          prepaidAmount = 0;
+          codAmount = 0;
+        } else {
+          paymentType = isPPCOD ? "PARTIAL_COD" : "COD";
+          prepaidAmount = 0;
+          codAmount = netAmount;
+        }
+
+        // 4. Realization Logic
+        // Prepaid and Partial Advance are considered "Realized" on Order Date
+        let isRealized =
+          paymentType === "PREPAID" || paymentType === "PARTIAL_COD";
+
+        // 5. COGS Stamping
         let totalCogs = 0;
         const lineItems = order.lineItems.edges.map(({ node: li }) => {
           const vId = li.variant?.id?.split("/").pop();
           const cost = costMap[vId] || 0;
           totalCogs += cost * li.quantity;
           return {
+            title: li.title || "",
             variantId: vId,
-            productName: li.title || "Unknown",
             quantity: li.quantity,
             cogsAtSale: cost,
             price: Number(li.discountedUnitPriceSet?.shopMoney?.amount || 0),
@@ -245,20 +293,27 @@ const processOrders = async (job) => {
             entityType: "ORDER",
             orderId,
             orderName: order.name || "",
+            normalizedOrderName: (order.name || "").replace(/^#/, "").trim().toLowerCase(),
             totalPrice,
             discounts,
             tax: Number(order.totalTaxSet?.shopMoney?.amount || 0),
-            refunds,
-            netRevenue: totalPrice - discounts - refunds,
-            paymentType: (order.paymentGatewayNames || []).some(
-              (g) =>
-                g?.toLowerCase().includes("cash") || g?.toLowerCase() === "cod",
-            )
-              ? "cod"
-              : "prepaid",
-            status: order.displayFinancialStatus?.toLowerCase() || "unknown",
-            isCancelled: !!order.cancelledAt,
+            refunds: refundsProductOnly,
+            netRevenue: Number(netAmount.toFixed(2)),
             totalCogs: Number(totalCogs.toFixed(2)),
+
+            // Realization Data
+            paymentType,
+            financialStatus,
+            isCOD: paymentType === "COD",
+            isPrepaid: paymentType === "PREPAID",
+
+            prepaidAmount: Number(prepaidAmount.toFixed(2)),
+            codAmount: Number(codAmount.toFixed(2)),
+            outstandingAmount: Number(outstanding.toFixed(2)),
+            isRealized,
+            orderCreatedAtIST: dateIST,
+            status: order.displayFinancialStatus?.toLowerCase(),
+            isCancelled: !!order.cancelledAt,
             lineItems,
             orderCreatedAt: order.createdAt,
             updatedAt: new Date().toISOString(),
@@ -277,13 +332,11 @@ const processOrders = async (job) => {
     const datesArray = Array.from(affectedDates);
 
     if (data.pageInfo.hasNextPage) {
-      // 🟢 UPDATE PROGRESS HERE
       await updateSyncProgress(
         merchantId,
         "SHOPIFY",
         Math.min(95, pageCount * 10),
       );
-
       await sqsClient.send(
         new SendMessageCommand({
           QueueUrl: shopifyQueueUrl,
@@ -296,7 +349,6 @@ const processOrders = async (job) => {
         }),
       );
     } else {
-      // 🟢 MARK AS COMPLETE HERE
       await markSyncComplete(
         merchantId,
         "SHOPIFY",

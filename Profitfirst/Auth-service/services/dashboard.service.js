@@ -4,7 +4,7 @@ const { newDynamoDB, newTableName } = require("../config/aws.config");
 class DashboardService {
   /**
    * Aggregates daily SUMMARY# records into a single period response.
-   * Rule: Sum the raw totals, then calculate ratios at the end.
+   * Handles the new Real Cash-Flow metrics.
    */
   async getAggregatedSummary(merchantId, startDate, endDate) {
     try {
@@ -12,7 +12,6 @@ class DashboardService {
       let lastKey = null;
 
       // 1. Fetch all SUMMARY# records for the date range
-      // SUMMARY#2026-03-01 to SUMMARY#2026-03-07
       do {
         const params = {
           TableName: newTableName,
@@ -30,10 +29,19 @@ class DashboardService {
         lastKey = result.LastEvaluatedKey;
       } while (lastKey);
 
-      // 2. Initialize the Master Aggregator
+      // 2. Initialize the Master Aggregator with New Cash-Flow Fields
       const totals = {
         revenueGenerated: 0,
-        revenueEarned: 0,
+        revenueEarned: 0, // Total realized cash (Prepaid + Delivered COD)
+
+        // 🟢 NEW CASH-FLOW METRICS
+        prepaidRevenue: 0, // Total prepaid sales in this period
+        codRevenue: 0, // Total COD cash received in this period
+        revenueFromPastOrders: 0, // Money from orders placed BEFORE this period
+        revenueFromCurrentOrders: 0, // Money from orders placed DURING this period
+        partialCodOrders: 0,
+        partialPrepaidAmount: 0,
+        partialCodAmount: 0,
         cogs: 0,
         adsSpend: 0,
         shippingSpend: 0,
@@ -49,9 +57,10 @@ class DashboardService {
         prepaidOrders: 0,
         codOrders: 0,
         rtoRevenueLost: 0,
+        totalCost: 0,
       };
 
-      // 3. Raw Summation of all days
+      // 3. Raw Summation logic
       days.forEach((day) => {
         Object.keys(totals).forEach((key) => {
           if (day[key] !== undefined) {
@@ -60,8 +69,7 @@ class DashboardService {
         });
       });
 
-      // 4. WEIGHTED RATIO CALCULATIONS (Crucial for Accuracy)
-      // We calculate these based on the SUMMED totals, not average of daily averages.
+      // 4. WEIGHTED RATIO CALCULATIONS
       const profitMargin =
         totals.revenueEarned > 0
           ? (totals.moneyKept / totals.revenueEarned) * 100
@@ -73,20 +81,7 @@ class DashboardService {
         totals.totalOrders > 0
           ? totals.revenueGenerated / totals.totalOrders
           : 0;
-      const profitPerOrder =
-        totals.deliveredOrders > 0
-          ? totals.moneyKept / totals.deliveredOrders
-          : 0;
-      const shippingPerOrder =
-        totals.deliveredOrders > 0
-          ? totals.shippingSpend / totals.deliveredOrders
-          : 0;
 
-      // 5. PERIOD FORECASTING (Merchant Specific)
-      const totalDecided = totals.deliveredOrders + totals.rtoOrders;
-      const successRate =
-        totalDecided > 0 ? (totals.deliveredOrders / totalDecided) * 100 : 0;
-      const rtoRate = 100 - successRate;
       const totalCost =
         totals.cogs +
         totals.adsSpend +
@@ -94,74 +89,65 @@ class DashboardService {
         totals.gatewayFees +
         totals.rtoHandlingFees +
         totals.businessExpenses;
-      // Expected realization from currently in-transit orders
+
+      // 5. PERIOD FORECASTING (Merchant Specific)
+      const totalDecided = totals.deliveredOrders + totals.rtoOrders;
+      const successRate =
+        totalDecided > 0 ? (totals.deliveredOrders / totalDecided) * 100 : 80;
+      const rtoRate = 100 - successRate;
+
       const expectedDelivered = Math.round(
         totals.inTransitOrders * (successRate / 100),
       );
       const expectedRevenue = expectedDelivered * aov;
 
-      // 6. TOP PRODUCTS (Delivered Only Profitability)
+      // 6. TOP PRODUCTS
       const topProducts = await this.calculateTopProducts(
         merchantId,
         startDate,
         endDate,
       );
 
-      // 7. BUILD MONEY FLOW DATA (For Recharts in Frontend)
-      const moneyFlowData = [
-        {
-          name: "Revenue",
-          value: Number(totals.revenueEarned.toFixed(0)),
-          type: "positive",
-        },
-        {
-          name: "COGS",
-          value: -Number(totals.cogs.toFixed(0)),
-          type: "negative",
-        },
-        {
-          name: "Marketing",
-          value: -Number(totals.adsSpend.toFixed(0)),
-          type: "negative",
-        },
-        {
-          name: "Shipping",
-          value: -Number(totals.shippingSpend.toFixed(0)),
-          type: "negative",
-        },
-        {
-          name: "Expenses/Fees",
-          value: -Number(
-            (
-              totals.businessExpenses +
-              totals.gatewayFees +
-              totals.rtoHandlingFees
-            ).toFixed(0),
-          ),
-          type: "negative",
-        },
-        {
-          name: "Net Profit",
-          value: Number(totals.moneyKept.toFixed(0)),
-          type: "positive",
-        },
-      ];
-
       return {
         success: true,
         summary: {
           ...totals,
-          // Rounding for UI
+          // Rounding for Frontend
           profitMargin: Number(profitMargin.toFixed(2)),
           roas: Number(roas.toFixed(2)),
           poas: Number(poas.toFixed(2)),
           aov: Number(aov.toFixed(0)),
-          profitPerOrder: Number(profitPerOrder.toFixed(0)),
-          shippingPerOrder: Number(shippingPerOrder.toFixed(0)),
+          profitPerOrder:
+            totals.deliveredOrders > 0
+              ? Number((totals.moneyKept / totals.deliveredOrders).toFixed(0))
+              : 0,
+          shippingPerOrder:
+            totals.deliveredOrders > 0
+              ? Number(
+                  (totals.shippingSpend / totals.deliveredOrders).toFixed(0),
+                )
+              : 0,
           poasDecision: this.getPoasDecision(poas),
           totalCost: Number(totalCost.toFixed(2)),
           rtoRate: Number(rtoRate.toFixed(2)),
         },
+        moneyFlowData: [
+          { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
+          { name: "COD", value: totals.codRevenue, type: "positive" },
+          { name: "COGS", value: -totals.cogs, type: "negative" },
+          { name: "Ads", value: -totals.adsSpend, type: "negative" },
+          { name: "Shipping", value: -totals.shippingSpend, type: "negative" },
+          {
+            name: "Fees",
+            value: -(totals.gatewayFees + totals.rtoHandlingFees),
+            type: "negative",
+          },
+          {
+            name: "Overhead",
+            value: -totals.businessExpenses,
+            type: "negative",
+          },
+        ],
         forecast: {
           successRate: Number(successRate.toFixed(2)),
           inTransit: totals.inTransitOrders,
@@ -175,8 +161,18 @@ class DashboardService {
                 : "Low Risk",
         },
         topProducts,
-        moneyFlowData, // Simplified for Recharts
-        chartData: days.sort((a, b) => a.date.localeCompare(b.date)), // Sorted for the chart
+        revenueSourceBreakdown: {
+          fromPastOrders: Number(totals.revenueFromPastOrders.toFixed(2)),
+          fromCurrentOrders: Number(totals.revenueFromCurrentOrders.toFixed(2)),
+          totalPrepaid: Number(totals.prepaidRevenue.toFixed(2)),
+          totalCOD: Number(totals.codRevenue.toFixed(2)),
+        },
+        chartData: days
+          .map((day) => ({
+            ...day,
+            date: day.SK?.replace("SUMMARY#", ""),
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
       };
     } catch (error) {
       console.error("❌ Dashboard Aggregator Error:", error.message);
@@ -193,52 +189,70 @@ class DashboardService {
 
   async calculateTopProducts(merchantId, start, end) {
     try {
-      const sDate = new Date(start);
-      sDate.setUTCHours(0, 0, 0, 0);
+      const lookbackStart = new Date(start);
+      lookbackStart.setDate(lookbackStart.getDate() - 30);
 
-      const eDate = new Date(end);
-      eDate.setUTCHours(23, 59, 59, 999);
-      let allOrders = [];
+      // Dashboard Range (IST Strings)
+      const sDateIST = start;
+      const eDateIST = end;
+
+      let allPotentialOrders = [];
       let lastKey = null;
 
-      // Important: Filtering ORDER# records to find best sellers in the period
       do {
         const params = {
           TableName: newTableName,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          // Note: Filtering by orderCreatedAt ensures we look at this period's sales
-          FilterExpression: "orderCreatedAt BETWEEN :start AND :end",
+          // Pichle 30 dino se lekar aaj tak ke saare orders uthao
+          FilterExpression: "orderCreatedAt >= :lookback",
           ExpressionAttributeValues: {
             ":pk": `MERCHANT#${merchantId}`,
             ":sk": "ORDER#",
-            ":start": sDate.toISOString(),
-            ":end": eDate.toISOString(),
+            ":lookback": lookbackStart.toISOString(),
           },
         };
         if (lastKey) params.ExclusiveStartKey = lastKey;
-
         const result = await newDynamoDB.send(new QueryCommand(params));
-        allOrders.push(...(result.Items || []));
+        allPotentialOrders.push(...(result.Items || []));
         lastKey = result.LastEvaluatedKey;
       } while (lastKey);
 
       const productMap = {};
 
-      allOrders.forEach((order) => {
-        // Logic: Only delivered orders should show up in "Product Profitability"
-        // This matches the Dashboard's "Actual Money" logic.
-        // We assume Summary Worker has already updated individual order status where possible.
-        if (order.status !== "cancelled") {
+      allPotentialOrders.forEach((order) => {
+        let isRealizedInPeriod = false;
+
+        const pType = (order.paymentType || "").toUpperCase();
+
+        // Case A: Prepaid / Partial — realized on order creation date
+        if (
+          (pType === "PREPAID" || pType === "PARTIAL_COD") &&
+          order.orderCreatedAtIST >= sDateIST &&
+          order.orderCreatedAtIST <= eDateIST
+        ) {
+          isRealizedInPeriod = true;
+        }
+        // Case B: COD — realized only on delivery
+        else if (
+          pType === "COD" &&
+          order.deliveredAtIST &&
+          order.deliveredAtIST >= sDateIST &&
+          order.deliveredAtIST <= eDateIST
+        ) {
+          isRealizedInPeriod = true;
+        }
+
+        if (isRealizedInPeriod && !order.isCancelled) {
           (order.lineItems || []).forEach((item) => {
-            const name = item.productName || "Unknown Product";
+            const name = item.title || "Unknown Product";
             if (!productMap[name]) {
               productMap[name] = { name, deliveredQty: 0, revenue: 0, cogs: 0 };
             }
             productMap[name].deliveredQty += item.quantity || 0;
             productMap[name].revenue +=
-              (item.price || 0) * (item.quantity || 0);
+              (Number(item.price) || 0) * (item.quantity || 0);
             productMap[name].cogs +=
-              (item.cogsAtSale || 0) * (item.quantity || 0);
+              (Number(item.cogsAtSale) || 0) * (item.quantity || 0);
           });
         }
       });
@@ -253,7 +267,7 @@ class DashboardService {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5);
     } catch (error) {
-      console.error("Top Products Calculation Error:", error.message);
+      console.error("Top Products Error:", error.message);
       return [];
     }
   }

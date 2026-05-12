@@ -84,7 +84,7 @@ class ShopifyUtil {
     try {
       const accessToken = encryptionService.decrypt(encryptedToken);
       const url = `https://${shop}/admin/api/2024-04/graphql.json`;
-      
+
       const query = `
       query getOrders($cursor: String, $query: String) {
         orders(
@@ -105,6 +105,9 @@ class ShopifyUtil {
               paymentGatewayNames
               subtotalPriceSet    { shopMoney { amount } }
               totalPriceSet       { shopMoney { amount } }
+              totalReceivedSet     { shopMoney { amount } } 
+              totalOutstandingSet { shopMoney { amount } }
+              totalRefundedSet    { shopMoney { amount } } 
               totalDiscountsSet   { shopMoney { amount } }
               totalTaxSet         { shopMoney { amount } }
               totalShippingPriceSet { shopMoney { amount } }
@@ -137,7 +140,7 @@ class ShopifyUtil {
       // Logic: variables.query ab wahi queryStr use karega jo Worker se aayi hai
       const variables = {
         cursor,
-        query: queryStr, 
+        query: queryStr,
       };
 
       console.log("-------------------------------------------------");

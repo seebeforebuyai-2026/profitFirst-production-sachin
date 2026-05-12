@@ -18,7 +18,7 @@ class AIAgentService {
 
     PERSONALITY & TONE:
     - Confident, professional, and data-driven. 
-    - Respond in "Hinglish" (Mix of Hindi and English) if the user speaks Hindi, to keep it natural and human-like.
+    - Respond in "Hinglish" (Mix of Hindi and English) if the user speaks Hindi, to keep it natural and human-like if the user speaks in English , to keep it natural and human-like English don't add then Hindi.
     - NEVER mention internal tool names like 'getFinancialSummary' or 'searchBusinessStrategy' to the user.
 
     CORE OPERATING RULES:

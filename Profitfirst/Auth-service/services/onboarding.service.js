@@ -703,11 +703,7 @@ class OnboardingService {
     }
   }
 
-  /**
-   * Legacy method for backward compatibility
-   *
-   * @deprecated Onboarding completes automatically in Step 5
-   */
+
   async completeOnboarding(merchantId, userId, finalData = {}) {
     console.warn(
       "⚠️  completeOnboarding is deprecated. Onboarding completes automatically in Step 5.",

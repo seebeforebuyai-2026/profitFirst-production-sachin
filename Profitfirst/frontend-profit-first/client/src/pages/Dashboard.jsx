@@ -103,18 +103,28 @@ const Dashboard = () => {
   }, [fetchDashboardData]);
 
   // 🟢 Real Data Chart Mapping
-  const formattedChartData = useMemo(() => {
-    if (!data?.chartData) return [];
-    return data.chartData.map((day) => ({
-      name: format(parseISO(day.date), "MMM dd"),
-      netProfit: Number(day.moneyKept || 0), // Truth from Summary Table
-    }));
-  }, [data]);
+ const formattedChartData = useMemo(() => {
+  if (!data?.chartData) return [];
+
+  return data.chartData
+    .map((day) => {
+      if (!day?.date) {
+        console.warn("Missing date in chartData:", day);
+        return null;
+      }
+
+      return {
+        name: format(parseISO(day.date), "MMM dd"),
+        netProfit: Number(day.moneyKept || 0),
+      };
+    })
+    .filter(Boolean);
+}, [data]);
 
   // 🟢 Real Money Flow Mapping
   const moneyFlowData = useMemo(() => {
     if (!data?.moneyFlowData) return [];
-    return data.moneyFlowData; // Direct waterfall array from Dashboard Service
+    return data.moneyFlowData;
   }, [data]);
 
   if (isLoading) {
@@ -214,7 +224,7 @@ const Dashboard = () => {
         <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
           Actual Money
         </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="Revenue Generated"
             value={`₹${summary.revenueGenerated.toLocaleString()}`}
@@ -232,15 +242,27 @@ const Dashboard = () => {
           />
           <MetricCard
             title="Total Cost"
-            value={`₹${(summary.totalCost || 0).toLocaleString()}`} // 🟢 Backend Truth
+            value={`₹${(summary.totalCost || 0).toLocaleString()}`}
             formula="COGS + Ads + Shipping + Fees + Overheads"
             color="text-red-400"
+          />
+          <MetricCard
+            title="Prepaid Revenue"
+            value={`₹${(summary.prepaidRevenue || 0).toLocaleString()}`}
+            formula="Prepaid orders placed in this period"
+            color="text-green-400"
+          />
+          <MetricCard
+            title="COD Revenue"
+            value={`₹${(summary.codRevenue || 0).toLocaleString()}`}
+            formula="COD orders delivered in this period"
+            color="text-green-400"
           />
           <MetricCard
             title="Money Kept"
             value={`₹${summary.moneyKept.toLocaleString()}`}
             formula="Net Profit after Revenue - Costs - Leaks"
-            color="text-green-400"
+            color={summary.moneyKept <= 0 ? "text-red-500" : "text-green-400"}
           />
           <MetricCard
             title="Profit Margin"
@@ -290,11 +312,41 @@ const Dashboard = () => {
         <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
           Order Economics
         </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <MetricCard
             title="Total Orders"
             value={summary.totalOrders}
             subtitle="Non-Test / Non-Cancelled"
+          />
+          <MetricCard
+            title="Collected from Last Month"
+            value={summary.revenueFromPastOrders || 0}
+            subtitle="Orders placed before this range but delivered now"
+          />
+          <MetricCard
+            title="Collected from New Orders"
+            value={summary.revenueFromCurrentOrders || 0}
+            subtitle="Orders placed and delivered in this same range."
+          />
+          <MetricCard
+            title="partialCodOrders"
+            value={summary.partialCodOrders || 0}
+            subtitle="partialCodOrders"
+          />
+          <MetricCard
+            title="partialPrepaidAmount"
+            value={summary.partialPrepaidAmount || 0}
+            subtitle="partialPrepaidAmount"
+          />
+          <MetricCard
+            title="partialCodAmount"
+            value={summary.partialCodAmount || 0}
+            subtitle="partialCodAmount"
+          />
+          <MetricCard
+            title="codOrders"
+            value={summary.codOrders || 0}
+            subtitle="codOrders"
           />
           <MetricCard
             title="Delivered Orders"
