@@ -1,17 +1,27 @@
-const { QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { QueryCommand,GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
 
 class DashboardService {
-  /**
-   * Aggregates daily SUMMARY# records into a single period response.
-   * Handles the new Real Cash-Flow metrics.
-   */
   async getAggregatedSummary(merchantId, startDate, endDate) {
     try {
+
+       const profileResult = await newDynamoDB.send(new GetCommand({
+        TableName: newTableName,
+        Key: {
+          PK: `MERCHANT#${merchantId}`,
+          SK: "PROFILE"
+        }
+      }));
+      
+      const profile = profileResult.Item || {};
+      const staffSalary = Number(profile.staffSalary || 0);
+      const officeRent = Number(profile.officeRent || 0);
+      const agencyFees = Number(profile.agencyFees || 0);
+
+
       let days = [];
       let lastKey = null;
 
-      // 1. Fetch all SUMMARY# records for the date range
       do {
         const params = {
           TableName: newTableName,
@@ -29,16 +39,17 @@ class DashboardService {
         lastKey = result.LastEvaluatedKey;
       } while (lastKey);
 
-      // 2. Initialize the Master Aggregator with New Cash-Flow Fields
       const totals = {
-        revenueGenerated: 0,
-        revenueEarned: 0, // Total realized cash (Prepaid + Delivered COD)
+        staffSalary: staffSalary,
+        officeRent: officeRent,
+        agencyFees: agencyFees,
 
-        // 🟢 NEW CASH-FLOW METRICS
-        prepaidRevenue: 0, // Total prepaid sales in this period
-        codRevenue: 0, // Total COD cash received in this period
-        revenueFromPastOrders: 0, // Money from orders placed BEFORE this period
-        revenueFromCurrentOrders: 0, // Money from orders placed DURING this period
+        revenueGenerated: 0,
+        revenueEarned: 0, 
+        prepaidRevenue: 0, 
+        codRevenue: 0,
+        revenueFromPastOrders: 0, 
+        revenueFromCurrentOrders: 0, 
         partialCodOrders: 0,
         partialPrepaidAmount: 0,
         partialCodAmount: 0,
@@ -69,7 +80,6 @@ class DashboardService {
         });
       });
 
-      // 4. WEIGHTED RATIO CALCULATIONS
       const profitMargin =
         totals.revenueEarned > 0
           ? (totals.moneyKept / totals.revenueEarned) * 100
@@ -89,6 +99,24 @@ class DashboardService {
         totals.gatewayFees +
         totals.rtoHandlingFees +
         totals.businessExpenses;
+
+      const contributionProfit =
+        totals.revenueEarned -
+        (totals.cogs +
+          totals.adsSpend +
+          totals.shippingSpend +
+          totals.gatewayFees +
+          totals.rtoHandlingFees);
+      const contributionMargin =
+        totals.revenueEarned > 0
+          ? (contributionProfit / totals.revenueEarned) * 100
+          : 0;
+
+      const marginBeforeAds =
+        totals.revenueEarned > 0
+          ? (contributionProfit + totals.adsSpend) / totals.revenueEarned
+          : 0;
+      const breakEvenROAS = marginBeforeAds > 0 ? 1 / marginBeforeAds : 0;
 
       // 5. PERIOD FORECASTING (Merchant Specific)
       const totalDecided = totals.deliveredOrders + totals.rtoOrders;
@@ -117,6 +145,9 @@ class DashboardService {
           roas: Number(roas.toFixed(2)),
           poas: Number(poas.toFixed(2)),
           aov: Number(aov.toFixed(0)),
+          contributionProfit: Number(contributionProfit.toFixed(2)),
+          contributionMargin: Number(contributionMargin.toFixed(2)),
+          breakEvenROAS: Number(breakEvenROAS.toFixed(2)),
           profitPerOrder:
             totals.deliveredOrders > 0
               ? Number((totals.moneyKept / totals.deliveredOrders).toFixed(0))
@@ -132,21 +163,26 @@ class DashboardService {
           rtoRate: Number(rtoRate.toFixed(2)),
         },
         moneyFlowData: [
-          { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
-          { name: "COD", value: totals.codRevenue, type: "positive" },
+          // { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
+          {
+            name: "Revenue Earned",
+            value: totals.revenueEarned,
+            type: "positive",
+          },
           { name: "COGS", value: -totals.cogs, type: "negative" },
           { name: "Ads", value: -totals.adsSpend, type: "negative" },
           { name: "Shipping", value: -totals.shippingSpend, type: "negative" },
+          // {
+          //   name: "Fees",
+          //   value: -(totals.gatewayFees + totals.rtoHandlingFees),
+          //   type: "negative",
+          // },
           {
-            name: "Fees",
-            value: -(totals.gatewayFees + totals.rtoHandlingFees),
-            type: "negative",
-          },
-          {
-            name: "Overhead",
+            name: "Business Expenses",
             value: -totals.businessExpenses,
             type: "negative",
           },
+          { name: "Money Kept", value: totals.moneyKept, type: "positive" },
         ],
         forecast: {
           successRate: Number(successRate.toFixed(2)),
@@ -161,6 +197,10 @@ class DashboardService {
                 : "Low Risk",
         },
         topProducts,
+        staffSalary,
+        officeRent,
+        agencyFees,
+        
         revenueSourceBreakdown: {
           fromPastOrders: Number(totals.revenueFromPastOrders.toFixed(2)),
           fromCurrentOrders: Number(totals.revenueFromCurrentOrders.toFixed(2)),

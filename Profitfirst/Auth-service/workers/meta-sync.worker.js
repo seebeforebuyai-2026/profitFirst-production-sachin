@@ -70,7 +70,7 @@ const processMetaSync = async (job) => {
     }
 
     const dirtyDates = new Set(affectedDates);
-    let nextUrl = `https://graph.facebook.com/v20.0/${adAccountId}/insights`;
+    let nextUrl = `https://graph.facebook.com/v24.0/${adAccountId}/insights`;
     let initialParams = {
         access_token: token,
         time_range: JSON.stringify({ since: startStr, until: endStr }),

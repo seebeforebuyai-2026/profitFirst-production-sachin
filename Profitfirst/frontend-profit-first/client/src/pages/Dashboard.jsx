@@ -16,7 +16,6 @@ import {
 import DateRangeSelector from "../components/DateRangeSelector";
 import { PulseLoader } from "react-spinners";
 import { toast } from "react-toastify";
-// 🟢 Reusable Metric Card (Design Optimized for Production Data)
 const MetricCard = ({
   title,
   value,
@@ -40,6 +39,39 @@ const MetricCard = ({
   </div>
 );
 
+const Row = ({ label, value, valueColor = "text-white" }) => (
+  <div className="flex justify-between items-center py-[14px] last-of-type:border-none py-2">
+    <div className="text-sm text-[#8f8f8f]">{label}</div>
+    <div className={`text-[15px] font-bold ${valueColor}`}>{value}</div>
+  </div>
+);
+
+const Highlight = ({ text }) => (
+  <div className="mt-5 p-[18px] bg-[#161616] rounded-[16px] text-sm leading-relaxed text-[#b8b8b8]">
+    {text}
+  </div>
+);
+
+const SideCard = ({
+  title,
+  bigNumber,
+  bigNumberColor = "text-white",
+  subtext,
+  children,
+}) => (
+  <div className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-[24px] p-[26px]">
+    <div className="text-[13px] uppercase tracking-[1px] text-[#8f8f8f] mb-[22px] font-semibold">
+      {title}
+    </div>
+    <div className={`text-[40px] font-extrabold mb-3 ${bigNumberColor}`}>
+      {bigNumber}
+    </div>
+    <div className="text-sm leading-relaxed text-[#9d9d9d]">{subtext}</div>
+    <div className="mt-[34px]"></div>
+    {children}
+  </div>
+);
+
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +90,12 @@ const Dashboard = () => {
     to: format(new Date(), "yyyy-MM-dd"),
     label: "Last 30 days",
   });
+
+  const formatCurrency = (num) =>
+    `₹${Number(num || 0).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
   const fetchDashboardData = useCallback(
     async (isFirstLoad = false) => {
@@ -103,23 +141,23 @@ const Dashboard = () => {
   }, [fetchDashboardData]);
 
   // 🟢 Real Data Chart Mapping
- const formattedChartData = useMemo(() => {
-  if (!data?.chartData) return [];
+  const formattedChartData = useMemo(() => {
+    if (!data?.chartData) return [];
 
-  return data.chartData
-    .map((day) => {
-      if (!day?.date) {
-        console.warn("Missing date in chartData:", day);
-        return null;
-      }
+    return data.chartData
+      .map((day) => {
+        if (!day?.date) {
+          console.warn("Missing date in chartData:", day);
+          return null;
+        }
 
-      return {
-        name: format(parseISO(day.date), "MMM dd"),
-        netProfit: Number(day.moneyKept || 0),
-      };
-    })
-    .filter(Boolean);
-}, [data]);
+        return {
+          name: format(parseISO(day.date), "MMM dd"),
+          netProfit: Number(day.moneyKept || 0),
+        };
+      })
+      .filter(Boolean);
+  }, [data]);
 
   // 🟢 Real Money Flow Mapping
   const moneyFlowData = useMemo(() => {
@@ -219,170 +257,558 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* SECTION 1: ACTUAL MONEY (Bank Statement Level Data) */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-          Actual Money
-        </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard
-            title="Revenue Generated"
-            value={`₹${summary.revenueGenerated.toLocaleString()}`}
-            formula="Total Order Value - Discounts (Non-Cancelled)"
-          />
-          <MetricCard
-            title="Revenue Earned"
-            value={`₹${summary.revenueEarned.toLocaleString()}`}
-            formula="Net Revenue of DELIVERED orders only"
-          />
-          <MetricCard
-            title="Total COGS"
-            value={`₹${summary.cogs.toLocaleString()}`}
-            formula="Sum of variant costs (at sale time) for delivered qty"
-          />
-          <MetricCard
-            title="Total Cost"
-            value={`₹${(summary.totalCost || 0).toLocaleString()}`}
-            formula="COGS + Ads + Shipping + Fees + Overheads"
-            color="text-red-400"
-          />
-          <MetricCard
-            title="Prepaid Revenue"
-            value={`₹${(summary.prepaidRevenue || 0).toLocaleString()}`}
-            formula="Prepaid orders placed in this period"
-            color="text-green-400"
-          />
-          <MetricCard
-            title="COD Revenue"
-            value={`₹${(summary.codRevenue || 0).toLocaleString()}`}
-            formula="COD orders delivered in this period"
-            color="text-green-400"
-          />
-          <MetricCard
-            title="Money Kept"
-            value={`₹${summary.moneyKept.toLocaleString()}`}
-            formula="Net Profit after Revenue - Costs - Leaks"
-            color={summary.moneyKept <= 0 ? "text-red-500" : "text-green-400"}
-          />
-          <MetricCard
-            title="Profit Margin"
-            value={`${summary.profitMargin}%`}
-            color={
-              summary.profitMargin > 15 ? "text-green-400" : "text-yellow-500"
-            }
-            formula="Profitability Efficiency (Money Kept / Revenue Earned)"
-          />
-        </div>
-      </section>
+      <section>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.5fr 1fr",
+            gap: "32px",
+          }}
+        >
+          {/* LEFT PANEL */}
+          <div
+            style={{
+              border: "1px solid #1b1b1b",
+              borderRadius: "26px",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "18px",
+              }}
+            >
+              {/* Gross Revenue */}
+              <div
+                style={{
+                  background: "#151515",
+                  border: "1px solid #1f1f1f",
+                  borderRadius: "20px",
+                  padding: "22px",
+                  color: "#e5e7eb",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Gross Revenue
+                </div>
 
-      {/* SECTION 2: ADS PERFORMANCE (Meta Truth) */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-          Ads Performance
-        </h3>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <MetricCard
-            title="Ads Spend"
-            value={`₹${summary.adsSpend.toLocaleString()}`}
-            subtitle="Direct from Meta API"
-          />
-          <MetricCard
-            title="ROAS"
-            value={summary.roas}
-            formula="Revenue Generated / Ads Spend"
-          />
-          <MetricCard
-            title="POAS"
-            value={summary.poas}
-            formula="Money Kept / Ads Spend"
-          />
-          <div className="bg-green-500/5 border border-green-500/10 p-5 rounded-2xl flex flex-col justify-center">
-            <span className="text-[9px] font-black text-green-500 uppercase mb-1 tracking-widest">
-              Growth Decision
-            </span>
-            <div className="text-xs font-bold text-green-400 italic">
-              "{summary.poasDecision}"
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                  }}
+                >
+                  ₹{summary.revenueGenerated?.toLocaleString()}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Total Shopify revenue before cancellations and returns.
+                </div>
+              </div>
+
+              {/* Real Revenue */}
+              <div
+                style={{
+                  background: "#151515",
+                  border: "1px solid #1f1f1f",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Real Revenue
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#22d37d",
+                  }}
+                >
+                  {formatCurrency(summary.revenueEarned || 0)}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Actual money generated from delivered orders.
+                </div>
+              </div>
+
+              {/* Contribution Profit */}
+              <div
+                style={{
+                  background: "#151515",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Contribution Profit
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#ffcc4d",
+                  }}
+                >
+                  {formatCurrency(summary.contributionProfit || 0)}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Profit remaining after variable operational costs but before
+                  fixed business expenses.
+                </div>
+
+                <div style={{ marginTop: "34px" }} />
+
+                <Row
+                  label="Contribution Margin"
+                  value={`${summary.contributionMargin || 0}%`}
+                  valueColor="text-[#ffcc4d]"
+                  style={{ borderBottom: "none" }}
+                />
+
+                <Row
+                  label="Break-even ROAS"
+                  value={`${summary.breakEvenROAS || 0}`}
+                />
+                <Row label="Current ROAS" value={`${summary.roas || 0}`} />
+                <Row label=" POAS" value={`${summary.poas || 0}`} />
+
+                <Highlight text="Operationally healthy before fixed overhead expenses." />
+              </div>
+
+              {/* Total Cost */}
+              <div
+                style={{
+                  background: "#151515",
+                  border: "1px solid #1f1f1f",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Total Cost
+                </div>
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#ff6262",
+                  }}
+                >
+                  {formatCurrency(summary.totalCost || 0)}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Complete operational spend across advertising, fulfillment and
+                  product costs.
+                </div>
+
+                <div style={{ marginTop: "34px" }} />
+
+                <Row
+                  label="Ad Spend"
+                  value={`${formatCurrency(summary.adsSpend || 0)}`}
+                />
+
+                <Row
+                  label="COGS"
+                  value={`${formatCurrency(summary.cogs || 0)}`}
+                />
+
+                <Row
+                  label="Shipping Spend"
+                  value={`${formatCurrency(summary.shippingSpend || 0)}`}
+                />
+
+                <Row
+                  label="Gateway Fees"
+                  value={`${formatCurrency(summary.gatewayFees || 0)}`}
+                />
+
+                <Row
+                  label="COD & RTO Losses"
+                  value={`${formatCurrency(summary.rtoHandlingFees || 0)}`}
+                  valueColor="text-[#ff6262]"
+                />
+
+                <Highlight text="Advertising and COD losses are consuming the majority of business margin." />
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT PANEL */}
+          <div
+            style={{
+              gap: "18px",
+              display: "grid",
+              gridTemplateRows: "repeat(2, auto)",
+            }}
+          >
+            <div>
+              {/* new matrix added  */}
+              <div
+                style={{
+                  background: "#151515",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#fcfcfc",
+                    marginBottom: "2px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Revenue Intelligence
+                </div>
+
+                <Row
+                  label="Prepaid Revenue"
+                  value={`₹${(summary.prepaidRevenue || 0).toLocaleString()}`}
+                />
+
+                <Row
+                  label="COD Revenue"
+                  value={`₹${(summary.codRevenue || 0).toLocaleString()}`}
+                />
+                <Row
+                  label="Revenue From Current Orders"
+                  value={`₹${(summary.revenueFromCurrentOrders || 0).toLocaleString()}`}
+                />
+                <Row
+                  label="Revenue From Previous Orders"
+                  value={`₹${(summary.revenueFromPastOrders || 0).toLocaleString()}`}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: "#151515",
+                border: "1px solid #1f1f1f",
+                borderRadius: "20px",
+                padding: "22px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.8px",
+                  color: "#8f8f8f",
+                  marginBottom: "14px",
+                  fontWeight: "600",
+                }}
+              >
+                Net Business Profit
+              </div>
+
+              <div
+                style={{
+                  fontSize: "40px",
+                  fontWeight: "800",
+                  marginBottom: "10px",
+                  color: "#ff6262",
+                }}
+              >
+                {formatCurrency(summary.moneyKept || 0)}
+              </div>
+
+              <div
+                style={{
+                  fontSize: "14px",
+                  lineHeight: "1.6",
+                  color: "#9d9d9d",
+                }}
+              >
+                Final company profit after salaries, rent, agency fees and fixed
+                operational expenses.
+              </div>
+
+              <div style={{ marginTop: "34px" }} />
+
+              <Row
+                label="Profit Margin"
+                value={`${summary.profitMargin || 0}%`}
+              />
+              <Row
+                label="Average Order Value"
+                value={`${formatCurrency(summary.aov || 0)}`}
+              />
+
+              <Row
+                label="Team Salaries"
+                value={`${formatCurrency(summary.staffSalary || 2)}`}
+              />
+
+              <Row
+                label="Office Rent"
+                value={`${formatCurrency(summary.officeRent || 2)}`}
+              />
+
+              <Row
+                label="Agency Fees"
+                value={`${formatCurrency(summary.agencyFees || 2)}`}
+              />
+
+              <Highlight text="Fixed overhead is currently pushing the business into negative profitability." />
             </div>
           </div>
         </div>
       </section>
 
-      {/* SECTION 3: ORDER ECONOMICS (Linked Shopify & Shiprocket Truths) */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-          Order Economics
-        </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <MetricCard
-            title="Total Orders"
-            value={summary.totalOrders}
-            subtitle="Non-Test / Non-Cancelled"
-          />
-          <MetricCard
-            title="Collected from Last Month"
-            value={summary.revenueFromPastOrders || 0}
-            subtitle="Orders placed before this range but delivered now"
-          />
-          <MetricCard
-            title="Collected from New Orders"
-            value={summary.revenueFromCurrentOrders || 0}
-            subtitle="Orders placed and delivered in this same range."
-          />
-          <MetricCard
-            title="partialCodOrders"
-            value={summary.partialCodOrders || 0}
-            subtitle="partialCodOrders"
-          />
-          <MetricCard
-            title="partialPrepaidAmount"
-            value={summary.partialPrepaidAmount || 0}
-            subtitle="partialPrepaidAmount"
-          />
-          <MetricCard
-            title="partialCodAmount"
-            value={summary.partialCodAmount || 0}
-            subtitle="partialCodAmount"
-          />
-          <MetricCard
-            title="codOrders"
-            value={summary.codOrders || 0}
-            subtitle="codOrders"
-          />
-          <MetricCard
-            title="Delivered Orders"
-            value={summary.deliveredOrders}
-            subtitle="Confirmed by Shiprocket"
-          />
-          <MetricCard
-            title="RTO Count"
-            value={summary.rtoOrders}
-            subtitle="Returned to Origin"
-          />
-          <MetricCard
-            title="Cancelled"
-            value={summary.cancelledOrders}
-            subtitle="Cancelled via Shopify"
-          />
-          <MetricCard
-            title="Prepaid Orders"
-            value={summary.prepaidOrders}
-            subtitle="Payment method matching"
-          />
-          <MetricCard
-            title="AOV"
-            value={`₹${summary.aov.toLocaleString()}`}
-            subtitle="Generated Revenue / Total Orders"
-          />
-          <MetricCard
-            title="Profit Per Order"
-            value={`₹${summary.profitPerOrder.toLocaleString()}`}
-            subtitle="Money Kept / Delivered"
-          />
-          <MetricCard
-            title="Shipping / Order"
-            value={`₹${summary.shippingPerOrder.toLocaleString()}`}
-            subtitle="Total Shipping / Delivered"
-          />
+      <section>
+        <div>
+          <div
+            style={{
+              border: "1px solid #1b1b1b",
+              borderRadius: "26px",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "18px",
+              }}
+            >
+              {/* ORDER HEALTH */}
+              <div
+                style={{
+                  background: "#151515",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Order Health
+                </div>
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#ffcc4d",
+                  }}
+                >
+                  {summary.totalOrders || 0}
+                </div>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Overall order flow across delivery, returns and cancellations.
+                </div>
+                <div style={{ marginTop: "34px" }} />
+
+                <Row
+                  label="Delivered Orders"
+                  value={`${summary.deliveredOrders || 0}`}
+                  style={{ borderBottom: "none" }}
+                />
+                <Row label="RTO Orders" value={`${summary.rtoOrders || 0}`} />
+                <Row
+                  label="Cancelled Orders"
+                  value={`${summary.cancelledOrders || 0}`}
+                />
+              </div>
+
+              {/* PAYMENT BEHAVIOR */}
+              <div
+                style={{
+                  background: "#151515",
+                  border: "1px solid #1f1f1f",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Payment Behavior
+                </div>
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#22d37d",
+                  }}
+                >
+                  {summary.totalOrders - summary.cancelledOrders || 0}
+                </div>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Customer payment distribution across prepaid, COD and partial
+                  COD.
+                </div>
+                <div style={{ marginTop: "34px" }} />
+
+                <Row
+                  label="Prepaid Orders"
+                  value={`${summary.prepaidOrders || 0}`}
+                />
+                <Row label="COD Orders" value={`${summary.codOrders || 0}`} />
+                <Row
+                  label="Partial COD Orders"
+                  value={`${summary.partialCodOrders || 0}`}
+                />
+              </div>
+
+              {/* UNIT ECONOMICS */}
+              <div
+                style={{
+                  background: "#151515",
+                  border: "1px solid #1f1f1f",
+                  borderRadius: "20px",
+                  padding: "22px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#8f8f8f",
+                    marginBottom: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Unit Economics
+                </div>
+                <div
+                  style={{
+                    fontSize: "40px",
+                    fontWeight: "800",
+                    marginBottom: "10px",
+                    color: "#ff6262",
+                  }}
+                >
+                  {formatCurrency(summary.profitPerOrder || 0)}
+                </div>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#9d9d9d",
+                  }}
+                >
+                  Per-order efficiency and profitability metrics.
+                </div>
+                <div style={{ marginTop: "34px" }} />
+
+                <Row
+                  label="Profit / Order"
+                  value={`${formatCurrency(summary.profitPerOrder || 0)}`}
+                />
+                <Row
+                  label="Shipping / Order"
+                  value={`${formatCurrency(summary.shippingPerOrder || 0)}`}
+                />
+                <Row
+                  label="Average Order Value"
+                  value={`${formatCurrency(summary.aov || 0)}`}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -459,17 +885,17 @@ const Dashboard = () => {
           />
           <MetricCard
             title="Gateway Fees"
-            value={`₹${summary.gatewayFees.toLocaleString()}`}
+            value={`${formatCurrency(summary.gatewayFees || 0).toLocaleString()}`}
             subtitle="Processing Fees (Prepaid Delivered Only)"
           />
           <MetricCard
             title="Fixed Costs"
-            value={`₹${summary.businessExpenses.toLocaleString()}`}
+            value={`${formatCurrency(summary.businessExpenses || 0).toLocaleString()}`}
             subtitle="Monthly Overheads divided by 30"
           />
           <MetricCard
             title="RTO Revenue Lost"
-            value={`₹${summary.rtoRevenueLost.toLocaleString()}`}
+            value={`${formatCurrency(summary.rtoRevenueLost || 0).toLocaleString()}`}
             subtitle="Potential Sales value lost to RTO"
           />
         </div>
