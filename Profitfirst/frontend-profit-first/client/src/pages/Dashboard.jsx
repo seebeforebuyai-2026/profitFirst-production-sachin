@@ -46,6 +46,31 @@ const Row = ({ label, value, valueColor = "text-white" }) => (
   </div>
 );
 
+const RowNew = ({ label, amount, orders, amountColor = "text-white" }) => {
+  return (
+    <div className="group flex items-center justify-between rounded-2xl bg-[#151515] px-5 py-4 transition-all duration-200 hover:bg-[#1a1a1a]">
+      {/* LEFT SIDE */}
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="truncate text-[14px] font-medium text-[#8f8f8f]">
+          {label}
+        </span>
+
+        <span className={`text-[16px] font-bold tracking-tight ${amountColor}`}>
+          ₹{amount.toLocaleString()}
+        </span>
+      </div>
+
+      {/* RIGHT SIDE */}
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[12px] uppercase tracking-wider text-[#666]">
+          Orders
+        </span>
+
+        <span className="text-[16px] font-semibold text-white">{orders}</span>
+      </div>
+    </div>
+  );
+};
 const Highlight = ({ text }) => (
   <div className="mt-5 p-[18px] bg-[#161616] rounded-[16px] text-sm leading-relaxed text-[#b8b8b8]">
     {text}
@@ -413,6 +438,12 @@ const Dashboard = () => {
                 <div style={{ marginTop: "34px" }} />
 
                 <Row
+                  label="Contribution Cost"
+                  value={`${summary.contributionCost || 0}`}
+                  valueColor="text-[#ff6262]"
+                  style={{ borderBottom: "none" }}
+                />
+                <Row
                   label="Contribution Margin"
                   value={`${summary.contributionMargin || 0}%`}
                   valueColor="text-[#ffcc4d]"
@@ -499,6 +530,10 @@ const Dashboard = () => {
                   value={`${formatCurrency(summary.rtoHandlingFees || 0)}`}
                   valueColor="text-[#ff6262]"
                 />
+                <Row
+                  label="Staff Salaries , Agency Fees & Office Rent"
+                  value={`${formatCurrency(summary.staffSalary + summary.officeRent + summary.agencyFees || 0)}`}
+                />
 
                 <Highlight text="Advertising and COD losses are consuming the majority of business margin." />
               </div>
@@ -535,22 +570,28 @@ const Dashboard = () => {
                   Revenue Intelligence
                 </div>
 
-                <Row
+                <RowNew
                   label="Prepaid Revenue"
-                  value={`₹${(summary.prepaidRevenue || 0).toLocaleString()}`}
+                  amount={summary.prepaidRevenue || 0}
+                  orders={summary.prepaidOrders || 0}
                 />
 
-                <Row
+                <RowNew
                   label="COD Revenue"
-                  value={`₹${(summary.codRevenue || 0).toLocaleString()}`}
+                  amount={summary.codRevenue || 0}
+                  orders={summary.codOrders || 0}
                 />
-                <Row
-                  label="Revenue From Current Orders"
-                  value={`₹${(summary.revenueFromCurrentOrders || 0).toLocaleString()}`}
+
+                <RowNew
+                  label="Revenue From Current Month Orders"
+                  amount={summary.revenueFromCurrentOrders || 0}
+                  orders={summary.currentOrdersCount || 0}
                 />
-                <Row
-                  label="Revenue From Previous Orders"
-                  value={`₹${(summary.revenueFromPastOrders || 0).toLocaleString()}`}
+
+                <RowNew
+                  label="Revenue From Previous Month Orders"
+                  amount={summary.revenueFromPastOrders || 0}
+                  orders={summary.pastOrdersCount || 0}
                 />
               </div>
             </div>
@@ -604,10 +645,10 @@ const Dashboard = () => {
                 label="Profit Margin"
                 value={`${summary.profitMargin || 0}%`}
               />
-              <Row
+              {/* <Row
                 label="Average Order Value"
                 value={`${formatCurrency(summary.aov || 0)}`}
-              />
+              /> */}
 
               <Row
                 label="Team Salaries"
@@ -795,12 +836,12 @@ const Dashboard = () => {
                 <div style={{ marginTop: "34px" }} />
 
                 <Row
-                  label="Profit / Order"
-                  value={`${formatCurrency(summary.profitPerOrder || 0)}`}
-                />
-                <Row
                   label="Shipping / Order"
                   value={`${formatCurrency(summary.shippingPerOrder || 0)}`}
+                />
+                <Row
+                  label="Real AOV"
+                  value={`${formatCurrency(summary.realaov || 0)}`}
                 />
                 <Row
                   label="Average Order Value"

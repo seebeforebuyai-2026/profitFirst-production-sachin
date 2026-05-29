@@ -110,6 +110,7 @@ const calculateProfitSummaries = async (job) => {
             (pAmount / (Number(o.netRevenue) || 1)) * Number(o.totalCogs || 0);
           stats.gatewayFees += pAmount * gatewayRate;
           stats.revenueFromCurrentOrders += pAmount;
+          stats.currentOrdersCount += 1; 
         }
 
         // 🟢 NEW LOGIC: Separate counting
@@ -145,9 +146,18 @@ const calculateProfitSummaries = async (job) => {
               // Month breakdown
               const orderDate =
                 s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
-              if (orderDate?.substring(0, 7) < targetDate.substring(0, 7))
+              if (orderDate?.substring(0, 7) < targetDate.substring(0, 7)){
+
                 stats.revenueFromPastOrders += cAmount;
-              else stats.revenueFromCurrentOrders += cAmount;
+                stats.pastOrdersCount += 1;
+              }
+              else {
+                stats.revenueFromCurrentOrders += cAmount;
+                
+                if (matchingOrder?.paymentType !== "PARTIAL_COD") {
+                  stats.currentOrdersCount += 1;
+                }
+              }
             }
           } else if (s.deliveryStatus === "RTO") {
             stats.rtoOrders += 1;
@@ -219,6 +229,8 @@ function initDay() {
     codRevenue: 0,
     revenueFromPastOrders: 0,
     revenueFromCurrentOrders: 0,
+    pastOrdersCount: 0,      
+    currentOrdersCount: 0,   
     cogs: 0,
     adsSpend: 0,
     shippingSpend: 0,

@@ -43,7 +43,8 @@ class DashboardService {
         staffSalary: staffSalary,
         officeRent: officeRent,
         agencyFees: agencyFees,
-
+        pastOrdersCount: 0,    
+        currentOrdersCount: 0, 
         revenueGenerated: 0,
         revenueEarned: 0, 
         prepaidRevenue: 0, 
@@ -92,6 +93,10 @@ class DashboardService {
           ? totals.revenueGenerated / totals.totalOrders
           : 0;
 
+          const realaov = totals.deliveredOrders > 0
+          ? totals.revenueEarned / totals.deliveredOrders
+          : 0;
+
       const totalCost =
         totals.cogs +
         totals.adsSpend +
@@ -112,11 +117,13 @@ class DashboardService {
           ? (contributionProfit / totals.revenueEarned) * 100
           : 0;
 
+
       const marginBeforeAds =
         totals.revenueEarned > 0
           ? (contributionProfit + totals.adsSpend) / totals.revenueEarned
           : 0;
-      const breakEvenROAS = marginBeforeAds > 0 ? 1 / marginBeforeAds : 0;
+      // const breakEvenROAS = marginBeforeAds > 0 ? 1 / marginBeforeAds : 0;
+      const breakEvenROAS = 1 / contributionMargin * 100;
 
       // 5. PERIOD FORECASTING (Merchant Specific)
       const totalDecided = totals.deliveredOrders + totals.rtoOrders;
@@ -135,7 +142,7 @@ class DashboardService {
         startDate,
         endDate,
       );
-
+      const contributionCost = totals.cogs + totals.shippingSpend + totals.gatewayFees + totals.rtoHandlingFees + totals.adsSpend;
       return {
         success: true,
         summary: {
@@ -145,9 +152,11 @@ class DashboardService {
           roas: Number(roas.toFixed(2)),
           poas: Number(poas.toFixed(2)),
           aov: Number(aov.toFixed(0)),
+          realaov: Number(realaov.toFixed(0)),
           contributionProfit: Number(contributionProfit.toFixed(2)),
           contributionMargin: Number(contributionMargin.toFixed(2)),
           breakEvenROAS: Number(breakEvenROAS.toFixed(2)),
+          contributionCost: Number(contributionCost.toFixed(2)),
           profitPerOrder:
             totals.deliveredOrders > 0
               ? Number((totals.moneyKept / totals.deliveredOrders).toFixed(0))
@@ -204,6 +213,8 @@ class DashboardService {
         revenueSourceBreakdown: {
           fromPastOrders: Number(totals.revenueFromPastOrders.toFixed(2)),
           fromCurrentOrders: Number(totals.revenueFromCurrentOrders.toFixed(2)),
+          pastOrdersCount: totals.pastOrdersCount,       
+          currentOrdersCount: totals.currentOrdersCount, 
           totalPrepaid: Number(totals.prepaidRevenue.toFixed(2)),
           totalCOD: Number(totals.codRevenue.toFixed(2)),
         },
