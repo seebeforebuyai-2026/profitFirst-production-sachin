@@ -526,7 +526,7 @@ const Dashboard = () => {
                 />
 
                 <Row
-                  label="COD & RTO Losses"
+                  label="RTO Repackaging Cost"
                   value={`${formatCurrency(summary.rtoHandlingFees || 0)}`}
                   valueColor="text-[#ff6262]"
                 />
@@ -622,7 +622,7 @@ const Dashboard = () => {
                   fontSize: "40px",
                   fontWeight: "800",
                   marginBottom: "10px",
-                  color: "#ff6262",
+                  color: summary.moneyKept >= 0 ? "#22d37d" : "#ff6262",
                 }}
               >
                 {formatCurrency(summary.moneyKept || 0)}
@@ -1001,13 +1001,13 @@ const Dashboard = () => {
                 vertical={false}
                 strokeDasharray="3 3"
               />
-              <XAxis
+              {/* <XAxis
                 dataKey="name"
                 stroke="#6B7280"
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
-              />
+              /> */}
               <YAxis
                 stroke="#6B7280"
                 fontSize={10}

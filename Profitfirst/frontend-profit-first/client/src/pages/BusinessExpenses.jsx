@@ -264,7 +264,7 @@ const BusinessExpenses = () => {
             <FiTrendingDown /> Operations & Logistics
           </h3>
           <InputField
-            label="RTO Handling Fee (Per Order)"
+            label="RTO Repackaging Cost (Per Order)"
             value={expenses.rtoHandlingFees}
             onChange={(val) => handleInputChange("rtoHandlingFees", val)}
             icon="₹"

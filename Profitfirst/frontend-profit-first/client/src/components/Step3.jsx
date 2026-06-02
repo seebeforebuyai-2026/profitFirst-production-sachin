@@ -10,7 +10,7 @@ const Step3 = ({ onComplete }) => {
   const [fetchingAccounts, setFetchingAccounts] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-useEffect(() => {
+  useEffect(() => {
     const checkConnection = async () => {
       setFetchingAccounts(true);
       try {
@@ -37,9 +37,10 @@ useEffect(() => {
     }
   }, []);
 
-const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!selectedAdAccountId) return toast.error("Please select your Ad account.");
+    if (!selectedAdAccountId)
+      return toast.error("Please select your Ad account.");
 
     setSubmitting(true);
     try {
@@ -111,7 +112,6 @@ const handleSubmit = async (e) => {
       <main className="w-full max-w-6xl flex flex-col lg:flex-row items-center justify-between px-12 gap-16">
         {/* LEFT CARD */}
         <div className="bg-[#1E1E1E] rounded-[20px] p-10 shadow-lg w-full max-w-md">
-          
           {/* Tabs */}
           <div className="flex mb-6 justify-center">
             <button
@@ -199,9 +199,29 @@ const handleSubmit = async (e) => {
         </div>
 
         {/* RIGHT SIDE */}
-        <div className="bg-[#141617] rounded-[20px] w-full max-w-xl h-[300px] flex items-center justify-center">
-          <div className="w-20 h-20 rounded-full border-2 border-gray-400 flex items-center justify-center">
-            ▶
+        {/* RIGHT SIDE */}
+        <div className="bg-[#141617] rounded-[20px] w-full max-w-xl shadow-md overflow-hidden border border-gray-800">
+          <video
+            className="w-full rounded-t-[20px]"
+            controls
+            preload="metadata"
+            poster="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
+          >
+            <source
+              src="https://res.cloudinary.com/dqdvr35aj/video/upload/v1780316538/Meta_Ads_Integration_e1xy66.mp4"
+              type="video/mp4"
+            />
+            Your browser does not support the video tag.
+          </video>
+
+          <div className="p-4">
+            <h3 className="text-white font-semibold text-lg">
+              Meta Ads Integration Guide
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">
+              Follow this walkthrough to connect your Meta Ads account, select
+              your ad account, and complete the onboarding process.
+            </p>
           </div>
         </div>
       </main>

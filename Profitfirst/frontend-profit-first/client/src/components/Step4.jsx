@@ -19,61 +19,59 @@ const Step4 = ({ onComplete }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    let payload = { platform };
+    try {
+      let payload = { platform };
 
-    switch (platform) {
-      case "Shiprocket":
-      case "Nimbuspost":
-      case "Shipway":
-        payload.email = formData.email;
-        payload.password = formData.password;
-        break;
+      switch (platform) {
+        case "Shiprocket":
+        case "Nimbuspost":
+        case "Shipway":
+          payload.email = formData.email;
+          payload.password = formData.password;
+          break;
 
-      case "Dilevery":
-        payload.access_token = formData.access_token;
-        break;
+        case "Dilevery":
+          payload.access_token = formData.access_token;
+          break;
 
-      case "Ithink Logistics":
-        payload.access_token = formData.access_token;
-        payload.secret_key = formData.secret_key;
-        break;
+        case "Ithink Logistics":
+          payload.access_token = formData.access_token;
+          payload.secret_key = formData.secret_key;
+          break;
 
-      default:
-        break;
+        default:
+          break;
+      }
+
+      // ✅ FIX: Store response
+      const response = await axiosInstance.post("/onboard/step4", payload);
+
+      if (response.data.success) {
+        toast.success("✅ Shipping account connected!", { autoClose: 1500 });
+
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1500);
+      } else {
+        console.log("Step 4 failed:", response.data);
+        toast.error(response.data.message || "Connection failed");
+      }
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "Failed to connect shipping account.";
+
+      toast.error(errorMessage);
+      console.error("Submission error:", err.response || err);
+    } finally {
+      setLoading(false);
     }
-
-    // ✅ FIX: Store response
-    const response = await axiosInstance.post("/onboard/step4", payload);
-
-    if (response.data.success) {
-      toast.success("✅ Shipping account connected!", { autoClose: 1500 });
-
-      setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 1500);
-    } else {
-      console.log("Step 4 failed:", response.data);
-      toast.error(response.data.message || "Connection failed");
-    }
-
-  } catch (err) {
-    const errorMessage =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      "Failed to connect shipping account.";
-
-    toast.error(errorMessage);
-    console.error("Submission error:", err.response || err);
-
-  } finally {
-    setLoading(false);
-  }
-};
+  };
   const renderFields = () => {
     switch (platform) {
       case "Shiprocket":
@@ -259,16 +257,30 @@ const handleSubmit = async (e) => {
           </div>
         </div>
         {/* RIGHT VIDEO SECTION */}
-        <div className="bg-[#141617] rounded-[20px] w-full max-w-xl h-[300px] flex items-center justify-center shadow-md">
-          <div className="w-20 h-20 rounded-full border-2 border-gray-400 flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-10 w-10 text-gray-400"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M8 5v14l11-7-11-7z" />
-            </svg>
+        {/* RIGHT VIDEO SECTION */}
+        <div className="bg-[#141617] rounded-[20px] w-full max-w-xl shadow-md overflow-hidden border border-gray-800">
+          <video
+            className="w-full rounded-t-[20px]"
+            controls
+            preload="metadata"
+            poster="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
+          >
+            <source
+              src="https://res.cloudinary.com/dqdvr35aj/video/upload/v1780316524/ShipRocket_Integration_1_wddq00.mp4"
+              type="video/mp4"
+            />
+            Your browser does not support the video tag.
+          </video>
+
+          <div className="p-4">
+            <h3 className="text-white font-semibold text-lg">
+              Shiprocket Integration Guide
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">
+              Follow this walkthrough to connect your shipping provider account
+              and complete the final onboarding step before accessing your
+              dashboard.
+            </p>
           </div>
         </div>
       </main>

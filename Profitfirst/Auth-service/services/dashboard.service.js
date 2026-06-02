@@ -173,14 +173,19 @@ class DashboardService {
         },
         moneyFlowData: [
           // { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
+          {name :"Shopify Generated / Gross Revenue  ", value: totals.revenueGenerated, type: "positive"},
           {
             name: "Revenue Earned",
             value: totals.revenueEarned,
             type: "positive",
           },
+
           { name: "COGS", value: -totals.cogs, type: "negative" },
           { name: "Ads", value: -totals.adsSpend, type: "negative" },
           { name: "Shipping", value: -totals.shippingSpend, type: "negative" },
+          { name: "Gateway Fees", value: -totals.gatewayFees, type: "negative" },
+          { name: "RTO Repacking Cost", value: -totals.rtoHandlingFees, type: "negative" },
+          
           // {
           //   name: "Fees",
           //   value: -(totals.gatewayFees + totals.rtoHandlingFees),
