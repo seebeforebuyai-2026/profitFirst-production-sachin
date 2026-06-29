@@ -1,6 +1,7 @@
 const { QueryCommand,GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
 
+
 class DashboardService {
   async getAggregatedSummary(merchantId, startDate, endDate) {
     try {
@@ -65,6 +66,10 @@ class DashboardService {
         deliveredOrders: 0,
         rtoOrders: 0,
         cancelledOrders: 0,
+        pickupPendingOrders: 0,
+        ndrPendingOrders: 0,
+        orphanShipmentsCount: 0,
+        totalShipments: 0,
         inTransitOrders: 0,
         prepaidOrders: 0,
         codOrders: 0,

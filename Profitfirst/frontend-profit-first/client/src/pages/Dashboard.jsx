@@ -919,6 +919,28 @@ const Dashboard = () => {
             value={`₹${summary.shippingSpend.toLocaleString()}`}
             formula="Total Forward + Return Freight Charges"
           />
+         
+          <MetricCard
+            title="Total Shipments"
+            value={`${summary.totalShipments.toLocaleString()}`}
+            formula="Total Forward + Return Shipments"
+          />
+         
+          <MetricCard
+            title="Pickup Pending Orders"
+            value={`${summary.pickupPendingOrders.toLocaleString()}`}
+            formula="Orders that haven't been picked up by the carrier yet"
+          />
+          <MetricCard
+            title="NDR Pending Orders"
+            value={`${summary.ndrPendingOrders.toLocaleString()}`}
+            formula="Orders marked as Not Delivered Ready but not yet returned or delivered"
+          />
+          <MetricCard
+            title="Orphan Shipments"
+            value={`${summary.orphanShipmentsCount.toLocaleString()}`}
+            formula="Shipments without a corresponding order in Shopify"
+          /> 
           <MetricCard
             title="RTO Handling"
             value={`₹${summary.rtoHandlingFees.toLocaleString()}`}

@@ -48,10 +48,22 @@ const pollQueue = async () => {
   }
 };
 
+const PICKUP_PENDING_STATUSES = [
+  "NEW",
+  "READY_TO_SHIP",
+  "PICKUP_SCHEDULED",
+  "PICKUP_GENERATED",
+  "PICKUP_QUEUED",
+  "LABEL_GENERATED",
+  "MANIFEST_GENERATED",
+];
+
+const NDR_PENDING_STATUSES = ["NDR_DELIVERED"];
+
 const calculateProfitSummaries = async (job) => {
   const { merchantId, affectedDates = [] } = job;
 
-  try {
+  try { 
     const profileRes = await newDynamoDB.send(
       new GetCommand({
         TableName: newTableName,
@@ -86,6 +98,158 @@ const calculateProfitSummaries = async (job) => {
       dynamodbService.queryAll(merchantId, "SHIPMENT#"),
     ]);
 
+   console.log("\n");
+console.log("=======================================");
+console.log("SHIPROCKET FORENSIC AUDIT");
+console.log("=======================================");
+
+console.log("Orders:", orders.length);
+console.log("Shipments:", shipments.length);
+
+const byDeliveryStatus = {};
+const byRawStatus = {};
+const byAwb = {};
+const bySrOrder = {};
+
+shipments.forEach((s) => {
+  const ds = s.deliveryStatus || "NULL";
+  const rs = s.rawStatus || "NULL";
+
+  byDeliveryStatus[ds] = (byDeliveryStatus[ds] || 0) + 1;
+  byRawStatus[rs] = (byRawStatus[rs] || 0) + 1;
+
+  if (s.awb) {
+    byAwb[s.awb] = (byAwb[s.awb] || 0) + 1;
+  }
+
+  if (s.srOrderId) {
+    bySrOrder[s.srOrderId] =
+      (bySrOrder[s.srOrderId] || 0) + 1;
+  }
+});
+
+console.log("\n=== DELIVERY STATUS ===");
+console.table(byDeliveryStatus);
+
+console.log("\n=== RAW STATUS ===");
+console.table(byRawStatus);
+
+const uniqueAwbs = Object.keys(byAwb).length;
+const uniqueSrOrders = Object.keys(bySrOrder).length;
+
+console.log("\n=== UNIQUENESS ===");
+console.log("Unique AWBs:", uniqueAwbs);
+console.log("Unique SR Orders:", uniqueSrOrders);
+
+console.log(
+  "Duplicate AWBs:",
+  Object.values(byAwb).filter(c => c > 1).length
+);
+
+console.log(
+  "Duplicate SR Orders:",
+  Object.values(bySrOrder).filter(c => c > 1).length
+);
+
+console.log("\n=== DUPLICATE AWBS SAMPLE ===");
+
+console.table(
+  Object.entries(byAwb)
+    .filter(([_, count]) => count > 1)
+    .slice(0, 30)
+    .map(([awb, count]) => ({
+      awb,
+      count,
+    }))
+);
+
+const forensic = {
+  delivered: 0,
+  rto: 0,
+  inTransit: 0,
+  cancelled: 0,
+  pickupPending: 0,
+  ndrDelivered: 0,
+};
+
+shipments.forEach((s) => {
+  const raw = (s.rawStatus || "").toUpperCase();
+  const ds = (s.deliveryStatus || "").toUpperCase();
+
+  if (ds === "DELIVERED")
+    forensic.delivered++;
+
+  if (
+    ds === "RTO" ||
+    raw.includes("RTO")
+  )
+    forensic.rto++;
+
+  if (
+    ds === "IN_TRANSIT" &&
+    !raw.includes("RTO")
+  )
+    forensic.inTransit++;
+
+  if (
+    ds === "CANCELLED" ||
+    raw.includes("CANCEL")
+  )
+    forensic.cancelled++;
+
+  if (
+    raw === "NDR_DELIVERED"
+  )
+    forensic.ndrDelivered++;
+
+  if (
+    [
+      "NEW",
+      "READY_TO_SHIP",
+      "PICKUP_SCHEDULED",
+      "PICKUP_GENERATED",
+      "PICKUP_QUEUED",
+      "LABEL_GENERATED",
+      "MANIFEST_GENERATED",
+    ].includes(raw)
+  ) {
+    forensic.pickupPending++;
+  }
+});
+
+console.log("\n=== FORENSIC COUNTS ===");
+console.table(forensic);
+
+const weirdRecords = shipments.filter(
+  (s) =>
+    s.deliveryStatus === "IN_TRANSIT" &&
+    (
+      (s.rawStatus || "").includes("RTO") ||
+      (s.rawStatus || "").includes("BACK")
+    )
+);
+
+console.log(
+  "\n=== SUSPICIOUS IN_TRANSIT ===",
+  weirdRecords.length
+);
+
+console.table(
+  weirdRecords.slice(0, 50).map((s) => ({
+    srOrderId: s.srOrderId,
+    awb: s.awb,
+    deliveryStatus: s.deliveryStatus,
+    rawStatus: s.rawStatus,
+    orderCreatedAtIST: s.orderCreatedAtIST,
+    deliveredAtIST: s.deliveredAtIST,
+    rtoAtIST: s.rtoAtIST,
+    shipActivityDateIST: s.shipActivityDateIST,
+  }))
+);
+
+console.log("=======================================");
+console.log("END FORENSIC AUDIT");
+console.log("=======================================");
     const orderMap = new Map(orders.map((o) => [normalize(o.orderName), o]));
 
     for (const targetDate of datesToCalculate) {
@@ -100,7 +264,8 @@ const calculateProfitSummaries = async (job) => {
         stats.totalOrders += 1;
         stats.revenueGenerated +=
           Number(o.totalPrice) - Number(o.discounts || 0);
-        if (o.isCancelled) stats.cancelledOrders += 1;
+        // Note: cancelledOrders is counted from SHIPMENT records (deliveryStatus === "CANCELLED")
+        // to match Shiprocket's dashboard definition, not Shopify order cancellations.
 
         const pAmount = Number(o.prepaidAmount || 0);
         if (pAmount > 0) {
@@ -110,7 +275,7 @@ const calculateProfitSummaries = async (job) => {
             (pAmount / (Number(o.netRevenue) || 1)) * Number(o.totalCogs || 0);
           stats.gatewayFees += pAmount * gatewayRate;
           stats.revenueFromCurrentOrders += pAmount;
-          stats.currentOrdersCount += 1; 
+          stats.currentOrdersCount += 1;
         }
 
         // 🟢 NEW LOGIC: Separate counting
@@ -125,53 +290,111 @@ const calculateProfitSummaries = async (job) => {
         }
       });
 
-      // 2. Shipment Updates (COD realized on delivery)
+      // Reset unique sets for each date
+      const deliveredUniqueOrders = new Set();
+      const rtoUniqueOrders = new Set();
+
+      // Shipping spend → shipActivityDateIST (financial event: when money was charged)
+      // Status counts (inTransit, pickupPending, cancelled) → orderCreatedAtIST
+      // This prevents double-counting when a shipment has activity across many days
       shipments.forEach((s) => {
         if (s.shipActivityDateIST === targetDate) {
           hasActivity = true;
           stats.shippingSpend += Number(s.totalShippingPaid || 0);
-          const matchingOrder = orderMap.get(normalize(s.shopifyOrderName));
+        }
 
-          if (s.deliveryStatus === "DELIVERED") {
-            stats.deliveredOrders += 1;
-            const cAmount = Number(s.codAmount || 0);
-            if (cAmount > 0) {
-              stats.codRevenue += cAmount;
-              stats.revenueEarned += cAmount;
-              stats.cogs +=
-                (cAmount /
-                  (Number(matchingOrder?.netRevenue || s.netRevenue) || 1)) *
-                Number(matchingOrder?.totalCogs || s.totalCogs || 0);
+        // Count each shipment's status once — on the date the order was created
+        const shipCountDate = s.orderCreatedAtIST || s.shipActivityDateIST;
+        if (shipCountDate === targetDate) {
+          hasActivity = true;
+          stats.totalShipments += 1;
+          if (s.isOrphan) stats.orphanShipmentsCount += 1;
+          if (PICKUP_PENDING_STATUSES.includes(s.rawStatus))
+            stats.pickupPendingOrders += 1;
+          if (NDR_PENDING_STATUSES.includes(s.rawStatus))
+            stats.ndrPendingOrders += 1;
+          if (s.deliveryStatus === "IN_TRANSIT") stats.inTransitOrders += 1;
+          if (s.deliveryStatus === "CANCELLED") stats.cancelledOrders += 1;
+        }
 
-              // Month breakdown
-              const orderDate =
-                s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
-              if (orderDate?.substring(0, 7) < targetDate.substring(0, 7)){
+        // Delivered → deliveredAtIST
+        if (
+          s.deliveredAtIST === targetDate &&
+          s.deliveryStatus === "DELIVERED"
+        ) {
+          const orderKey = normalize(s.shopifyOrderName);
+          if (deliveredUniqueOrders.has(orderKey)) return;
+          deliveredUniqueOrders.add(orderKey);
 
-                stats.revenueFromPastOrders += cAmount;
-                stats.pastOrdersCount += 1;
-              }
-              else {
-                stats.revenueFromCurrentOrders += cAmount;
-                
-                if (matchingOrder?.paymentType !== "PARTIAL_COD") {
-                  stats.currentOrdersCount += 1;
-                }
+          hasActivity = true;
+          const matchingOrder = orderMap.get(orderKey);
+          stats.deliveredOrders += 1;
+
+          const codAmount = matchingOrder
+            ? Number(matchingOrder.codAmount || 0)
+            : Number(s.codAmount || 0);
+
+          if (!matchingOrder) {
+            console.log(
+              "ORDER MATCH FAILED",
+              orderKey,
+              s.shopifyOrderName,
+              s.srOrderId,
+            );
+          }
+
+          if (codAmount > 0) {
+            stats.codRevenue += codAmount;
+            stats.revenueEarned += codAmount;
+            stats.gatewayFees += codAmount * gatewayRate;
+            stats.cogs += matchingOrder
+              ? Number(matchingOrder.totalCogs || 0)
+              : Number(s.totalCogs || 0);
+
+            const orderDate =
+              s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
+            if (orderDate?.substring(0, 7) < targetDate.substring(0, 7)) {
+              stats.revenueFromPastOrders += codAmount;
+              stats.pastOrdersCount += 1;
+            } else {
+              stats.revenueFromCurrentOrders += codAmount;
+              if (matchingOrder?.paymentType !== "PARTIAL_COD") {
+                stats.currentOrdersCount += 1;
               }
             }
-          } else if (s.deliveryStatus === "RTO") {
-            stats.rtoOrders += 1;
-            stats.rtoHandlingFees += rtoFee;
-            stats.rtoRevenueLost += Number(
-              matchingOrder?.netRevenue || s.netRevenue || 0,
-            );
-          } else if (s.deliveryStatus === "IN_TRANSIT") {
-            stats.inTransitOrders += 1;
-            stats.expectedRevenue += Number(s.codAmount || 0);
+          }
+        }
+
+        const srId = s.srOrderId;
+        const rawStat = (s.rawStatus || "").toUpperCase().trim();
+        const orderKey = normalize(s.shopifyOrderName);
+
+        const isCurrentlyRTO =
+          s.deliveryStatus === "RTO" ||
+          rawStat.includes("RTO") ||
+          rawStat.includes("RETURN_TO_SELLER");
+
+        if (isCurrentlyRTO) {
+          const rtoDateToMatch = s.rtoAtIST || s.updatedAtIST; // Prefer completion date, fallback to last update date (as per Shiprocket sample data)
+
+          if (rtoDateToMatch === targetDate) {
+            const uniqueRTOKey = `${srId}_${targetDate}`;
+
+            if (!rtoUniqueOrders.has(uniqueRTOKey)) {
+              // Use the Set declared outside the shipment loop but reset per targetDate iteration
+              hasActivity = true;
+              stats.rtoOrders += 1;
+              stats.rtoHandlingFees += rtoFee;
+
+              const matchingOrder = orderMap.get(orderKey);
+              stats.rtoRevenueLost += matchingOrder
+                ? Number(matchingOrder.netRevenue || 0)
+                : Number(s.netRevenue || 0);
+              rtoUniqueOrders.add(uniqueRTOKey);
+            }
           }
         }
       });
-
       // 3. Marketing & Aggregation
       const adsForDay = ads.filter((a) => a.date === targetDate);
       stats.adsSpend = adsForDay.reduce(
@@ -185,32 +408,43 @@ const calculateProfitSummaries = async (job) => {
           stats.totalOrders > 0
             ? Number((stats.revenueGenerated / stats.totalOrders).toFixed(2))
             : 0;
-        const totalCost =
-          stats.cogs +
-          stats.adsSpend +
-          stats.shippingSpend +
-          stats.gatewayFees +
-          stats.rtoHandlingFees +
-          dailyOverhead;
+        const totalCost = [
+          stats.cogs,
+          stats.adsSpend,
+          stats.shippingSpend,
+          stats.gatewayFees,
+          stats.rtoHandlingFees,
+          dailyOverhead,
+        ].reduce((sum, val) => sum + (Number(val) || 0), 0);
         const moneyKept = Number((stats.revenueEarned - totalCost).toFixed(2));
         stats.businessExpenses = Number(dailyOverhead.toFixed(2));
 
+        const item = {
+          PK: `MERCHANT#${merchantId}`,
+          SK: `SUMMARY#${targetDate}`,
+          ...stats,
+          moneyKept,
+          totalCost: Number(totalCost.toFixed(2)),
+          profitMargin:
+            stats.revenueEarned > 0
+              ? Number(((moneyKept / stats.revenueEarned) * 100).toFixed(2))
+              : 0,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // NaN fields dhundo
+        const nanFields = Object.entries(item).filter(
+          ([k, v]) => typeof v === "number" && isNaN(v),
+        );
+        if (nanFields.length > 0) {
+          console.error(
+            "❌ NaN fields found:",
+            nanFields.map(([k]) => k),
+          );
+        }
+
         await newDynamoDB.send(
-          new PutCommand({
-            TableName: newTableName,
-            Item: {
-              PK: `MERCHANT#${merchantId}`,
-              SK: `SUMMARY#${targetDate}`,
-              ...stats,
-              moneyKept,
-              totalCost: Number(totalCost.toFixed(2)),
-              profitMargin:
-                stats.revenueEarned > 0
-                  ? Number(((moneyKept / stats.revenueEarned) * 100).toFixed(2))
-                  : 0,
-              updatedAt: new Date().toISOString(),
-            },
-          }),
+          new PutCommand({ TableName: newTableName, Item: item }),
         );
       }
     }
@@ -229,8 +463,8 @@ function initDay() {
     codRevenue: 0,
     revenueFromPastOrders: 0,
     revenueFromCurrentOrders: 0,
-    pastOrdersCount: 0,      
-    currentOrdersCount: 0,   
+    pastOrdersCount: 0,
+    currentOrdersCount: 0,
     cogs: 0,
     adsSpend: 0,
     shippingSpend: 0,
@@ -242,10 +476,14 @@ function initDay() {
     partialPrepaidAmount: 0,
     partialCodAmount: 0,
     totalOrders: 0,
+    totalShipments: 0,
     deliveredOrders: 0,
     rtoOrders: 0,
     cancelledOrders: 0,
     inTransitOrders: 0,
+    pickupPendingOrders: 0,
+    ndrPendingOrders: 0,
+    orphanShipmentsCount: 0,
     prepaidOrders: 0,
     codOrders: 0,
     expectedDelivery: 0,
