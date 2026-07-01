@@ -90,7 +90,7 @@ ultimateClean();
 // const path = require("path");
 // require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-// const MERCHANT_ID = "c1c33d7a-d0a1-7089-bb93-76dff06d488b";
+// const MERCHANT_ID = "493aa5ec-a011-701d-818a-ab89873da82d";
 
 // async function ultimateClean() {
 //   console.log(`🧹 Starting Targeted Clean for Merchant: ${MERCHANT_ID}`);
