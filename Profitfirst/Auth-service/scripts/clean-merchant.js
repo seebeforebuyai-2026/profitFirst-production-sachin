@@ -4,8 +4,7 @@ const { newDynamoDB, newTableName, s3Client, s3BucketName } = require("../config
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-const MERCHANT_ID = "f173edda-a031-705d-cbb3-e868f0a6782a";
-
+const MERCHANT_ID = "493aa5ec-a011-701d-818a-ab89873da82d";
 async function ultimateClean() {
     console.log(`🧹 Starting Targeted Clean for Merchant: ${MERCHANT_ID}`);
 
@@ -91,7 +90,7 @@ ultimateClean();
 // const path = require("path");
 // require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-// const MERCHANT_ID = "f173edda-a031-705d-cbb3-e868f0a6782a";
+// const MERCHANT_ID = "493aa5ec-a011-701d-818a-ab89873da82d";
 
 // async function ultimateClean() {
 //   console.log(`🧹 Starting Targeted Clean for Merchant: ${MERCHANT_ID}`);

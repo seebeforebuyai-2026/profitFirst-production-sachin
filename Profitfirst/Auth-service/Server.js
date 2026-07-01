@@ -18,7 +18,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
-
+/*
 if (isProduction) {
   app.use((req, res, next) => {
     if (req.path === '/health') {
@@ -36,7 +36,7 @@ if (isProduction) {
   });
 }
 
-
+*/
 const requiredEnvVars = [
   'AWS_REGION',
   'AWS_ACCESS_KEY_ID',
