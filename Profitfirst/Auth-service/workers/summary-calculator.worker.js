@@ -352,7 +352,7 @@ const calculateProfitSummaries = async (job) => {
   } catch (e) {
     console.error("❌ Summary Error:", e.message);
   }
-};
+}; 
 function initDay() {
   return {
     revenueGenerated: 0,
