@@ -213,14 +213,6 @@ const calculateProfitSummaries = async (job) => {
           ) {
             // RTO: current status is RTO — count it in this cohort
             stats.rtoOrders += 1;
-            // Financial: only charge rtoHandlingFee on the day RTO was confirmed
-            if (s.rtoAtIST === targetDate) {
-              stats.rtoHandlingFees += rtoFee;
-              const matchingOrder = orderMap.get(normalize(s.shopifyOrderName));
-              stats.rtoRevenueLost += matchingOrder
-                ? Number(matchingOrder.netRevenue || 0)
-                : Number(s.netRevenue || 0);
-            }
 
           } else if (dsUp === "DELIVERED") {
             // Current status is DELIVERED — count it in this cohort
@@ -276,9 +268,29 @@ const calculateProfitSummaries = async (job) => {
           }
         }
 
+        // ── FINANCIAL: RTO handling fee + revenue lost → when RTO was confirmed ──
+        // Anchored to rtoAtIST (the date Shiprocket confirmed the return).
+        // Completely separate from status counts — this is purely about money.
+        // rtoHandlingFees = rtoFee × number of RTOs confirmed on this date
+        // rtoRevenueLost  = net revenue of the order that got returned
+        const isRTO =
+          dsUp === "RTO" ||
+          rawUp.includes("RTO") ||
+          RETURNING_TO_SELLER_STATUSES.includes(rawUp);
+
+        if (isRTO && s.rtoAtIST === targetDate) {
+          hasActivity = true;
+          stats.rtoHandlingFees += rtoFee;
+
+          const matchingOrder = orderMap.get(normalize(s.shopifyOrderName));
+          const revenueLost = matchingOrder
+            ? Number(matchingOrder.netRevenue || 0)
+            : Number(s.netRevenue || 0);
+          stats.rtoRevenueLost += revenueLost;
+        }
+
         // ── FINANCIAL: RTO handling fee → when RTO was confirmed ─────────
-        // (already handled inside the RTO status block above when
-        //  rtoAtIST === targetDate, so nothing extra needed here)
+        // (handled above — nothing extra needed here)
 
       });
       // 3. Marketing & Aggregation
