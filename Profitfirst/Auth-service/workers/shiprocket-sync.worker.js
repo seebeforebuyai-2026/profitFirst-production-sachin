@@ -93,10 +93,57 @@ const getNormalizedStatus = (status) => {
   if (typeof status === "number" || (!isNaN(Number(status)) && String(status).trim() !== "")) {
     textStatus = STATUS_CODE_MAP[Number(status)] || String(status);
   }
-  const s = String(textStatus).toLowerCase();
-  if (s.includes("rto")) return "RTO";
-  if (s.includes("delivered") && !s.includes("rto")) return "DELIVERED";
+  const s = String(textStatus).toLowerCase().trim();
+
+  // ── CANCELLED ────────────────────────────────────────────────────────────
   if (s.includes("cancel")) return "CANCELLED";
+
+  // ── RTO — confirmed return to seller (package physically going/arrived back)
+  // Note: "RTO INITIATED" is NOT counted as RTO by SR dashboard — it stays IN_TRANSIT
+  // Note: "REACHED BACK AT THE SELLER CITY" IS counted as RTO by SR dashboard
+  if (
+    s === "rto delivered" ||
+    s === "rto_delivered" ||
+    s === "rto in intransit" ||
+    s === "rto_in_intransit" ||
+    s === "rto_ofd" ||
+    s === "rto ofd" ||
+    s === "reached back at the seller city" ||
+    s === "reached back at seller city" ||
+    s.includes("return_to_seller")
+  ) return "RTO";
+
+  // ── DELIVERED (exact match to avoid false positives) ─────────────────────
+  // PARTIAL_DELIVERED counts as DELIVERED (Shiprocket dashboard groups these)
+  if (
+    s === "delivered" ||
+    s === "partial_delivered" ||
+    s === "partial delivered"
+  ) return "DELIVERED";
+
+  // ── NDR — delivery attempted but failed ──────────────────────────────────
+  // Only UNDELIVERED family counts as NDR in SR dashboard
+  if (
+    s === "undelivered" ||
+    s === "undelivered_1st" ||
+    s === "undelivered_2nd" ||
+    s === "undelivered_3rd"
+  ) return "NDR";
+
+  // ── PICKUP PENDING ────────────────────────────────────────────────────────
+  const up = String(textStatus).toUpperCase().trim();
+  const PICKUP_SET = new Set([
+    "NEW","READY_TO_SHIP","PICKUP_SCHEDULED","PICKUP_GENERATED","PICKUP_QUEUED",
+    "LABEL_GENERATED","MANIFEST_GENERATED","PICKUP RESCHEDULED","PICKUP_RESCHEDULED",
+    "AWB_ASSIGNED",
+  ]);
+  if (PICKUP_SET.has(up)) return "PICKUP_PENDING";
+
+  // ── Everything else → IN_TRANSIT ─────────────────────────────────────────
+  // Covers: IN_TRANSIT, OUT_FOR_DELIVERY, OUT FOR DELIVERY, PICKED_UP,
+  // PICKUP_EXCEPTION, REACHED_DESTINATION_HUB, REACHED AT DESTINATION HUB,
+  // MISROUTED, DELAYED, HANDED_OVER, RTO_INITIATED, RTO INITIATED,
+  // CUSTOMER_NOT_AVAILABLE, ADDRESS_INCORRECT, SHIPPED, etc.
   return "IN_TRANSIT";
 };
 
@@ -353,12 +400,15 @@ async function collectShipmentsForWindow(merchantId, token, fromStr, toStr, hear
         entityType: "TEMP_SHIPMENT",
         srOrderId: String(ship.order_id),
         textStatus: ship.status,
+        // shipment created_at — this is the correct anchor date for counting
+        // (matches what Shiprocket dashboard uses when filtering by date range)
+        shipment_created_at: ship.created_at || null,
         charges: ship.charges || {},
         delivered_date: ship.delivered_date || null,
         rto_delivered_date: ship.rto_delivered_date || null,
         awb: ship.awb || "",
         courier: ship.courier_name || "",
-        ttl: Math.floor(Date.now() / 1000) + 14400, // 4 hour TTL for large syncs
+        ttl: Math.floor(Date.now() / 1000) + 14400,
       });
 
       if (itemsToWrite.length >= 500) {
@@ -367,8 +417,10 @@ async function collectShipmentsForWindow(merchantId, token, fromStr, toStr, hear
     }
 
     totalCollected += shipments.length;
-    const pagination = result.data?.meta?.pagination;
-    if (!pagination || pagination.current_page >= pagination.total_pages) break;
+    // SR /shipments API has broken pagination — total_pages is always null.
+    // Must use the next link to determine if more pages exist.
+    const nextLink = result.data?.meta?.pagination?.links?.next;
+    if (!nextLink) break;
     page++;
   }
 
@@ -414,6 +466,15 @@ async function processOrdersPage(merchantId, srOrders, dirtyDates) {
 
       const deliveryStatus = getNormalizedStatus(rawStatus);
       const shipActivityDateIST = parseShiprocketDate(srOrder.updated_at);
+
+      // srCreatedAtIST = shipment created_at from /shipments API (via TEMP record).
+      // This is the correct anchor date — matches Shiprocket dashboard date filter.
+      // Falls back to srOrder.created_at (order creation date) only if /shipments
+      // enrichment wasn't available for this order.
+      const srCreatedAtIST =
+        parseShiprocketDate(enriched.shipment_created_at) ||
+        parseShiprocketDate(srOrder.created_at);
+
       const deliveredAtIST = parseShiprocketDate(
         enriched.delivered_date || shipmentData.delivered_date,
       );
@@ -440,6 +501,7 @@ async function processOrdersPage(merchantId, srOrders, dirtyDates) {
         codPart = order.codAmount || 0;
 
         if (orderCreatedDateIST) dirtyDates.add(orderCreatedDateIST);
+        if (srCreatedAtIST) dirtyDates.add(srCreatedAtIST);   // Shiprocket creation date must also recalculate
         if (deliveryStatus === "RTO" && rtoAtIST) dirtyDates.add(rtoAtIST);
 
         if (deliveryStatus === "DELIVERED" && deliveredAtIST) {
@@ -477,6 +539,14 @@ async function processOrdersPage(merchantId, srOrders, dirtyDates) {
         shipmentId: String(shipmentId),
         srOrderId: String(srOrder.id),
         orderCreatedAtIST: orderCreatedDateIST,
+        // srCreatedAtIST = shipment created_at from /shipments API.
+        // This is the anchor date for dashboard counts — matches SR dashboard date filter.
+        // If enriched.shipment_created_at is populated, this is 100% accurate.
+        // If not (no TEMP enrichment), falls back to srOrder.created_at.
+        srCreatedAtIST,
+        // isPhantom: true if this order has no shipment record in Shiprocket /shipments API.
+        // Phantom records are excluded from status counts but kept for financial records.
+        isPhantom: !enriched.shipment_created_at ? true : undefined,
         paymentType,
         netRevenue: orderNetRevenue,
         totalCogs: orderCogs,
@@ -635,7 +705,7 @@ async function processShiprocketSync(job, heartbeat) {
     const today = new Date();
     const startDateObj =
       mode === "incremental"
-        ? new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+        ? new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000)
         : new Date(sinceDate);
     const fromStr = formatDate(startDateObj);
     const toStr = formatDate(today);
@@ -918,6 +988,80 @@ async function markSyncComplete(merchantId, finalAffectedDates) {
         ExpressionAttributeValues: { ":t": new Date().toISOString() },
       }),
     );
+
+    // ── POST-SYNC SHIPMENT QUALITY REPORT ─────────────────────────────
+    // Scans all SHIPMENT# records we just wrote and prints a summary
+    // so you can immediately verify srCreatedAtIST is populated.
+    try {
+      let allShips = [];
+      let lastKey;
+      do {
+        const res = await newDynamoDB.send(new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":sk": "SHIPMENT#",
+          },
+          ProjectionExpression: "srCreatedAtIST, orderCreatedAtIST, deliveredAtIST, rtoAtIST, deliveryStatus, rawStatus, isOrphan",
+          ExclusiveStartKey: lastKey,
+        }));
+        allShips.push(...(res.Items || []));
+        lastKey = res.LastEvaluatedKey;
+      } while (lastKey);
+
+      const total      = allShips.length;
+      const hasSrDate  = allShips.filter(s => s.srCreatedAtIST).length;
+      const hasOrdDate = allShips.filter(s => s.orderCreatedAtIST).length;
+      const hasDelDate = allShips.filter(s => s.deliveredAtIST).length;
+      const hasRtoDate = allShips.filter(s => s.rtoAtIST).length;
+      const rtoTotal   = allShips.filter(s => {
+        const ds = (s.deliveryStatus||"").toUpperCase();
+        const rs = (s.rawStatus||"").toUpperCase();
+        return ds === "RTO" || rs.includes("RTO");
+      }).length;
+      const rtoNoDate = allShips.filter(s => {
+        const ds = (s.deliveryStatus||"").toUpperCase();
+        const rs = (s.rawStatus||"").toUpperCase();
+        return (ds === "RTO" || rs.includes("RTO")) && !s.rtoAtIST;
+      }).length;
+
+      // Count by status
+      const bySt = {};
+      allShips.forEach(s => {
+        const k = s.deliveryStatus || "NULL";
+        bySt[k] = (bySt[k] || 0) + 1;
+      });
+
+      console.log("\n╔══════════════════════════════════════════════════════════════╗");
+      console.log(  "║         SHIPROCKET POST-SYNC QUALITY REPORT                  ║");
+      console.log(  "╚══════════════════════════════════════════════════════════════╝");
+      console.log(`  Total SHIPMENT records written : ${total}`);
+      console.log(`  srCreatedAtIST populated       : ${hasSrDate}/${total} (${Math.round(hasSrDate/total*100||0)}%)`);
+      console.log(`  orderCreatedAtIST populated    : ${hasOrdDate}/${total}`);
+      console.log(`  deliveredAtIST populated       : ${hasDelDate}/${total}`);
+      console.log(`  rtoAtIST populated             : ${hasRtoDate}/${total}`);
+      console.log(`  RTO shipments (total)          : ${rtoTotal}`);
+      console.log(`  RTO shipments with NO rtoAtIST : ${rtoNoDate} ← these won't count in any date range`);
+      console.log(`\n  deliveryStatus breakdown:`);
+      console.table(bySt);
+
+      if (hasSrDate < total) {
+        console.log(`\n  ⚠️  ${total - hasSrDate} shipments missing srCreatedAtIST.`);
+        console.log(`      These are old records not yet re-synced. Run full sync again to fix.`);
+      } else {
+        console.log(`\n  ✅ All shipments have srCreatedAtIST. Date anchor is correct.`);
+      }
+      if (rtoNoDate > 0) {
+        console.log(`\n  ⚠️  ${rtoNoDate} RTO shipments have no rtoAtIST.`);
+        console.log(`      Shiprocket did not return rto_delivered_date for these.`);
+        console.log(`      They WILL be counted in totalShipments but NOT in rtoOrders for any date.`);
+      }
+      console.log("  ──────────────────────────────────────────────────────────────\n");
+    } catch (debugErr) {
+      console.warn("  Post-sync debug scan failed (non-fatal):", debugErr.message);
+    }
+    // ── END QUALITY REPORT ────────────────────────────────────────────
 
     await sqsClient.send(
       new SendMessageCommand({

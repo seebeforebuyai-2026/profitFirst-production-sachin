@@ -1,0 +1,91 @@
+{
+  "generatedAt": "2026-07-02T07:50:28.168Z",
+  "config": {
+    "merchantId": "493aa5ec-a011-701d-818a-ab89873da82d",
+    "FROM": "2026-06-03",
+    "TO": "2026-07-02",
+    "PER_PAGE": 100,
+    "SAVE_RAW": true,
+    "RAW_DIR": "./scripts/sr-raw-dump"
+  },
+  "srTotal": 257,
+  "srCounts": {
+    "total": 257,
+    "delivered": 70,
+    "rto": 62,
+    "inTransit": 79,
+    "ndr": 23,
+    "pickup": 1,
+    "cancelled": 22
+  },
+  "dbCounts": {
+    "total": 256,
+    "delivered": 69,
+    "rto": 62,
+    "inTransit": 80,
+    "ndr": 22,
+    "pickup": 1,
+    "cancelled": 22
+  },
+  "comparison": {
+    "total": {
+      "sr": 257,
+      "db": 256,
+      "diff": -1
+    },
+    "delivered": {
+      "sr": 70,
+      "db": 69,
+      "diff": -1
+    },
+    "rto": {
+      "sr": 62,
+      "db": 62,
+      "diff": 0
+    },
+    "inTransit": {
+      "sr": 79,
+      "db": 80,
+      "diff": 1
+    },
+    "ndr": {
+      "sr": 23,
+      "db": 22,
+      "diff": -1
+    },
+    "pickup": {
+      "sr": 1,
+      "db": 1,
+      "diff": 0
+    },
+    "cancelled": {
+      "sr": 22,
+      "db": 22,
+      "diff": 0
+    }
+  },
+  "dbFieldCoverage": {
+    "total": 904,
+    "noAnchor": 0,
+    "missingSrCreatedAtIST": 0
+  },
+  "inSRNotDB": [
+    {
+      "srOrderId": "1360680809",
+      "awb": "19041926151692",
+      "bucket": "DELIVERED",
+      "rawStatus": "DELIVERED",
+      "createdIST": "2026-05-24"
+    }
+  ],
+  "inDBNotSR": [],
+  "bucketMismatch": [
+    {
+      "srOrderId": "1419389133",
+      "SR bucket": "NDR",
+      "SR rawStatus": "UNDELIVERED",
+      "DB bucket": "IN_TRANSIT",
+      "DB rawStatus": "OUT FOR DELIVERY"
+    }
+  ]
+}

@@ -117,7 +117,7 @@ async function startIncrementalSyncForAll() {
               merchantId,
               mode: "incremental",
               sinceDate: new Date(
-                Date.now() - 48 * 60 * 60 * 1000,
+                Date.now() - 168 * 60 * 60 * 1000,
               ).toISOString(),
             }),
           }),

@@ -49,21 +49,39 @@ const pollQueue = async () => {
 };
 
 const PICKUP_PENDING_STATUSES = [
-  "NEW",
-  "READY_TO_SHIP",
-  "PICKUP_SCHEDULED",
-  "PICKUP_GENERATED",
-  "PICKUP_QUEUED",
-  "LABEL_GENERATED",
-  "MANIFEST_GENERATED",
+  "NEW", "READY_TO_SHIP", "PICKUP_SCHEDULED", "PICKUP_GENERATED", "PICKUP_QUEUED",
+  "LABEL_GENERATED", "MANIFEST_GENERATED", "PICKUP RESCHEDULED", "PICKUP_RESCHEDULED",
+  "AWB_ASSIGNED",  // AWB assigned but not yet picked up
 ];
 
-const NDR_PENDING_STATUSES = ["NDR_DELIVERED"];
+// NDR = delivery attempted but failed. Only UNDELIVERED family per SR dashboard.
+const NDR_PENDING_STATUSES = [
+  "UNDELIVERED", "UNDELIVERED_1ST", "UNDELIVERED_2ND", "UNDELIVERED_3RD",
+];
+
+// REACHED BACK statuses = RTO per SR dashboard
+const RETURNING_TO_SELLER_STATUSES = [
+  "REACHED BACK AT THE SELLER CITY",
+  "REACHED BACK AT SELLER CITY",
+  "REACHED_BACK_AT_THE_SELLER_CITY",
+];
 
 const calculateProfitSummaries = async (job) => {
   const { merchantId, affectedDates = [] } = job;
 
-  try { 
+  try {
+    // ── GUARD: only run after Shiprocket sync is fully complete ──────
+    // Prevents stale SQS messages from recalculating mid-sync.
+    const syncRes = await newDynamoDB.send(new GetCommand({
+      TableName: newTableName,
+      Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#SHIPROCKET" },
+    }));
+    const srStatus = syncRes?.Item?.status;
+    if (srStatus === "in_progress") {
+      console.warn(`⏳ [SummaryWorker] Shiprocket sync still in_progress for ${merchantId}. Skipping — will recalculate after sync finishes.`);
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────
     const profileRes = await newDynamoDB.send(
       new GetCommand({
         TableName: newTableName,
@@ -98,158 +116,11 @@ const calculateProfitSummaries = async (job) => {
       dynamodbService.queryAll(merchantId, "SHIPMENT#"),
     ]);
 
-   console.log("\n");
-console.log("=======================================");
-console.log("SHIPROCKET FORENSIC AUDIT");
-console.log("=======================================");
+    // Compact data quality log — one line per merchant, non-blocking
+    const hasSrCreated = shipments.filter(s => s.srCreatedAtIST && !s.isPhantom).length;
+    const totalNonPhantom = shipments.filter(s => !s.isPhantom).length;
+    console.log(`📊 [Summary] ${merchantId} | shipments: ${totalNonPhantom} (phantoms excluded: ${shipments.length - totalNonPhantom}) | srCreatedAtIST: ${hasSrCreated}/${totalNonPhantom}`);
 
-console.log("Orders:", orders.length);
-console.log("Shipments:", shipments.length);
-
-const byDeliveryStatus = {};
-const byRawStatus = {};
-const byAwb = {};
-const bySrOrder = {};
-
-shipments.forEach((s) => {
-  const ds = s.deliveryStatus || "NULL";
-  const rs = s.rawStatus || "NULL";
-
-  byDeliveryStatus[ds] = (byDeliveryStatus[ds] || 0) + 1;
-  byRawStatus[rs] = (byRawStatus[rs] || 0) + 1;
-
-  if (s.awb) {
-    byAwb[s.awb] = (byAwb[s.awb] || 0) + 1;
-  }
-
-  if (s.srOrderId) {
-    bySrOrder[s.srOrderId] =
-      (bySrOrder[s.srOrderId] || 0) + 1;
-  }
-});
-
-console.log("\n=== DELIVERY STATUS ===");
-console.table(byDeliveryStatus);
-
-console.log("\n=== RAW STATUS ===");
-console.table(byRawStatus);
-
-const uniqueAwbs = Object.keys(byAwb).length;
-const uniqueSrOrders = Object.keys(bySrOrder).length;
-
-console.log("\n=== UNIQUENESS ===");
-console.log("Unique AWBs:", uniqueAwbs);
-console.log("Unique SR Orders:", uniqueSrOrders);
-
-console.log(
-  "Duplicate AWBs:",
-  Object.values(byAwb).filter(c => c > 1).length
-);
-
-console.log(
-  "Duplicate SR Orders:",
-  Object.values(bySrOrder).filter(c => c > 1).length
-);
-
-console.log("\n=== DUPLICATE AWBS SAMPLE ===");
-
-console.table(
-  Object.entries(byAwb)
-    .filter(([_, count]) => count > 1)
-    .slice(0, 30)
-    .map(([awb, count]) => ({
-      awb,
-      count,
-    }))
-);
-
-const forensic = {
-  delivered: 0,
-  rto: 0,
-  inTransit: 0,
-  cancelled: 0,
-  pickupPending: 0,
-  ndrDelivered: 0,
-};
-
-shipments.forEach((s) => {
-  const raw = (s.rawStatus || "").toUpperCase();
-  const ds = (s.deliveryStatus || "").toUpperCase();
-
-  if (ds === "DELIVERED")
-    forensic.delivered++;
-
-  if (
-    ds === "RTO" ||
-    raw.includes("RTO")
-  )
-    forensic.rto++;
-
-  if (
-    ds === "IN_TRANSIT" &&
-    !raw.includes("RTO")
-  )
-    forensic.inTransit++;
-
-  if (
-    ds === "CANCELLED" ||
-    raw.includes("CANCEL")
-  )
-    forensic.cancelled++;
-
-  if (
-    raw === "NDR_DELIVERED"
-  )
-    forensic.ndrDelivered++;
-
-  if (
-    [
-      "NEW",
-      "READY_TO_SHIP",
-      "PICKUP_SCHEDULED",
-      "PICKUP_GENERATED",
-      "PICKUP_QUEUED",
-      "LABEL_GENERATED",
-      "MANIFEST_GENERATED",
-    ].includes(raw)
-  ) {
-    forensic.pickupPending++;
-  }
-});
-
-console.log("\n=== FORENSIC COUNTS ===");
-console.table(forensic);
-
-const weirdRecords = shipments.filter(
-  (s) =>
-    s.deliveryStatus === "IN_TRANSIT" &&
-    (
-      (s.rawStatus || "").includes("RTO") ||
-      (s.rawStatus || "").includes("BACK")
-    )
-);
-
-console.log(
-  "\n=== SUSPICIOUS IN_TRANSIT ===",
-  weirdRecords.length
-);
-
-console.table(
-  weirdRecords.slice(0, 50).map((s) => ({
-    srOrderId: s.srOrderId,
-    awb: s.awb,
-    deliveryStatus: s.deliveryStatus,
-    rawStatus: s.rawStatus,
-    orderCreatedAtIST: s.orderCreatedAtIST,
-    deliveredAtIST: s.deliveredAtIST,
-    rtoAtIST: s.rtoAtIST,
-    shipActivityDateIST: s.shipActivityDateIST,
-  }))
-);
-
-console.log("=======================================");
-console.log("END FORENSIC AUDIT");
-console.log("=======================================");
     const orderMap = new Map(orders.map((o) => [normalize(o.orderName), o]));
 
     for (const targetDate of datesToCalculate) {
@@ -292,35 +163,82 @@ console.log("=======================================");
 
       // Reset unique sets for each date
       const deliveredUniqueOrders = new Set();
-      const rtoUniqueOrders = new Set();
 
-      // Shipping spend → shipActivityDateIST (financial event: when money was charged)
-      // Status counts (inTransit, pickupPending, cancelled) → orderCreatedAtIST
-      // This prevents double-counting when a shipment has activity across many days
+      // ─────────────────────────────────────────────────────────────────────
+      // SHIPMENT METRICS — two separate concerns:
+      //
+      // 1. STATUS COUNTS (totalShipments, delivered, RTO, inTransit, NDR,
+      //    pickupPending, cancelled) → anchored to srCreatedAtIST.
+      //    Logic: "of all shipments Shiprocket created on this date, what is
+      //    their CURRENT status?" — same as Shiprocket dashboard date filter.
+      //
+      // 2. FINANCIAL EVENTS (shippingSpend, codRevenue, rtoHandlingFees)
+      //    → anchored to the event date (deliveredAtIST, rtoAtIST,
+      //    shipActivityDateIST) because money moves on those dates.
+      // ─────────────────────────────────────────────────────────────────────
       shipments.forEach((s) => {
+
+        if (s.isPhantom) return;  // phantom records excluded from all counts
+
+        const rawUp = (s.rawStatus || "").toUpperCase().trim();
+        const dsUp  = (s.deliveryStatus || "").toUpperCase().trim();
+
+        // ── FINANCIAL: Shipping spend → when money was charged ──────────
         if (s.shipActivityDateIST === targetDate) {
           hasActivity = true;
           stats.shippingSpend += Number(s.totalShippingPaid || 0);
         }
 
-        // Count each shipment's status once — on the date the order was created
-        const shipCountDate = s.orderCreatedAtIST || s.shipActivityDateIST;
-        if (shipCountDate === targetDate) {
+        // ── STATUS COUNTS: anchored to srCreatedAtIST (Shiprocket cohort) ─
+        // Falls back to orderCreatedAtIST for records without srCreatedAtIST yet.
+        const shipCountDate = s.srCreatedAtIST || s.orderCreatedAtIST || s.shipActivityDateIST;
+        if (shipCountDate === targetDate && !s.isPhantom) {
           hasActivity = true;
           stats.totalShipments += 1;
           if (s.isOrphan) stats.orphanShipmentsCount += 1;
-          if (PICKUP_PENDING_STATUSES.includes(s.rawStatus))
+
+          if (PICKUP_PENDING_STATUSES.includes(rawUp)) {
             stats.pickupPendingOrders += 1;
-          if (NDR_PENDING_STATUSES.includes(s.rawStatus))
+
+          } else if (NDR_PENDING_STATUSES.includes(rawUp)) {
             stats.ndrPendingOrders += 1;
-          if (s.deliveryStatus === "IN_TRANSIT") stats.inTransitOrders += 1;
-          if (s.deliveryStatus === "CANCELLED") stats.cancelledOrders += 1;
+
+          } else if (dsUp === "CANCELLED") {
+            stats.cancelledOrders += 1;
+
+          } else if (
+            dsUp === "RTO" ||
+            rawUp.includes("RTO") ||
+            RETURNING_TO_SELLER_STATUSES.includes(rawUp)
+          ) {
+            // RTO: current status is RTO — count it in this cohort
+            stats.rtoOrders += 1;
+            // Financial: only charge rtoHandlingFee on the day RTO was confirmed
+            if (s.rtoAtIST === targetDate) {
+              stats.rtoHandlingFees += rtoFee;
+              const matchingOrder = orderMap.get(normalize(s.shopifyOrderName));
+              stats.rtoRevenueLost += matchingOrder
+                ? Number(matchingOrder.netRevenue || 0)
+                : Number(s.netRevenue || 0);
+            }
+
+          } else if (dsUp === "DELIVERED") {
+            // Current status is DELIVERED — count it in this cohort
+            stats.deliveredOrders += 1;
+
+          } else if (
+            dsUp === "IN_TRANSIT" &&
+            !RETURNING_TO_SELLER_STATUSES.includes(rawUp)
+          ) {
+            stats.inTransitOrders += 1;
+          }
         }
 
-        // Delivered → deliveredAtIST
+        // ── FINANCIAL: COD revenue → when the order was delivered ────────
+        // This is separate from status counts — it's about when money arrived.
         if (
           s.deliveredAtIST === targetDate &&
-          s.deliveryStatus === "DELIVERED"
+          dsUp === "DELIVERED"
         ) {
           const orderKey = normalize(s.shopifyOrderName);
           if (deliveredUniqueOrders.has(orderKey)) return;
@@ -328,19 +246,13 @@ console.log("=======================================");
 
           hasActivity = true;
           const matchingOrder = orderMap.get(orderKey);
-          stats.deliveredOrders += 1;
 
           const codAmount = matchingOrder
             ? Number(matchingOrder.codAmount || 0)
             : Number(s.codAmount || 0);
 
           if (!matchingOrder) {
-            console.log(
-              "ORDER MATCH FAILED",
-              orderKey,
-              s.shopifyOrderName,
-              s.srOrderId,
-            );
+            console.log("ORDER MATCH FAILED", orderKey, s.shopifyOrderName, s.srOrderId);
           }
 
           if (codAmount > 0) {
@@ -351,8 +263,7 @@ console.log("=======================================");
               ? Number(matchingOrder.totalCogs || 0)
               : Number(s.totalCogs || 0);
 
-            const orderDate =
-              s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
+            const orderDate = s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
             if (orderDate?.substring(0, 7) < targetDate.substring(0, 7)) {
               stats.revenueFromPastOrders += codAmount;
               stats.pastOrdersCount += 1;
@@ -365,35 +276,10 @@ console.log("=======================================");
           }
         }
 
-        const srId = s.srOrderId;
-        const rawStat = (s.rawStatus || "").toUpperCase().trim();
-        const orderKey = normalize(s.shopifyOrderName);
+        // ── FINANCIAL: RTO handling fee → when RTO was confirmed ─────────
+        // (already handled inside the RTO status block above when
+        //  rtoAtIST === targetDate, so nothing extra needed here)
 
-        const isCurrentlyRTO =
-          s.deliveryStatus === "RTO" ||
-          rawStat.includes("RTO") ||
-          rawStat.includes("RETURN_TO_SELLER");
-
-        if (isCurrentlyRTO) {
-          const rtoDateToMatch = s.rtoAtIST || s.updatedAtIST; // Prefer completion date, fallback to last update date (as per Shiprocket sample data)
-
-          if (rtoDateToMatch === targetDate) {
-            const uniqueRTOKey = `${srId}_${targetDate}`;
-
-            if (!rtoUniqueOrders.has(uniqueRTOKey)) {
-              // Use the Set declared outside the shipment loop but reset per targetDate iteration
-              hasActivity = true;
-              stats.rtoOrders += 1;
-              stats.rtoHandlingFees += rtoFee;
-
-              const matchingOrder = orderMap.get(orderKey);
-              stats.rtoRevenueLost += matchingOrder
-                ? Number(matchingOrder.netRevenue || 0)
-                : Number(s.netRevenue || 0);
-              rtoUniqueOrders.add(uniqueRTOKey);
-            }
-          }
-        }
       });
       // 3. Marketing & Aggregation
       const adsForDay = ads.filter((a) => a.date === targetDate);

@@ -922,8 +922,9 @@ const Dashboard = () => {
          
           <MetricCard
             title="Total Shipments"
-            value={`${summary.totalShipments.toLocaleString()}`}
-            formula="Total Forward + Return Shipments"
+            value={`${summary.totalShipments-summary.cancelledOrders.toLocaleString()}`}
+            // value={`${summary.totalShipments.toLocaleString() - }`}
+            formula="Total Forward + Return Shipments - Cancelled"
           />
          
           <MetricCard

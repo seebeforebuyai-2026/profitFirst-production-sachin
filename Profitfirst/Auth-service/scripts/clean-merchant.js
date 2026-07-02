@@ -76,14 +76,6 @@ ultimateClean();
 
 
 
-
-
-
-
-
-
-
-
 // const { QueryCommand, DeleteCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 // const { ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 // const { newDynamoDB, newTableName, s3Client, s3BucketName } = require("../config/aws.config");
