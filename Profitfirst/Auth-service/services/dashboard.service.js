@@ -201,7 +201,11 @@ class DashboardService {
             value: -totals.businessExpenses,
             type: "negative",
           },
-          { name: "Money Kept", value: totals.moneyKept, type: "positive" },
+          {
+  name: "Money Kept",
+  value: totals.moneyKept,
+  type: totals.moneyKept >= 0 ? "positive" : "negative",
+},
         ],
         forecast: {
           successRate: Number(successRate.toFixed(2)),
