@@ -13,7 +13,7 @@ class DashboardService {
           SK: "PROFILE"
         }
       }));
-      
+
       const profile = profileResult.Item || {};
       const staffSalary = Number(profile.staffSalary || 0);
       const officeRent = Number(profile.officeRent || 0);

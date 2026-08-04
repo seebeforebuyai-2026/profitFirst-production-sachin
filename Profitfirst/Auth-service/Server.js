@@ -18,44 +18,6 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
-
-// ── NIGHTLY SYNC SCHEDULER ────────────────────────────────────────────────
-// Fires at midnight IST (18:30 UTC) every day for all active merchants.
-// Sends DISPATCH_DAILY_SYNC to Shopify SQS queue → triggers full relay chain
-// Shopify → Meta → Shiprocket → Summary for every merchant automatically.
-function scheduleMidnightSync() {
-  const { SendMessageCommand } = require('@aws-sdk/client-sqs');
-  const { sqsClient, shopifyQueueUrl } = require('./config/aws.config');
-  const { formatInTimeZone } = require('date-fns-tz');
-
-  function msUntilMidnightIST() {
-    const now = new Date();
-    // Next midnight IST = next day 00:00:00 Asia/Kolkata
-    const todayIST = formatInTimeZone(now, 'Asia/Kolkata', 'yyyy-MM-dd');
-    const midnightIST = new Date(`${todayIST}T18:30:00.000Z`); // midnight IST = 18:30 UTC
-    if (midnightIST <= now) midnightIST.setUTCDate(midnightIST.getUTCDate() + 1);
-    return midnightIST.getTime() - now.getTime();
-  }
-
-  async function fireDailySync() {
-    try {
-      await sqsClient.send(new SendMessageCommand({
-        QueueUrl: shopifyQueueUrl,
-        MessageBody: JSON.stringify({ type: 'DISPATCH_DAILY_SYNC' }),
-      }));
-      console.log(`🌙 [Nightly] DISPATCH_DAILY_SYNC sent at ${new Date().toISOString()}`);
-    } catch (err) {
-      console.error('❌ [Nightly] Failed to send sync message:', err.message);
-    }
-    // Schedule next midnight
-    setTimeout(fireDailySync, msUntilMidnightIST());
-  }
-
-  const msToMidnight = msUntilMidnightIST();
-  console.log(`🌙 [Nightly] Next sync scheduled in ${Math.round(msToMidnight / 3600000 * 10) / 10}h (midnight IST)`);
-  setTimeout(fireDailySync, msToMidnight);
-}
-// ─────────────────────────────────────────────────────────────────────────
 /*
 if (isProduction) {
   app.use((req, res, next) => {
@@ -188,15 +150,6 @@ app.use(compression({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(express.json({ 
-  limit: '10mb', 
-  verify: (req, res, buf, encoding) => {
-    if (buf.length > 10 * 1024 * 1024) { // 10MB in bytes
-      throw new Error('Request body too large');
-    }
-  }
-}));
-
 // Serve static files from public directory
 app.use(express.static('public'));
 
@@ -266,6 +219,7 @@ app.use('/api/admin', adminRoutes);
 
 app.use('/api/products', productsRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/payment', require('./routes/payment'));
 
 
 // Health check endpoint - useful for monitoring and load balancers

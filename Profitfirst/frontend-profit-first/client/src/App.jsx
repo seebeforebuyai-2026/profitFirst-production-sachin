@@ -13,6 +13,7 @@ import { ToastContainer, Slide } from "react-toastify";
 import VerifyEmail from "./pages/VerifyEmail";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
+import Ourplans from "./pages/Ourplans";
 import MainDashboard from "./MainDashboard";
 import Marketing from "./pages/Marketing";
 import Analytics from "./pages/Analytics";
@@ -209,6 +210,7 @@ function AppWrapper() {
             <Route index element={<Dashboard />} />
             <Route path="chatbot" element={<ChatbotPage />} />
             <Route path="growth" element={<Aiprediction />} />
+            <Route path="plans" element={<Ourplans />} />
             <Route
               path="analytics"
               element={
