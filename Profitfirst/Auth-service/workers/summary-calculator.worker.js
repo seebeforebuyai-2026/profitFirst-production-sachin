@@ -15,7 +15,15 @@ const syncService = require("../services/sync.service");
 
 let isShuttingDown = false;
 const normalize = (name) =>
-  name ? name.toString().replace(/^#/, "").trim().toLowerCase() : "";
+  name
+    ? String(name)
+        .replace(/^R_/i, "")       // strip return prefix  e.g. R_#4067-77946
+        .replace(/^#/, "")          // strip leading #
+        .replace(/-[A-Z]$/i, "")    // strip trailing single-letter suffix e.g. -C
+        .replace(/-\d{5,}$/, "")    // strip trailing Shopify internal ID  e.g. -85624
+        .trim()
+        .toLowerCase()
+    : "";
 
 const pollQueue = async () => {
   console.log("🚀 [SummaryWorker] Cash-Flow Accounting Engine Active...");

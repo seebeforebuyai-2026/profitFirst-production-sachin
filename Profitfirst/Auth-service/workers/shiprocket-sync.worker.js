@@ -76,7 +76,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const normalizeOrderName = (name) => {
   if (!name) return "";
-  return String(name).replace(/^#/, "").replace(/-[A-Z]$/i, "").trim().toLowerCase();
+  return String(name)
+    .replace(/^R_/i, "")          // strip return prefix  e.g. R_#4067-77946 → #4067-77946
+    .replace(/^#/, "")             // strip leading #
+    .replace(/-[A-Z]$/i, "")       // strip trailing single-letter suffix e.g. -C, -A
+    .replace(/-\d{5,}$/, "")       // strip trailing Shopify internal ID  e.g. -85624, -37266
+    .trim()
+    .toLowerCase();
 };
 
 const parseShiprocketDate = (dateStr) => {
