@@ -51,89 +51,47 @@ if (missingEnvVars.length > 0) {
   process.exit(1);
 }
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4200',
+  'http://localhost:8080',
+  'https://profitfirstanalytics.co.in',
+  'https://www.profitfirstanalytics.co.in',
+  'https://api.profitfirstanalytics.co.in',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function(origin, callback) {
+    // Allow requests with no origin (server-to-server, mobile apps, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    console.warn(`⚠️  CORS blocked: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'x-shopify-access-token'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600,
+};
+
+// CORS must be first — before helmet and all other middleware
+// Preflight OPTIONS requests must be handled immediately
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight for all routes
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      "script-src": ["'self'", "'unsafe-inline'"], // Allow inline scripts for OAuth callback
+      "script-src": ["'self'", "'unsafe-inline'"],
     },
   },
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // allow cross-origin resource loading
 }));
-
-
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 500, // Increase this to 500 requests per minute
-  message: 'Too many requests, please wait a moment.'
-});
-app.use('/api/', limiter);
-
-// 🟢 FIX 3: Increase Auth Limiter (Polling hits this!)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100, // Increase from 20 to 100
-  message: 'Too many authentication attempts.'
-});
-
-// Stricter rate limit for password reset endpoints (prevent brute force)
-const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // limit each IP to 5 password reset requests per hour
-  message: 'Too many password reset attempts. Please try again later.'
-});
-
-// OAuth-specific rate limiter (prevent OAuth abuse)
-const oauthLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 OAuth requests per window
-  message: 'Too many OAuth attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const allowedOrigins = [
-  'http://localhost:3000',  
-  'http://localhost:5173', // Vite default
-  'http://localhost:5174', // Vite alternative
-  'http://localhost:4200', // Angular
-  'http://localhost:8080', // Vue CLI
-  'https://profitfirstanalytics.co.in',
-  'https://www.profitfirstanalytics.co.in',
-  'https://api.profitfirstanalytics.co.in',
-  "*",
-  'https://www.api.profitfirstanalytics.co.in',
-  process.env.FRONTEND_URL
-].filter(Boolean); // Remove undefined values
-
-
-const corsOptions = isProduction ? {
-  origin: function(origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    } else {
-      console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'x-shopify-access-token'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600
-} : {
-  origin: true, 
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'x-shopify-access-token'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600
-};
-
-app.use(cors(corsOptions));
 
 app.use(compression({
   filter: (req, res) => {
@@ -144,6 +102,27 @@ app.use(compression({
   },
   level: 6 
 }));
+
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 500,
+  message: 'Too many requests, please wait a moment.'
+});
+app.use('/api/', limiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many authentication attempts.'
+});
+
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many OAuth attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 
 
