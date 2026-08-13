@@ -564,7 +564,92 @@ class OnboardingService {
   }
 
   /**
-   * Update Onboarding Step 5: Product COGS Setup (moved from Step 3)
+   * Update Onboarding Step 4: Token-based Integration (Dilevery, Ithink Logistics)
+   * Stores access_token and optional secret_key encrypted in DynamoDB.
+   * Platform name stored as-is so it can be identified later.
+   *
+   * @param {string} merchantId
+   * @param {Object} data - { platform, access_token, secret_key? }
+   */
+  async updateStep4TokenIntegration(merchantId, data) {
+    try {
+      const { platform, access_token, secret_key } = data;
+
+      if (!access_token) {
+        return { success: false, error: "Access token is required." };
+      }
+
+      // Build the payload — encrypt all credentials
+      const payload = {
+        platform       : platform.toLowerCase().replace(/\s+/g, "_"), // e.g. "ithink_logistics"
+        platformDisplay: platform,          // e.g. "Ithink Logistics" — for UI
+        access_token   : encryptionService.encrypt(access_token),
+        status         : "active",
+        connectedAt    : new Date().toISOString(),
+      };
+
+      if (secret_key) {
+        payload.secret_key = encryptionService.encrypt(secret_key);
+      }
+
+      // Use the platform slug as the DynamoDB integration key
+      // e.g.  INTEGRATION#dilevery  or  INTEGRATION#ithink_logistics
+      const platformKey = payload.platform;
+
+      const existingIntegration = await dynamodbService.getIntegrationStatus(
+        merchantId,
+        platformKey,
+      );
+
+      let integrationResult;
+      if (existingIntegration.success) {
+        console.log(`🔄 ${platform} integration exists, updating for merchant: ${merchantId}`);
+        integrationResult = await dynamodbService.updateIntegration(
+          merchantId,
+          platformKey,
+          payload,
+        );
+      } else {
+        console.log(`➕ Creating new ${platform} integration for merchant: ${merchantId}`);
+        integrationResult = await dynamodbService.createIntegration({
+          merchantId,
+          platform: platformKey,
+          credentials: payload,
+        });
+      }
+
+      if (!integrationResult.success) {
+        return { success: false, error: integrationResult.error };
+      }
+
+      // Advance onboarding — same as after Shiprocket
+      await dynamodbService.updateUserProfileOnboarding(merchantId, {
+        onboardingStep     : 6,
+        onboardingCompleted: true,
+        step4CompletedAt   : new Date().toISOString(),
+        cogsCompleted      : false,
+        expensesCompleted  : false,
+        dashboardUnlocked  : false,
+      });
+
+      console.log(`✅ ${platform} token integration saved for merchant: ${merchantId}`);
+
+      return {
+        success: true,
+        data: {
+          currentStep       : 6,
+          onboardingCompleted: true,
+          dashboardUnlocked  : false,
+          platform,
+        },
+      };
+    } catch (error) {
+      console.error(`❌ updateStep4TokenIntegration error:`, error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    *
    * @param {string} merchantId - Merchant's unique ID
    * @param {Object} productData - Product and variants with COGS

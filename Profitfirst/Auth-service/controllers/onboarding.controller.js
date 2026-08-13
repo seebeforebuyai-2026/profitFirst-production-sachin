@@ -244,43 +244,56 @@ class OnboardingController {
 
       console.log(`\n🚚 Step 4: Connecting ${platform} for merchant: ${merchantId}`);
 
-      if (platform !== 'Shiprocket') {
+      const SUPPORTED = ["Shiprocket", "Dilevery", "Ithink Logistics", "Shipway", "Nimbuspost"];
+      if (!SUPPORTED.includes(platform)) {
         return res.status(400).json({
-          error: 'Unsupported platform',
-          message: `Platform ${platform} is not supported yet`
+          error: "Unsupported platform",
+          message: `Platform ${platform} is not supported yet`,
         });
       }
 
-      // 1. Validate React sent the fields
-      if (!email || !password) {
-        return res.status(400).json({
-          error: 'Missing required fields',
-          message: 'Email and password are required for Shiprocket'
-        });
-      }
-        
-      // 2. Prepare data for our Service
-      const shiprocketData = {
-        email: email,
-        password: password
-      };
+      let result;
 
-      // 3. Let the Service handle the API call, token generation, and encryption!
-      const result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, shiprocketData);
+      if (platform === "Shiprocket" || platform === "Shipway" || platform === "Nimbuspost") {
+        if (!email || !password) {
+          return res.status(400).json({
+            error: "Missing required fields",
+            message: `Email and password are required for ${platform}`,
+          });
+        }
+        result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, { email, password });
+
+      } else if (platform === "Dilevery") {
+        if (!access_token) {
+          return res.status(400).json({
+            error: "Missing required fields",
+            message: "Access token is required for Dilevery",
+          });
+        }
+        result = await onboardingService.updateStep4TokenIntegration(merchantId, { platform, access_token });
+
+      } else if (platform === "Ithink Logistics") {
+        if (!access_token || !secret_key) {
+          return res.status(400).json({
+            error: "Missing required fields",
+            message: "Access token and secret key are required for Ithink Logistics",
+          });
+        }
+        result = await onboardingService.updateStep4TokenIntegration(merchantId, { platform, access_token, secret_key });
+      }
 
       if (!result.success) {
-        // This will catch the "Invalid credentials" error from the service
         return res.status(400).json({ message: result.error });
       }
 
-      console.log(`✅ ${platform} connected successfully via Onboarding Step 4`);
+      console.log(`✅ ${platform} connected successfully`);
 
       res.status(200).json({
         success: true,
         message: `${platform} connected successfully`,
-        platform: platform,
+        platform,
         currentStep: result.data.currentStep,
-        data: result.data
+        data: result.data,
       });
 
     } catch (error) {
