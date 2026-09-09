@@ -179,7 +179,7 @@ const Sidebar = ({ isLocked = false }) => {
           <div className="space-y-0.5 border-t border-gray-800 pt-3 pb-4">
             {/* Our Plans */}
             <NavLink
-              to="/dashboard/plans"
+              to="https://admin.shopify.com/store/evhmrv-iy/charges/Profit-First-v1/pricing_plans"
               onClick={() => setIsOpen(false)}
               className="flex items-center gap-2 p-1.5 rounded-lg text-gray-400 hover:bg-[#1a1a1a] hover:text-white text-xs"
             >

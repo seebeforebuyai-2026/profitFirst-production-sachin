@@ -1,7 +1,6 @@
 const { ReceiveMessageCommand, DeleteMessageCommand } = require("@aws-sdk/client-sqs");
 const { BatchWriteCommand } = require("@aws-sdk/lib-dynamodb");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
-// 🟢 Use the specific productQueueUrl from your config
 const { sqsClient, productQueueUrl, newDynamoDB, newTableName, s3Client, s3BucketName } = require("../config/aws.config");
 const dynamodbService = require("../services/dynamodb.service");
 const shopifyUtil = require("../utils/shopify.util");
@@ -38,7 +37,6 @@ const pollQueue = async () => {
       if (body.type === "PRODUCT_FETCH") {
         console.log(`📦 Processing PRODUCT_FETCH for merchant: ${body.merchantId}`);
         await processProductFetch(body.merchantId);
-        
         // 🟢 Delete ONLY after successful processing
         await sqsClient.send(
           new DeleteMessageCommand({
@@ -51,7 +49,6 @@ const pollQueue = async () => {
         console.log(`⏭️  Skipping ${body.type} - Not a product fetch job.`);
         // Note: In the 4-queue model, we shouldn't even get other types here.
       }
-
     } catch (error) {
       if (!isShuttingDown) {
         // 🟢 FIXED: Removed the reference to 'body.type' here to prevent the crash
