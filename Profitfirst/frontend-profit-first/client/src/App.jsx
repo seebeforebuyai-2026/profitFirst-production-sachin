@@ -41,6 +41,7 @@ import { useState, useEffect } from "react";
 import { ProfileProvider } from "./ProfileContext";
 import ProtectedRoute from "./ProtectedRoute";
 import MetaBridge from "./components/MetaBridge";
+import SsoLogin from "./pages/SsoLogin";
 
 
 
@@ -158,7 +159,7 @@ function AppWrapper() {
           <Route path="/retry" element={<RetryPage />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/verify-email/:token" element={<VerifyEmail />} />
-
+          <Route path="/sso-login" element={<SsoLogin />} />
           <Route
             path="/onboarding"
             element={(() => {

@@ -8,9 +8,10 @@
 
 const cognitoService = require("../services/cognito.service");
 const dynamoDBService = require("../services/dynamodb.service");
+const jwt = require("jsonwebtoken");
+const { v4: uuidv4 } = require("uuid");
 
 class AuthController {
- 
   renderErrorPage = (res, message, errorCode = "unknown") => {
     const errorHtml = `
 <!DOCTYPE html>
@@ -96,7 +97,6 @@ class AuthController {
     return res.status(400).send(errorHtml);
   };
 
- 
   async signup(req, res) {
     try {
       const { firstName, lastName, email, password } = req.body;
@@ -141,7 +141,6 @@ class AuthController {
     }
   }
 
-  
   async verifyOTP(req, res) {
     try {
       const { email, otp } = req.body;
@@ -176,7 +175,7 @@ class AuthController {
       res.status(500).json({ error: "Verification failed. Please try again." });
     }
   }
- 
+
   async resendOTP(req, res) {
     try {
       const { email } = req.body;
@@ -199,7 +198,6 @@ class AuthController {
     }
   }
 
- 
   async login(req, res) {
     try {
       const { email, password } = req.body;
@@ -278,7 +276,7 @@ class AuthController {
       res.status(500).json({ error: "Login failed. Please try again." });
     }
   }
- 
+
   async checkUserStatus(req, res) {
     try {
       const { email } = req.body;
@@ -323,7 +321,6 @@ class AuthController {
     }
   }
 
- 
   async logout(req, res) {
     try {
       const authHeader = req.headers.authorization;
@@ -346,7 +343,6 @@ class AuthController {
     }
   }
 
- 
   async refreshToken(req, res) {
     try {
       const { refreshToken } = req.body;
@@ -401,7 +397,6 @@ class AuthController {
     }
   }
 
- 
   async changePassword(req, res) {
     try {
       const { oldPassword, newPassword } = req.body;
@@ -464,7 +459,6 @@ class AuthController {
     }
   }
 
- 
   async forgotPassword(req, res) {
     try {
       const { email } = req.body;
@@ -556,7 +550,6 @@ class AuthController {
     }
   }
 
-  
   async verifyResetOTP(req, res) {
     try {
       const { email, code } = req.body;
@@ -641,7 +634,6 @@ class AuthController {
     }
   }
 
-  
   async resendResetOTP(req, res) {
     try {
       const { email } = req.body;
@@ -664,7 +656,6 @@ class AuthController {
     }
   }
 
-  
   async resetPassword(req, res) {
     try {
       const { newPassword } = req.body;
@@ -760,7 +751,6 @@ class AuthController {
     }
   }
 
- 
   async confirmForgotPassword(req, res) {
     try {
       const { email, code, newPassword } = req.body;
@@ -829,7 +819,7 @@ class AuthController {
       res.status(500).json({ error: "Failed to fetch profile." });
     }
   }
- 
+
   getOAuthUrl = async (req, res) => {
     try {
       const { provider } = req.query;
@@ -855,7 +845,6 @@ class AuthController {
     }
   };
 
- 
   verifyOAuthTokens = async (req, res) => {
     try {
       const { accessToken, idToken, refreshToken } = req.body;
@@ -940,7 +929,6 @@ class AuthController {
     }
   };
 
-  
   handleOAuthCallback = async (req, res) => {
     try {
       const { code, error, error_description, state } = req.query;
@@ -1337,6 +1325,272 @@ class AuthController {
       res.status(500).send(errorHtml);
     }
   };
+
+  async shopifySsoLogin(req, res) {
+    try {
+      // 1. Security check — sirf Shopify app EC2 se request aani chahiye
+      const serviceSecret = req.headers["x-service-secret"];
+      if (
+        !serviceSecret ||
+        serviceSecret !== process.env.INTERNAL_SERVICE_SECRET
+      ) {
+        console.warn("❌ shopifySsoLogin: Unauthorized access attempt");
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const { shop, shopInfo, orderSummary } = req.body;
+
+      if (!shop || !shopInfo || !shopInfo.email) {
+        return res
+          .status(400)
+          .json({ error: "Missing required fields: shop, shopInfo.email" });
+      }
+
+      const normalizedEmail = shopInfo.email.toLowerCase().trim();
+      console.log(
+        `\n🛍️ Shopify SSO: Processing for shop=${shop}, email=${normalizedEmail}`,
+      );
+
+      // 2. DynamoDB mein check karo — kya ye shop pehle se registered hai?
+      let existingUser = await dynamoDBService.getUserByEmail(normalizedEmail);
+      let merchantId;
+      let isNewUser = false;
+      let onboardingCompleted = false;
+
+      if (!existingUser.success) {
+        // ─── NAYA USER ───────────────────────────────────────────────
+        console.log(
+          `🆕 New merchant: ${normalizedEmail} — creating Cognito account`,
+        );
+        isNewUser = true;
+
+        // a. Cognito mein account banao
+        const createResult = await cognitoService.adminCreateUser(
+          normalizedEmail,
+          shopInfo.name || "Merchant",
+          "",
+        );
+
+        if (!createResult.success) {
+          return res
+            .status(500)
+            .json({ error: "Failed to create merchant account" });
+        }
+
+        // b. Password set karo aur Cognito tokens lo
+        const authResult =
+          await cognitoService.adminSetPasswordAndAuth(normalizedEmail);
+        if (!authResult.success) {
+          return res
+            .status(500)
+            .json({ error: "Failed to authenticate new merchant" });
+        }
+
+        // c. Cognito sub (userId) nikalo tokens se
+        const userDetails = await cognitoService.getUserDetails(
+          authResult.data.AccessToken,
+        );
+        const userAttributes = userDetails.data.UserAttributes || [];
+        merchantId = userAttributes.find((a) => a.Name === "sub")?.Value;
+
+        // d. DynamoDB mein PROFILE banao
+        await dynamoDBService.createUserProfile({
+          userId: merchantId,
+          email: normalizedEmail,
+          firstName: shopInfo.name || "Merchant",
+          lastName: "",
+          authProvider: "shopify",
+          isVerified: true,
+        });
+
+        // e. INTEGRATION#SHOPIFY record banao
+        const { newDynamoDB, newTableName } = require("../config/aws.config");
+        const { PutCommand } = require("@aws-sdk/lib-dynamodb");
+        await newDynamoDB.send(
+          new PutCommand({
+            TableName: newTableName,
+            Item: {
+              PK: `MERCHANT#${merchantId}`,
+              SK: "INTEGRATION#SHOPIFY",
+              entityType: "INTEGRATION",
+              platform: "SHOPIFY",
+              shopDomain: shop,
+              appInstalled: true,
+              shopName: shopInfo.name,
+              currency: shopInfo.currency,
+              timezone: shopInfo.timezone,
+              orderSummary: orderSummary || {},
+              connectedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+        );
+
+        console.log(`✅ New merchant created: merchantId=${merchantId}`);
+      } else {
+        // ─── PURANA USER ──────────────────────────────────────────────
+        console.log(`🔄 Returning merchant: ${normalizedEmail}`);
+        merchantId = existingUser.data.userId;
+        onboardingCompleted = existingUser.data.onboardingCompleted || false;
+
+        // appInstalled: true update karo (reinstall case)
+        await dynamoDBService.updateUserProfileOnboarding(merchantId, {
+          appInstalled: true,
+        });
+      }
+
+      // 3. SSO JWT token generate karo (60 seconds valid, one-time use)
+      const ssoToken = jwt.sign(
+        {
+          merchantId,
+          email: normalizedEmail,
+          shop,
+          purpose: "sso",
+          jti: uuidv4(),
+        },
+        process.env.SSO_JWT_SECRET,
+        { expiresIn: "60s" },
+      );
+
+      // 4. redirectPath decide karo
+      const redirectPath = onboardingCompleted ? "/dashboard" : "/onboarding";
+
+      console.log(
+        `✅ SSO token generated for ${shop} → redirecting to ${redirectPath}`,
+      );
+
+      return res.status(200).json({
+        success: true,
+        token: ssoToken,
+        userStatus: isNewUser
+          ? "new"
+          : onboardingCompleted
+            ? "existing"
+            : "returning_incomplete",
+        redirectPath,
+        merchantId,
+      });
+    } catch (error) {
+      console.error("❌ shopifySsoLogin error:", error.message);
+      return res
+        .status(500)
+        .json({ error: "SSO login failed. Please try again." });
+    }
+  }
+
+  async verifySsoToken(req, res) {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        return res.status(400).json({ error: "SSO token required" });
+      }
+
+      // 1. JWT verify karo — expired ya invalid toh error
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.SSO_JWT_SECRET);
+      } catch (jwtErr) {
+        if (jwtErr.name === "TokenExpiredError") {
+          return res.status(401).json({
+            error:
+              "Login link expired. Please open the app from Shopify again.",
+            code: "TOKEN_EXPIRED",
+          });
+        }
+        return res.status(401).json({
+          error: "Invalid SSO token.",
+          code: "TOKEN_INVALID",
+        });
+      }
+
+      // 2. purpose check karo — sirf 'sso' tokens accept karo
+      if (decoded.purpose !== "sso") {
+        return res.status(401).json({ error: "Invalid token purpose" });
+      }
+
+      const { merchantId, email, jti } = decoded;
+
+      // 3. One-time use check — kya ye token pehle use ho chuka hai?
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
+
+      const usedCheck = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: `SSO_USED#${jti}`,
+          },
+        }),
+      );
+
+      if (usedCheck.Item) {
+        return res.status(401).json({
+          error:
+            "Login link already used. Please open the app from Shopify again.",
+          code: "TOKEN_USED",
+        });
+      }
+
+      // 4. Token used mark karo — TTL 5 minutes (replay attack block)
+      const ttlTime = Math.floor(Date.now() / 1000) + 5 * 60; // 5 min TTL
+      await newDynamoDB.send(
+        new PutCommand({
+          TableName: newTableName,
+          Item: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: `SSO_USED#${jti}`,
+            usedAt: new Date().toISOString(),
+            ttl: ttlTime,
+          },
+        }),
+      );
+
+      // 5. DynamoDB se PROFILE fetch karo — onboarding status check ke liye
+      const profileResult = await dynamoDBService.getUserProfile(merchantId);
+      if (!profileResult.success) {
+        return res.status(404).json({ error: "Merchant profile not found" });
+      }
+
+      const profile = profileResult.data;
+      const onboardingCompleted = profile.onboardingCompleted || false;
+
+      // 6. Cognito se real tokens lo — adminSetPasswordAndAuth use karo
+      const authResult = await cognitoService.adminSetPasswordAndAuth(email);
+      if (!authResult.success) {
+        return res
+          .status(500)
+          .json({ error: "Failed to generate session tokens" });
+      }
+
+      const { AccessToken, IdToken, RefreshToken } = authResult.data;
+
+      // 7. redirectTo decide karo
+      const redirectTo = onboardingCompleted ? "/dashboard" : "/onboarding";
+
+      console.log(`✅ SSO verified for ${email} → ${redirectTo}`);
+
+      return res.status(200).json({
+        success: true,
+        accessToken: AccessToken,
+        refreshToken: RefreshToken,
+        idToken: IdToken,
+        user: {
+          userId: merchantId,
+          email: email,
+          firstName: profile.firstName || "",
+          lastName: profile.lastName || "",
+        },
+        redirectTo,
+      });
+    } catch (error) {
+      console.error("❌ verifySsoToken error:", error.message);
+      return res
+        .status(500)
+        .json({ error: "SSO verification failed. Please try again." });
+    }
+  }
 }
 
 module.exports = new AuthController();

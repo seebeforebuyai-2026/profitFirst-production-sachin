@@ -75,6 +75,20 @@ router.post('/change-password', authenticateToken, validateNewPassword, authCont
 // Get current user profile information
 router.get('/profile', authenticateToken, authController.getProfile);
 
+
+
+// ============================================
+// SHOPIFY SSO ROUTES (Zero Signup Auto Login)
+// ============================================
+
+// Shopify App EC2 → Auth-Service: store check + SSO token generate karo
+// Security: x-service-secret header required (not public internet)
+router.post('/shopify-sso', authController.shopifySsoLogin);
+
+// React Frontend → Auth-Service: SSO token verify karo + Cognito tokens lo
+router.post('/sso-verify', authController.verifySsoToken);
+
+
 // ============================================
 // OAUTH ROUTES (Social Login)
 // ============================================
