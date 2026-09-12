@@ -1368,7 +1368,7 @@ class AuthController {
         const createResult = await cognitoService.adminCreateUser(
           normalizedEmail,
           shopInfo.name || "Merchant",
-          "",
+          'Store',
         );
 
         if (!createResult.success) {
