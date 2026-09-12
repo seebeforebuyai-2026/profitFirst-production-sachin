@@ -6,6 +6,9 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# shopify app
+profitfirst-shopify-app
+test
 # Environment variables
 .env
 .env.local
