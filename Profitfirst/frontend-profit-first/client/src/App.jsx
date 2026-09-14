@@ -42,19 +42,13 @@ import { ProfileProvider } from "./ProfileContext";
 import ProtectedRoute from "./ProtectedRoute";
 import MetaBridge from "./components/MetaBridge";
 import SsoLogin from "./pages/SsoLogin";
-
-
+import ShopifyOnboarding from "./pages/ShopifyOnboarding";
 
 function AppWrapper() {
-
-
-
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // STEP 1: Check for OAuth tokens in URL hash FIRST
     // OAuth callback redirects with tokens in hash: #auth={...}
     const hash = window.location.hash;
-
-    
 
     if (hash.includes("#auth=")) {
       try {
@@ -90,10 +84,6 @@ function AppWrapper() {
     const isValid = isTokenValid();
     return isValid;
   });
-
-
-
- 
 
   useEffect(() => {
     const checkAuth = () => {
@@ -160,6 +150,8 @@ function AppWrapper() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/verify-email/:token" element={<VerifyEmail />} />
           <Route path="/sso-login" element={<SsoLogin />} />
+          <Route path="/onboarding/shopify" element={<ShopifyOnboarding />} />
+
           <Route
             path="/onboarding"
             element={(() => {
@@ -240,8 +232,6 @@ function AppWrapper() {
           </Route>
           <Route path="*" element={<Homepage />} />
         </Routes>
-
-        
       </ProfileProvider>
     </>
   );

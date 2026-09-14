@@ -37,4 +37,8 @@ router.post('/step4', onboardingController.connectShipping);
 // Legacy route for backward compatibility (Step 5 - now unused)
 router.post('/step5', onboardingController.connectShipping);
 
+// Shopify insight for new merchant onboarding screen
+router.get('/shopify-insight', onboardingController.getShopifyInsight);
+
+
 module.exports = router;

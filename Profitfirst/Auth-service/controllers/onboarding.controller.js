@@ -1,8 +1,6 @@
-
-const onboardingService = require('../services/onboarding.service');
+const onboardingService = require("../services/onboarding.service");
 
 class OnboardingController {
-  
   async getCurrentStep(req, res) {
     try {
       const userId = req.user.userId;
@@ -19,11 +17,11 @@ class OnboardingController {
         isCompleted: result.data.isCompleted,
         integrations: result.data.integrations,
         products: result.data.products,
-        variants: result.data.variants
+        variants: result.data.variants,
       });
     } catch (error) {
-      console.error('Get current step error:', error);
-      res.status(500).json({ error: 'Failed to get onboarding step' });
+      console.error("Get current step error:", error);
+      res.status(500).json({ error: "Failed to get onboarding step" });
     }
   }
 
@@ -34,7 +32,7 @@ class OnboardingController {
       const { step, data } = req.body;
 
       if (!step || step < 1 || step > 5) {
-        return res.status(400).json({ error: 'Invalid step number' });
+        return res.status(400).json({ error: "Invalid step number" });
       }
 
       let result;
@@ -42,22 +40,37 @@ class OnboardingController {
       // Route to specific step methods
       switch (step) {
         case 1:
-          result = await onboardingService.updateStep1BusinessInfo(merchantId, data);
+          result = await onboardingService.updateStep1BusinessInfo(
+            merchantId,
+            data,
+          );
           break;
         case 2:
-          result = await onboardingService.updateStep2ShopifyIntegration(merchantId, data);
+          result = await onboardingService.updateStep2ShopifyIntegration(
+            merchantId,
+            data,
+          );
           break;
         case 3:
-          result = await onboardingService.updateStep3MetaIntegration(merchantId, data);
+          result = await onboardingService.updateStep3MetaIntegration(
+            merchantId,
+            data,
+          );
           break;
         case 4:
-          result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, data);
+          result = await onboardingService.updateStep4ShiprocketIntegration(
+            merchantId,
+            data,
+          );
           break;
         case 5:
-          result = await onboardingService.updateStep5ProductCOGS(merchantId, data);
+          result = await onboardingService.updateStep5ProductCOGS(
+            merchantId,
+            data,
+          );
           break;
         default:
-          return res.status(400).json({ error: 'Invalid step number' });
+          return res.status(400).json({ error: "Invalid step number" });
       }
 
       if (!result.success) {
@@ -68,37 +81,38 @@ class OnboardingController {
         message: `Step ${step} completed successfully`,
         currentStep: result.data.currentStep,
         isCompleted: result.data.isCompleted || false,
-        data: result.data
+        data: result.data,
       });
     } catch (error) {
-      console.error('Update step error:', error);
-      res.status(500).json({ error: 'Failed to update onboarding step' });
+      console.error("Update step error:", error);
+      res.status(500).json({ error: "Failed to update onboarding step" });
     }
   }
 
- 
   async completeOnboarding(req, res) {
     try {
       const userId = req.user.userId;
       const merchantId = userId; // In new schema, merchantId = userId
 
-      const result = await onboardingService.completeOnboarding(merchantId, userId);
+      const result = await onboardingService.completeOnboarding(
+        merchantId,
+        userId,
+      );
 
       if (!result.success) {
         return res.status(400).json({ error: result.error });
       }
 
       res.status(200).json({
-        message: 'Onboarding completed successfully',
-        data: result.data
+        message: "Onboarding completed successfully",
+        data: result.data,
       });
     } catch (error) {
-      console.error('Complete onboarding error:', error);
-      res.status(500).json({ error: 'Failed to complete onboarding' });
+      console.error("Complete onboarding error:", error);
+      res.status(500).json({ error: "Failed to complete onboarding" });
     }
   }
 
-  
   async getOnboardingData(req, res) {
     try {
       const userId = req.user.userId;
@@ -112,12 +126,11 @@ class OnboardingController {
 
       res.status(200).json(result.data);
     } catch (error) {
-      console.error('Get onboarding data error:', error);
-      res.status(500).json({ error: 'Failed to get onboarding data' });
+      console.error("Get onboarding data error:", error);
+      res.status(500).json({ error: "Failed to get onboarding data" });
     }
   }
 
- 
   async getProxyToken(req, res) {
     try {
       const { shop, password } = req.query;
@@ -128,61 +141,63 @@ class OnboardingController {
 
       if (!shop || !password) {
         return res.status(400).json({
-          error: 'Missing required parameters',
-          message: 'shop and password are required'
+          error: "Missing required parameters",
+          message: "shop and password are required",
         });
       }
 
       // Call external proxy service to get access token
-      const axios = require('axios');
-      const externalUrl = 'https://profitfirst.co.in/token';
-      
+      const axios = require("axios");
+      const externalUrl = "https://profitfirst.co.in/token";
+
       console.log(`📡 Calling external service: ${externalUrl}`);
       console.log(`   Params: shop=${shop}, password=${password}`);
-      
+
       const proxyResponse = await axios.get(externalUrl, {
         params: { shop, password },
-        timeout: 10000 // 10 second timeout
+        timeout: 10000, // 10 second timeout
       });
 
       console.log(`✅ External service response:`, {
         status: proxyResponse.status,
-        data: proxyResponse.data
+        data: proxyResponse.data,
       });
 
       if (proxyResponse.data && proxyResponse.data.accessToken) {
-        console.log(`✅ Access token received: ${proxyResponse.data.accessToken.substring(0, 20)}...`);
-        
+        console.log(
+          `✅ Access token received: ${proxyResponse.data.accessToken.substring(0, 20)}...`,
+        );
+
         res.json({
           success: true,
           accessToken: proxyResponse.data.accessToken,
-          shop: shop
+          shop: shop,
         });
       } else {
         console.log(`❌ No access token in response:`, proxyResponse.data);
-        
+
         res.status(400).json({
-          error: 'Failed to get access token',
-          message: 'External service did not return an access token'
+          error: "Failed to get access token",
+          message: "External service did not return an access token",
         });
       }
     } catch (error) {
-      console.error('❌ Proxy token error:', error.message);
-      
+      console.error("❌ Proxy token error:", error.message);
+
       if (error.response) {
         console.error(`   Status: ${error.response.status}`);
         console.error(`   Data:`, error.response.data);
-        
+
         return res.status(error.response.status).json({
-          error: 'External service error',
+          error: "External service error",
           message: error.response.data?.message || error.message,
-          details: error.response.data
+          details: error.response.data,
         });
       }
 
       res.status(500).json({
-        error: 'Failed to fetch token',
-        message: error.message
+        error: "Failed to fetch token",
+        message: error.message,
       });
     }
   }
@@ -193,14 +208,14 @@ class OnboardingController {
 
       console.log(`\n🔄 Shopify OAuth callback received`);
       console.log(`📝 Shop: ${shop}`);
-      console.log(`🔑 Code: ${code ? 'received' : 'missing'}`);
+      console.log(`🔑 Code: ${code ? "received" : "missing"}`);
       console.log(`🛡️  State: ${state}`);
 
       if (!code || !shop || !state) {
         console.log(`❌ Missing required callback parameters`);
         return res.status(400).json({
-          error: 'Missing required parameters',
-          message: 'Installation callback is invalid'
+          error: "Missing required parameters",
+          message: "Installation callback is invalid",
         });
       }
 
@@ -208,43 +223,53 @@ class OnboardingController {
       const merchantId = state;
 
       // Process the callback through onboarding service
-      const result = await onboardingService.updateStep2ShopifyIntegration(merchantId, {
-        shopifyStore: shop,
-        code: code,
-        state: state,
-        installationMode: 'callback'
-      });
+      const result = await onboardingService.updateStep2ShopifyIntegration(
+        merchantId,
+        {
+          shopifyStore: shop,
+          code: code,
+          state: state,
+          installationMode: "callback",
+        },
+      );
 
       if (!result.success) {
         console.log(`❌ Callback processing failed: ${result.error}`);
-        
+
         // Redirect to frontend with error
-        const errorUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/step2?error=${encodeURIComponent(result.error)}`;
+        const errorUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/onboarding/step2?error=${encodeURIComponent(result.error)}`;
         return res.redirect(errorUrl);
       }
 
       console.log(`✅ Shopify connection completed successfully`);
 
       // Redirect to frontend with success
-      const successUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/step2?success=true&shop=${encodeURIComponent(result.data.shopInfo.name)}`;
+      const successUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/onboarding/step2?success=true&shop=${encodeURIComponent(result.data.shopInfo.name)}`;
       res.redirect(successUrl);
-
     } catch (error) {
-      console.error('❌ Shopify callback error:', error.message);
-      
+      console.error("❌ Shopify callback error:", error.message);
+
       // Redirect to frontend with error
-      const errorUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/step2?error=${encodeURIComponent('Installation failed')}`;
+      const errorUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/onboarding/step2?error=${encodeURIComponent("Installation failed")}`;
       res.redirect(errorUrl);
     }
   }
- async connectShipping(req, res) {
+  async connectShipping(req, res) {
     try {
       const merchantId = req.user.userId;
       const { platform, email, password, access_token, secret_key } = req.body;
 
-      console.log(`\n🚚 Step 4: Connecting ${platform} for merchant: ${merchantId}`);
+      console.log(
+        `\n🚚 Step 4: Connecting ${platform} for merchant: ${merchantId}`,
+      );
 
-      const SUPPORTED = ["Shiprocket", "Dilevery", "Ithink Logistics", "Shipway", "Nimbuspost"];
+      const SUPPORTED = [
+        "Shiprocket",
+        "Dilevery",
+        "Ithink Logistics",
+        "Shipway",
+        "Nimbuspost",
+      ];
       if (!SUPPORTED.includes(platform)) {
         return res.status(400).json({
           error: "Unsupported platform",
@@ -254,15 +279,21 @@ class OnboardingController {
 
       let result;
 
-      if (platform === "Shiprocket" || platform === "Shipway" || platform === "Nimbuspost") {
+      if (
+        platform === "Shiprocket" ||
+        platform === "Shipway" ||
+        platform === "Nimbuspost"
+      ) {
         if (!email || !password) {
           return res.status(400).json({
             error: "Missing required fields",
             message: `Email and password are required for ${platform}`,
           });
         }
-        result = await onboardingService.updateStep4ShiprocketIntegration(merchantId, { email, password });
-
+        result = await onboardingService.updateStep4ShiprocketIntegration(
+          merchantId,
+          { email, password },
+        );
       } else if (platform === "Dilevery") {
         if (!access_token) {
           return res.status(400).json({
@@ -270,16 +301,22 @@ class OnboardingController {
             message: "Access token is required for Dilevery",
           });
         }
-        result = await onboardingService.updateStep4TokenIntegration(merchantId, { platform, access_token });
-
+        result = await onboardingService.updateStep4TokenIntegration(
+          merchantId,
+          { platform, access_token },
+        );
       } else if (platform === "Ithink Logistics") {
         if (!access_token || !secret_key) {
           return res.status(400).json({
             error: "Missing required fields",
-            message: "Access token and secret key are required for Ithink Logistics",
+            message:
+              "Access token and secret key are required for Ithink Logistics",
           });
         }
-        result = await onboardingService.updateStep4TokenIntegration(merchantId, { platform, access_token, secret_key });
+        result = await onboardingService.updateStep4TokenIntegration(
+          merchantId,
+          { platform, access_token, secret_key },
+        );
       }
 
       if (!result.success) {
@@ -295,12 +332,78 @@ class OnboardingController {
         currentStep: result.data.currentStep,
         data: result.data,
       });
-
     } catch (error) {
-      console.error('❌ Step 4 shipping connection error:', error.message);
+      console.error("❌ Step 4 shipping connection error:", error.message);
       res.status(500).json({
-        error: 'Failed to connect shipping platform',
-        message: error.message
+        error: "Failed to connect shipping platform",
+        message: error.message,
+      });
+    }
+  }
+
+  async getShopifyInsight(req, res) {
+    try {
+      const merchantId = req.user.userId;
+
+      console.log(`\n📊 Shopify Insight: fetching for merchant=${merchantId}`);
+
+      // DynamoDB se INTEGRATION#SHOPIFY record fetch karo
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { GetCommand } = require("@aws-sdk/lib-dynamodb");
+
+      const result = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: "INTEGRATION#SHOPIFY",
+          },
+        }),
+      );
+
+      const integration = result.Item;
+
+      if (!integration) {
+        return res.status(404).json({
+          error: "Shopify integration not found",
+          message: "Please connect your Shopify store first",
+        });
+      }
+
+      // orderSummary jo shopifySsoLogin mein store hua tha
+      const orderSummary = integration.orderSummary || {};
+
+      const totalRevenue = orderSummary.totalRevenue || 0;
+      const totalOrders = orderSummary.totalOrders || 0;
+      const codEstimate = orderSummary.codEstimate || 0;
+
+      // Gap calculate karo
+      // codEstimate = COD/Pending orders jinka paisa abhi nahi mila
+      // Approximate: gap = (codEstimate / totalOrders) * totalRevenue
+      const gapPercent = totalOrders > 0 ? codEstimate / totalOrders : 0;
+      const gap = Math.round(totalRevenue * gapPercent);
+      const actualEarned = Math.round(totalRevenue - gap);
+
+      console.log(
+        `✅ Shopify Insight ready: revenue=${totalRevenue}, gap=${gap}`,
+      );
+
+      return res.status(200).json({
+        success: true,
+        shopName:
+          integration.shopName || integration.shopDomain || "Your Store",
+        shopDomain: integration.shopDomain || "",
+        currency: integration.currency || "INR",
+        totalRevenue,
+        actualEarned,
+        gap,
+        totalOrders,
+        codOrders: codEstimate,
+      });
+    } catch (error) {
+      console.error("❌ getShopifyInsight error:", error.message);
+      return res.status(500).json({
+        error: "Failed to fetch Shopify insight",
       });
     }
   }
