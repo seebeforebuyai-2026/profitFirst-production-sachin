@@ -1,6 +1,9 @@
 import { useNavigate } from "react-router-dom";
 
 const ShopifyOnboarding = () => {
+  // Page load pe check karo
+
+
   const navigate = useNavigate();
 
   // ── Dummy data — baad mein API se replace karenge ──
@@ -150,7 +153,6 @@ const styles = {
     minHeight: "100vh",
     background: "#0a1628",
     color: "#fff",
-    fontFamily: "Inter, sans-serif",
   },
 
   // Sidebar
@@ -175,6 +177,7 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     marginBottom: "10px",
+    
   },
   sideItem: {
     display: "flex",
@@ -249,6 +252,8 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    alignItems: "center",
+
   },
   insightCard: {
     background: "rgba(38,179,94,0.08)",
@@ -257,6 +262,7 @@ const styles = {
     padding: "20px 24px",
     marginBottom: "32px",
     maxWidth: "560px",
+
   },
   insightTitle: {
     fontSize: "0.85rem",
