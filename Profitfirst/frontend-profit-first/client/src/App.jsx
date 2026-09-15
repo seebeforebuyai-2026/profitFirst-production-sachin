@@ -43,6 +43,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import MetaBridge from "./components/MetaBridge";
 import SsoLogin from "./pages/SsoLogin";
 import ShopifyOnboarding from "./pages/ShopifyOnboarding";
+import MetaOnboarding from "./pages/MetaOnboarding";
 
 function AppWrapper() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -151,6 +152,7 @@ function AppWrapper() {
           <Route path="/verify-email/:token" element={<VerifyEmail />} />
           <Route path="/sso-login" element={<SsoLogin />} />
           <Route path="/onboarding/shopify" element={<ShopifyOnboarding />} />
+          <Route path="/onboarding/meta" element={<MetaOnboarding />} />
 
           <Route
             path="/onboarding"

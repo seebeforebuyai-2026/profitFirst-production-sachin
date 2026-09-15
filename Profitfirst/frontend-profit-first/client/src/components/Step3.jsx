@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { PulseLoader } from "react-spinners";
 import axiosInstance from "../../axios";
 
 const Step3 = ({ onComplete }) => {
-  const [platform, setPlatform] = useState("meta");
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [selectedAdAccountId, setSelectedAdAccountId] = useState("");
+  const [adAccounts, setAdAccounts]           = useState([]);
+  const [selectedAdAccountIds, setSelectedAdAccountIds] = useState([]);
   const [fetchingAccounts, setFetchingAccounts] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting]           = useState(false);
 
+  // ── Load ad accounts on mount ─────────────────────────────
   useEffect(() => {
     const checkConnection = async () => {
       setFetchingAccounts(true);
@@ -17,11 +16,10 @@ const Step3 = ({ onComplete }) => {
         const response = await axiosInstance.get("/meta/connection");
         if (response.data.connected && response.data.connection) {
           const accounts = response.data.connection.adAccounts || [];
-          console.log("📥 Accounts received from API:", accounts.length);
           setAdAccounts(accounts);
         }
       } catch (err) {
-        console.error("Fetch failed");
+        console.error("Fetch failed", err);
       } finally {
         setFetchingAccounts(false);
       }
@@ -29,7 +27,6 @@ const Step3 = ({ onComplete }) => {
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get("meta") === "connected") {
-      // 🟢 Add a 1-second delay to allow DynamoDB to finish writing (Eventual Consistency)
       setTimeout(() => checkConnection(), 1000);
       window.history.replaceState({}, "", window.location.pathname);
     } else {
@@ -37,24 +34,31 @@ const Step3 = ({ onComplete }) => {
     }
   }, []);
 
-  const handleSubmit = async (e) => {
-    if (e) e.preventDefault();
-    if (!selectedAdAccountId)
-      return toast.error("Please select your Ad account.");
+  // ── Toggle checkbox ──────────────────────────────────────
+  const toggleAccount = (accountId) => {
+    setSelectedAdAccountIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId],
+    );
+  };
+
+  // ── Submit ───────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (selectedAdAccountIds.length === 0)
+      return toast.error("Please select at least one Ad account.");
 
     setSubmitting(true);
     try {
-      console.log("💾 Step 3 Finalizing: Saving account", selectedAdAccountId);
-
-      // 🚀 Just one call. The backend will save the account AND move to step 4.
       const res = await axiosInstance.post("/meta/select-account", {
-        adAccountId: selectedAdAccountId,
+        adAccountIds: selectedAdAccountIds,
       });
 
       if (res.data.success) {
         toast.success("✅ Meta Setup Complete!");
-        // Small delay for smooth UI transition
-        setTimeout(() => onComplete(), 1000);
+        setTimeout(() => {
+          window.location.href = "/onboarding/meta";
+        }, 1000);
       }
     } catch (err) {
       console.error("❌ Submission error:", err);
@@ -64,16 +68,14 @@ const Step3 = ({ onComplete }) => {
     }
   };
 
+  // ── Meta OAuth ───────────────────────────────────────────
   const handleMetaConnect = async () => {
     try {
-      console.log("🔗 Initiating Meta OAuth...");
       const response = await axiosInstance.post("/meta/connect");
-
       if (!response.data?.authUrl) {
         toast.error("Invalid auth response");
         return;
       }
-
       window.location.href = response.data.authUrl;
     } catch (err) {
       console.error("❌ Meta connect error:", err);
@@ -81,152 +83,352 @@ const Step3 = ({ onComplete }) => {
     }
   };
 
+  // ── Render ───────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#101218] text-white flex flex-col items-center justify-center relative overflow-hidden">
-      <style>{`
-        .bg-blob {
-          position: absolute;
-          width: 380px;
-          height: 380px;
-          filter: blur(80px);
-          opacity: 0.14;
-          z-index: 0;
-          border-radius: 50%;
-        }
-        .blob-left { left: -120px; top: 100%; background: #5fc61f; transform: translateY(-50%); }
-        .blob-right { right: -120px; top: 0%; background: #5fc61f; }
-      `}</style>
+    <div style={styles.page}>
 
-      <div className="bg-blob blob-left"></div>
-      <div className="bg-blob blob-right"></div>
+      {/* LEFT SIDEBAR */}
+      <div style={styles.sidebar}>
+        <div style={styles.logo}>
+          <img
+            src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
+            alt="ProfitFirst"
+            style={{ width: "140px" }}
+          />
+        </div>
 
-      {/* Header */}
-      <header className="w-full max-w-7xl px-12 py-10 flex items-center gap-3">
-        <img
-          src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
-          alt="Logo"
-          className="w-35"
-        />
-      </header>
-
-      <main className="w-full max-w-6xl flex flex-col lg:flex-row items-center justify-between px-12 gap-16">
-        {/* LEFT CARD */}
-        <div className="bg-[#1E1E1E] rounded-[20px] p-10 shadow-lg w-full max-w-md">
-          {/* Tabs */}
-          <div className="flex mb-6 justify-center">
-            <button
-              onClick={() => setPlatform("meta")}
-              className={`px-4 py-1.5 rounded-md text-sm ${
-                platform === "meta"
-                  ? "bg-white text-black font-semibold"
-                  : "text-gray-400"
-              }`}
-            >
-              Meta
-            </button>
-            <button
-              onClick={() => setPlatform("google")}
-              className={`px-4 py-1.5 rounded-md text-sm ${
-                platform === "google"
-                  ? "bg-white text-black font-semibold"
-                  : "text-gray-400"
-              }`}
-            >
-              Google
-            </button>
+        <div style={styles.sideSection}>
+          <p style={styles.sideLabel}>Connections</p>
+          <div style={styles.sideItem}>
+            <span style={styles.sideIcon}>🛍️</span>
+            <span style={styles.sideText}>Shopify</span>
+            <span style={styles.badgeLive}>Live</span>
           </div>
-
-          {/* Heading */}
-          <h2 className="text-center text-2xl font-bold mb-2">
-            Connect your Ad Account
-          </h2>
-          <p className="text-center text-sm text-gray-400 mb-6">
-            Track performance and manage campaigns.
-          </p>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-            <label className="text-sm text-gray-400">
-              {adAccounts.length > 0
-                ? "Select your Ad account:"
-                : "Please connect your Meta account first"}
-            </label>
-
-            {fetchingAccounts ? (
-              <div className="flex justify-center py-4">
-                <PulseLoader size={10} color="#12EB8E" />
-              </div>
-            ) : adAccounts.length > 0 ? (
-              <select
-                value={selectedAdAccountId}
-                onChange={(e) => setSelectedAdAccountId(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-black border border-green-500/50"
-              >
-                <option value="">Select an Ad Account</option>
-                {adAccounts.map((acc) => (
-                  <option key={acc.accountId} value={acc.accountId}>
-                    {acc.name} ({acc.currency})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="text-center py-4 border border-dashed border-gray-700 rounded-lg text-gray-500">
-                No accounts linked yet
-              </div>
-            )}
-          </form>
-
-          {/* Buttons */}
-          <div className="flex flex-col gap-3">
-            {adAccounts.length === 0 ? (
-              <button
-                onClick={handleMetaConnect}
-                className="w-full py-4 rounded-xl bg-blue-600 font-bold hover:bg-blue-700"
-              >
-                Connect to Meta Ads
-              </button>
-            ) : (
-              <button
-                type="submit"
-                onClick={handleSubmit}
-                disabled={submitting || !selectedAdAccountId}
-                className="w-full py-4 rounded-xl bg-green-500 text-black font-bold disabled:opacity-50"
-              >
-                {submitting ? "Saving..." : "Confirm & Continue →"}
-              </button>
-            )}
+          <div style={styles.sideItem}>
+            <span style={styles.sideIcon}>📘</span>
+            <span style={styles.sideText}>Meta Ads</span>
+            <span style={styles.badgeCurrent}>Setup</span>
+          </div>
+          <div style={styles.sideItem}>
+            <span style={styles.sideIcon}>🚚</span>
+            <span style={styles.sideText}>Shiprocket</span>
+            <span style={styles.badgePending}>Pending</span>
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
-        {/* RIGHT SIDE */}
-        <div className="bg-[#141617] rounded-[20px] w-full max-w-xl shadow-md overflow-hidden border border-gray-800">
-          <video
-            className="w-full rounded-t-[20px]"
-            controls
-            preload="metadata"
-            poster="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
-          >
-            <source
-              src="https://res.cloudinary.com/dqdvr35aj/video/upload/v1780316538/Meta_Ads_Integration_e1xy66.mp4"
-              type="video/mp4"
-            />
-            Your browser does not support the video tag.
-          </video>
+        <div style={styles.sideSection}>
+          <p style={styles.sideLabel}>What you'll unlock</p>
+          <p style={styles.sideStatSmall}>📊 Real ad spend vs revenue</p>
+          <p style={styles.sideStatSmall}>📈 Accurate ROAS per campaign</p>
+          <p style={styles.sideStatSmall}>💡 Profit on Ad Spend (POAS)</p>
+          <p style={styles.sideStatSmall}>🎯 Break-even ROAS</p>
+        </div>
 
-          <div className="p-4">
-            <h3 className="text-white font-semibold text-lg">
-              Meta Ads Integration Guide
-            </h3>
-            <p className="text-gray-400 text-sm mt-1">
-              Follow this walkthrough to connect your Meta Ads account, select
-              your ad account, and complete the onboarding process.
+        <div style={styles.sideBottom}>
+          <span style={styles.shopDot}></span>
+          <span style={styles.shopName}>Step 2 of 7</span>
+        </div>
+      </div>
+
+      {/* RIGHT MAIN CONTENT */}
+      <div style={styles.main}>
+
+        <p style={styles.stepText}>— Step 2 of 7</p>
+
+        <h1 style={styles.headline}>
+          Connect your{" "}
+          <span style={styles.headlineGreen}>Meta Ads</span>{" "}
+          account
+        </h1>
+
+        <p style={styles.subText}>
+          We read your ad spend and campaign data. We never post, create,
+          or change anything in your account.
+        </p>
+
+        {/* ── Meta not connected yet ── */}
+        {adAccounts.length === 0 && !fetchingAccounts && (
+          <div style={styles.connectCard}>
+            <div style={styles.connectIcon}>📘</div>
+            <div>
+              <p style={styles.connectTitle}>Meta Ads not connected</p>
+              <p style={styles.connectDesc}>
+                Click below to authorize access to your Facebook Ad accounts.
+              </p>
+            </div>
+            <button style={styles.btnConnect} onClick={handleMetaConnect}>
+              Connect Meta Ads →
+            </button>
+          </div>
+        )}
+
+        {/* ── Loading accounts ── */}
+        {fetchingAccounts && (
+          <div style={styles.loadingBox}>
+            <div style={styles.spinner}></div>
+            <p style={{ color: "#aaa", fontSize: "0.9rem" }}>
+              Loading your ad accounts...
             </p>
           </div>
-        </div>
-      </main>
+        )}
+
+        {/* ── Accounts list ── */}
+        {adAccounts.length > 0 && !fetchingAccounts && (
+          <>
+            <p style={styles.selectLabel}>
+              Select the ad accounts to track{" "}
+              <span style={{ color: "#26b35e" }}>
+                ({selectedAdAccountIds.length} selected)
+              </span>
+            </p>
+
+            <div style={styles.accountsList}>
+              {adAccounts.map((acc) => {
+                const isSelected = selectedAdAccountIds.includes(acc.accountId);
+                return (
+                  <div
+                    key={acc.accountId}
+                    onClick={() => toggleAccount(acc.accountId)}
+                    style={{
+                      ...styles.accountItem,
+                      border: isSelected
+                        ? "1px solid #26b35e"
+                        : "1px solid rgba(255,255,255,0.08)",
+                      background: isSelected
+                        ? "rgba(38,179,94,0.08)"
+                        : "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <div
+                      style={{
+                        ...styles.checkbox,
+                        background: isSelected ? "#26b35e" : "transparent",
+                        border: isSelected
+                          ? "2px solid #26b35e"
+                          : "2px solid rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      {isSelected && (
+                        <span style={{ color: "#fff", fontSize: "11px" }}>✓</span>
+                      )}
+                    </div>
+
+                    {/* Account info */}
+                    <div style={{ flex: 1 }}>
+                      <p style={styles.accName}>{acc.name}</p>
+                      <p style={styles.accMeta}>
+                        {acc.currency} · {acc.id}
+                      </p>
+                    </div>
+
+                    {isSelected && (
+                      <span style={styles.selectedBadge}>Selected</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* CTA Buttons */}
+            <div style={styles.ctaRow}>
+              <button
+                style={{
+                  ...styles.btnPrimary,
+                  opacity: selectedAdAccountIds.length === 0 || submitting ? 0.5 : 1,
+                  cursor: selectedAdAccountIds.length === 0 || submitting
+                    ? "not-allowed"
+                    : "pointer",
+                }}
+                onClick={handleSubmit}
+                disabled={submitting || selectedAdAccountIds.length === 0}
+              >
+                {submitting ? "Saving..." : "Save & Continue →"}
+              </button>
+              <button
+                style={styles.btnSecondary}
+                onClick={() => window.location.href = "/dashboard"}
+              >
+                I'll do this later →
+              </button>
+            </div>
+
+            <p style={styles.ctaNote}>
+              Skipping shows ₹0 for ad spend on your dashboard
+            </p>
+          </>
+        )}
+
+        {/* ── If connected but no accounts found ── */}
+        {adAccounts.length === 0 && !fetchingAccounts && (
+          <button
+            style={{ ...styles.btnSecondary, marginTop: "16px" }}
+            onClick={() => window.location.href = "/dashboard"}
+          >
+            Skip for now →
+          </button>
+        )}
+
+      </div>
     </div>
   );
 };
+
+// ── STYLES ──────────────────────────────────────────────────
+const styles = {
+  page: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#0a1628",
+    color: "#fff",
+    fontFamily: "Inter, sans-serif",
+  },
+  sidebar: {
+    width: "220px",
+    minWidth: "220px",
+    background: "#0d1f35",
+    padding: "24px 16px",
+    display: "flex",
+    flexDirection: "column",
+    borderRight: "1px solid rgba(255,255,255,0.06)",
+  },
+  logo:        { marginBottom: "28px" },
+  sideSection: { marginBottom: "24px" },
+  sideLabel: {
+    fontSize: "0.7rem", color: "#aaa",
+    textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px",
+  },
+  sideItem: {
+    display: "flex", alignItems: "center",
+    gap: "8px", marginBottom: "10px",
+  },
+  sideIcon:  { fontSize: "14px" },
+  sideText:  { fontSize: "0.85rem", flex: 1 },
+  badgeLive: {
+    fontSize: "0.65rem", background: "#26b35e", color: "#fff",
+    padding: "2px 7px", borderRadius: "20px", fontWeight: "600",
+  },
+  badgeCurrent: {
+    fontSize: "0.65rem", background: "#f59e0b", color: "#000",
+    padding: "2px 7px", borderRadius: "20px", fontWeight: "600",
+  },
+  badgePending: {
+    fontSize: "0.65rem", background: "rgba(255,255,255,0.1)", color: "#aaa",
+    padding: "2px 7px", borderRadius: "20px",
+  },
+  sideStatSmall: {
+    fontSize: "0.75rem", color: "#888",
+    marginBottom: "8px", lineHeight: "1.4",
+  },
+  sideBottom: {
+    marginTop: "auto", display: "flex", alignItems: "center",
+    gap: "8px", paddingTop: "16px",
+    borderTop: "1px solid rgba(255,255,255,0.06)",
+  },
+  shopDot: {
+    width: "8px", height: "8px", borderRadius: "50%",
+    background: "#26b35e", display: "inline-block",
+  },
+  shopName: { fontSize: "0.75rem", color: "#aaa" },
+
+  main: {
+    flex: 1, padding: "48px 56px",
+    display: "flex", flexDirection: "column", justifyContent: "center",
+  },
+  stepText:  { fontSize: "0.8rem", color: "#26b35e", marginBottom: "12px" },
+  headline: {
+    fontSize: "2.2rem", fontWeight: "700",
+    color: "#fff", lineHeight: "1.2",
+    marginBottom: "16px", maxWidth: "520px",
+  },
+  headlineGreen: { color: "#26b35e" },
+  subText: {
+    fontSize: "0.95rem", color: "#aaa",
+    marginBottom: "32px", maxWidth: "480px", lineHeight: "1.6",
+  },
+
+  // Not connected card
+  connectCard: {
+    display: "flex", alignItems: "center", gap: "16px",
+    background: "rgba(38,179,94,0.06)",
+    border: "1px solid rgba(38,179,94,0.2)",
+    borderRadius: "12px", padding: "20px 24px",
+    marginBottom: "24px", maxWidth: "520px",
+    flexWrap: "wrap",
+  },
+  connectIcon:  { fontSize: "32px" },
+  connectTitle: { fontSize: "0.95rem", fontWeight: "600", marginBottom: "4px" },
+  connectDesc:  { fontSize: "0.82rem", color: "#aaa" },
+  btnConnect: {
+    background: "#1877f2", color: "#fff", border: "none",
+    padding: "12px 24px", borderRadius: "8px",
+    fontSize: "0.9rem", fontWeight: "600", cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+
+  // Loading
+  loadingBox: {
+    display: "flex", alignItems: "center", gap: "16px",
+    marginBottom: "24px",
+  },
+  spinner: {
+    width: "32px", height: "32px",
+    border: "3px solid rgba(38,179,94,0.15)",
+    borderTop: "3px solid #26b35e",
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  },
+
+  // Accounts list
+  selectLabel: {
+    fontSize: "0.85rem", color: "#ccc",
+    marginBottom: "12px", fontWeight: "500",
+  },
+  accountsList: {
+    display: "flex", flexDirection: "column", gap: "8px",
+    maxWidth: "520px", maxHeight: "280px",
+    overflowY: "auto", marginBottom: "28px",
+  },
+  accountItem: {
+    display: "flex", alignItems: "center", gap: "12px",
+    padding: "14px 16px", borderRadius: "10px", cursor: "pointer",
+    transition: "all 0.15s ease",
+  },
+  checkbox: {
+    width: "20px", height: "20px", borderRadius: "5px",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, transition: "all 0.15s ease",
+  },
+  accName:  { fontSize: "0.9rem", fontWeight: "600", color: "#fff", marginBottom: "2px" },
+  accMeta:  { fontSize: "0.75rem", color: "#888" },
+  selectedBadge: {
+    fontSize: "0.65rem", background: "#26b35e", color: "#fff",
+    padding: "2px 8px", borderRadius: "20px", fontWeight: "600",
+  },
+
+  // CTA
+  ctaRow: {
+    display: "flex", gap: "16px",
+    alignItems: "center", marginBottom: "12px",
+  },
+  btnPrimary: {
+    background: "#26b35e", color: "#fff", border: "none",
+    padding: "14px 28px", borderRadius: "8px",
+    fontSize: "0.95rem", fontWeight: "600",
+    transition: "opacity 0.2s",
+  },
+  btnSecondary: {
+    background: "transparent", color: "#aaa",
+    border: "1px solid rgba(255,255,255,0.15)",
+    padding: "14px 24px", borderRadius: "8px",
+    fontSize: "0.95rem", cursor: "pointer",
+  },
+  ctaNote: { fontSize: "0.78rem", color: "#666" },
+};
+
+// CSS animation
+const styleSheet = document.createElement("style");
+styleSheet.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+document.head.appendChild(styleSheet);
 
 export default Step3;
