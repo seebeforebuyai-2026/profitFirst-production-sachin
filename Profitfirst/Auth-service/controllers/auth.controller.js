@@ -10,6 +10,11 @@ const cognitoService = require("../services/cognito.service");
 const dynamoDBService = require("../services/dynamodb.service");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
+// SQS import — method ke andar (existing require ke saath)
+const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
+const { SendMessageCommand } = require("@aws-sdk/client-sqs");
+const { newDynamoDB, newTableName } = require("../config/aws.config");
+const { GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
 class AuthController {
   renderErrorPage = (res, message, errorCode = "unknown") => {
@@ -1368,7 +1373,7 @@ class AuthController {
         const createResult = await cognitoService.adminCreateUser(
           normalizedEmail,
           shopInfo.name || "Merchant",
-          'Store',
+          "Store",
         );
 
         if (!createResult.success) {
@@ -1403,9 +1408,6 @@ class AuthController {
           isVerified: true,
         });
 
-        // e. INTEGRATION#SHOPIFY record banao
-        const { newDynamoDB, newTableName } = require("../config/aws.config");
-        const { PutCommand } = require("@aws-sdk/lib-dynamodb");
         await newDynamoDB.send(
           new PutCommand({
             TableName: newTableName,
@@ -1415,6 +1417,8 @@ class AuthController {
               entityType: "INTEGRATION",
               platform: "SHOPIFY",
               shopDomain: shop,
+              shopifyStore: shop,
+              accessToken: req.body.accessToken || "",
               appInstalled: true,
               shopName: shopInfo.name,
               currency: shopInfo.currency,
@@ -1427,6 +1431,32 @@ class AuthController {
         );
 
         console.log(`✅ New merchant created: merchantId=${merchantId}`);
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const sinceDate = thirtyDaysAgo.toISOString();
+
+        try {
+          await sqsClient.send(
+            new SendMessageCommand({
+              QueueUrl: shopifyQueueUrl,
+              MessageBody: JSON.stringify({
+                type: "SHOPIFY_SYNC",
+                merchantId: merchantId,
+                sinceDate: sinceDate,
+                mode: "shopify_onboarding",
+                affectedDates: [],
+              }),
+            }),
+          );
+          console.log(
+            `📡 Shopify sync triggered for new merchant: ${merchantId}`,
+          );
+        } catch (sqsErr) {
+          console.error(
+            `⚠️ SQS trigger failed (non-critical): ${sqsErr.message}`,
+          );
+        }
       } else {
         // ─── PURANA USER ──────────────────────────────────────────────
         console.log(`🔄 Returning merchant: ${normalizedEmail}`);
@@ -1449,7 +1479,7 @@ class AuthController {
           jti: uuidv4(),
         },
         process.env.SSO_JWT_SECRET,
-        { expiresIn: "60s" },
+        { expiresIn: "120s" },
       );
 
       // 4. redirectPath decide karo
@@ -1510,10 +1540,6 @@ class AuthController {
       }
 
       const { merchantId, email, jti } = decoded;
-
-      // 3. One-time use check — kya ye token pehle use ho chuka hai?
-      const { newDynamoDB, newTableName } = require("../config/aws.config");
-      const { GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
       const usedCheck = await newDynamoDB.send(
         new GetCommand({

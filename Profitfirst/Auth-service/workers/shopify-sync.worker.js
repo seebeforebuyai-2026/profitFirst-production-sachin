@@ -21,6 +21,7 @@ const {
   newTableName,
   s3Client,
   s3BucketName,
+  summaryQueueUrl,
 } = require("../config/aws.config");
 
 const shopifyUtil = require("../utils/shopify.util");
@@ -293,7 +294,10 @@ const processOrders = async (job) => {
             entityType: "ORDER",
             orderId,
             orderName: order.name || "",
-            normalizedOrderName: (order.name || "").replace(/^#/, "").trim().toLowerCase(),
+            normalizedOrderName: (order.name || "")
+              .replace(/^#/, "")
+              .trim()
+              .toLowerCase(),
             totalPrice,
             discounts,
             tax: Number(order.totalTaxSet?.shopMoney?.amount || 0),
@@ -418,23 +422,39 @@ async function markSyncComplete(
       syncTime: syncStartTime,
     });
 
-    // 3. Pass baton to Meta Sync
-    await sqsClient.send(
-      new SendMessageCommand({
-        QueueUrl: metaQueueUrl,
-        MessageBody: JSON.stringify({
-          type: "META_SYNC",
-          merchantId,
-          sinceDate,
-          mode,
-          affectedDates,
+    if (mode === "shopify_onboarding") {
+      // Meta skip karo — seedha summary calculate karo
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: summaryQueueUrl,
+          MessageBody: JSON.stringify({
+            type: "SUMMARY_CALC",
+            merchantId,
+            affectedDates,
+          }),
         }),
-      }),
-    );
-
-    console.log(
-      `🏁 Shopify Sync COMPLETED for ${merchantId}. Moving to Meta Ads.`,
-    );
+      );
+      console.log(
+        `🏁 Shopify Onboarding Sync done for ${merchantId}. Going to Summary.`,
+      );
+    } else {
+      // Normal flow — Meta ko bhejo
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: metaQueueUrl,
+          MessageBody: JSON.stringify({
+            type: "META_SYNC",
+            merchantId,
+            sinceDate,
+            mode,
+            affectedDates,
+          }),
+        }),
+      );
+      console.log(
+        `🏁 Shopify Sync COMPLETED for ${merchantId}. Moving to Meta Ads.`,
+      );
+    }
   } catch (err) {
     console.error("Complete Sync Error:", err.message);
   }

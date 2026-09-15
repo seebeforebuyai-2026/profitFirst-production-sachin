@@ -1,4 +1,6 @@
 const onboardingService = require("../services/onboarding.service");
+const { newDynamoDB, newTableName } = require("../config/aws.config");
+const { GetCommand } = require("@aws-sdk/lib-dynamodb");
 
 class OnboardingController {
   async getCurrentStep(req, res) {
@@ -345,12 +347,9 @@ class OnboardingController {
     try {
       const merchantId = req.user.userId;
 
-      console.log(`\n📊 Shopify Insight: fetching for merchant=${merchantId}`);
+      console.log(`📊 Shopify Insight: fetching for merchant=${merchantId}`);
 
-      // DynamoDB se INTEGRATION#SHOPIFY record fetch karo
-      const { newDynamoDB, newTableName } = require("../config/aws.config");
-      const { GetCommand } = require("@aws-sdk/lib-dynamodb");
-
+      // 1. Integration record fetch karo
       const result = await newDynamoDB.send(
         new GetCommand({
           TableName: newTableName,
@@ -370,26 +369,69 @@ class OnboardingController {
         });
       }
 
-      // orderSummary jo shopifySsoLogin mein store hua tha
-      const orderSummary = integration.orderSummary || {};
-
-      const totalRevenue = orderSummary.totalRevenue || 0;
-      const totalOrders = orderSummary.totalOrders || 0;
-      const codEstimate = orderSummary.codEstimate || 0;
-
-      // Gap calculate karo
-      // codEstimate = COD/Pending orders jinka paisa abhi nahi mila
-      // Approximate: gap = (codEstimate / totalOrders) * totalRevenue
-      const gapPercent = totalOrders > 0 ? codEstimate / totalOrders : 0;
-      const gap = Math.round(totalRevenue * gapPercent);
-      const actualEarned = Math.round(totalRevenue - gap);
-
-      console.log(
-        `✅ Shopify Insight ready: revenue=${totalRevenue}, gap=${gap}`,
+      // 2. Sync status check karo
+      const syncRes = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#SHOPIFY" },
+        }),
       );
+
+      const isCompleted = syncRes.Item?.status === "completed";
+      const syncStatus = isCompleted ? "completed" : "in_progress";
+
+      // 3. Agar sync abhi chal raha hai, toh seedha in_progress return karo (Frontend polling karega)
+      if (!isCompleted) {
+        return res.status(200).json({
+          success: true,
+          syncStatus: "in_progress",
+          shopName:
+            integration.shopName || integration.shopDomain || "Your Store",
+          shopDomain: integration.shopDomain || "",
+          currency: integration.currency || "INR",
+        });
+      }
+
+      // 4. Sync complete ho chuka hai — SUMMARY# records se last 30 days ka accurate data fetch karo
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+
+      const startDate = thirtyDaysAgo.toISOString().split("T")[0]; // "YYYY-MM-DD"
+      const endDate = today.toISOString().split("T")[0];
+
+      const summaryRes = await newDynamoDB.send(
+        new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND SK BETWEEN :start AND :end",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":start": `SUMMARY#${startDate}`,
+            ":end": `SUMMARY#${endDate}`,
+          },
+        }),
+      );
+
+      const summaryItems = summaryRes.Items || [];
+
+      // 5. Aggregate karo
+      const totalRevenue = summaryItems.reduce(
+        (s, d) => s + Number(d.revenueGenerated || 0),
+        0,
+      );
+      const actualEarned = summaryItems.reduce(
+        (s, d) => s + Number(d.revenueEarned || 0),
+        0,
+      );
+      const totalOrders = summaryItems.reduce(
+        (s, d) => s + Number(d.totalOrders || 0),
+        0,
+      );
+      const gap = Math.round(totalRevenue - actualEarned);
 
       return res.status(200).json({
         success: true,
+        syncStatus: "completed",
         shopName:
           integration.shopName || integration.shopDomain || "Your Store",
         shopDomain: integration.shopDomain || "",
@@ -398,7 +440,6 @@ class OnboardingController {
         actualEarned,
         gap,
         totalOrders,
-        codOrders: codEstimate,
       });
     } catch (error) {
       console.error("❌ getShopifyInsight error:", error.message);
