@@ -6,7 +6,7 @@ const API_URL =
 
 const MetaOnboarding = () => {
   const [status, setStatus] = useState("loading");
-  const [data, setData]     = useState(null);
+  const [data, setData] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
 
   // ── Auth check ──────────────────────────────────────────────
@@ -37,7 +37,6 @@ const MetaOnboarding = () => {
 
       setData(d);
       setStatus("ready");
-
     } catch (err) {
       console.error("Meta insight error:", err);
       setErrorMsg(err.response?.data?.error || "Failed to load Meta data.");
@@ -47,11 +46,14 @@ const MetaOnboarding = () => {
 
   // ── Format ──────────────────────────────────────────────────
   const fmt = (num) =>
-    "₹" + Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    "₹" +
+    Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
   // ── Render ──────────────────────────────────────────────────
   return (
     <div style={styles.page}>
+      <div style={{ ...styles.blob, ...styles.blobLeft }}></div>
+      <div style={{ ...styles.blob, ...styles.blobRight }}></div>
 
       {/* LEFT SIDEBAR */}
       <div style={styles.sidebar}>
@@ -89,7 +91,13 @@ const MetaOnboarding = () => {
             <p style={styles.sideStatValue}>{fmt(data.totalAdSpend)}</p>
             <p style={{ ...styles.sideStatLabel, marginTop: "12px" }}>ROAS</p>
             <p style={styles.sideStatValue}>{data.roas}</p>
-            <p style={{ ...styles.sideStatLabel, marginTop: "12px", color: "#aaa" }}>
+            <p
+              style={{
+                ...styles.sideStatLabel,
+                marginTop: "12px",
+                color: "#aaa",
+              }}
+            >
               Shipping Cost
             </p>
             <p style={styles.sideStatSmall}>Connect Shiprocket →</p>
@@ -108,7 +116,6 @@ const MetaOnboarding = () => {
 
       {/* RIGHT MAIN CONTENT */}
       <div style={styles.main}>
-
         {/* LOADING */}
         {status === "loading" && (
           <div style={styles.centerBox}>
@@ -125,7 +132,8 @@ const MetaOnboarding = () => {
             <h2 style={styles.heading}>Fetching your ad data...</h2>
             <p style={styles.subText}>
               We are pulling your last 30 days of Meta Ads data.
-              <br />This usually takes 30–60 seconds.
+              <br />
+              This usually takes 30–60 seconds.
             </p>
             <div style={styles.progressBar}>
               <div style={styles.progressFill}></div>
@@ -150,7 +158,9 @@ const MetaOnboarding = () => {
           <>
             {/* Insight card */}
             <div style={styles.insightCard}>
-              <p style={styles.insightTitle}>✅ Meta Ads connected — first insight</p>
+              <p style={styles.insightTitle}>
+                ✅ Meta Ads connected — first insight
+              </p>
               <div style={styles.insightNumbers}>
                 <div>
                   <p style={styles.numValue}>{fmt(data.totalAdSpend)}</p>
@@ -163,7 +173,8 @@ const MetaOnboarding = () => {
               </div>
               <p style={styles.insightDesc}>
                 <strong>
-                  ROAS {data.roas} shows revenue per rupee spent — not real profit.
+                  ROAS {data.roas} shows revenue per rupee spent — not real
+                  profit.
                 </strong>{" "}
                 Connect Shiprocket next to add shipping and RTO costs — then
                 your real profit on ad spend becomes visible.
@@ -174,9 +185,7 @@ const MetaOnboarding = () => {
 
             <h1 style={styles.headline}>
               Ads are running.{" "}
-              <span style={styles.headlineGreen}>
-                Now track real profit.
-              </span>
+              <span style={styles.headlineGreen}>Now track real profit.</span>
             </h1>
 
             <p style={styles.subText}>
@@ -187,13 +196,15 @@ const MetaOnboarding = () => {
             <div style={styles.ctaRow}>
               <button
                 style={styles.btnPrimary}
-                onClick={() => window.location.href = "/onboarding/shiprocket"}
+                onClick={() =>
+                  (window.location.href = "/onboarding/shiprocket")
+                }
               >
                 Connect Shiprocket →
               </button>
               <button
                 style={styles.btnSecondary}
-                onClick={() => window.location.href = "/dashboard"}
+                onClick={() => (window.location.href = "/dashboard")}
               >
                 I'll do this later →
               </button>
@@ -204,7 +215,6 @@ const MetaOnboarding = () => {
             </p>
           </>
         )}
-
       </div>
     </div>
   );
@@ -213,56 +223,89 @@ const MetaOnboarding = () => {
 // ── STYLES ─────────────────────────────────────────────────────
 const styles = {
   page: {
-    display: "flex", minHeight: "100vh",
-    background: "#0a1628", color: "#fff",
-    fontFamily: "Inter, sans-serif",
+    display: "flex",
+    minHeight: "100vh",
+    background: "#101218",
+    position: "relative",
+    overflow: "hidden",
   },
   sidebar: {
-    width: "220px", minWidth: "220px",
-    background: "#0d1f35", padding: "24px 16px",
-    display: "flex", flexDirection: "column",
+    width: "220px",
+    minWidth: "220px",
+    background: "rgba(255,255,255,0.02)",
+    backdropFilter: "blur(10px)",
+    padding: "24px 16px",
+    display: "flex",
+    flexDirection: "column",
     borderRight: "1px solid rgba(255,255,255,0.06)",
+    position: "relative",
+    zIndex: 1,
   },
-  logo:        { marginBottom: "28px" },
+  logo: { marginBottom: "28px" },
   sideSection: { marginBottom: "24px" },
   sideLabel: {
-    fontSize: "0.7rem", color: "#aaa",
-    textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px",
+    fontSize: "0.7rem",
+    color: "#aaa",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    marginBottom: "10px",
   },
   sideItem: {
-    display: "flex", alignItems: "center",
-    gap: "8px", marginBottom: "10px",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "10px",
   },
   sideIcon: { fontSize: "14px" },
   sideText: { fontSize: "0.85rem", flex: 1 },
   badgeLive: {
-    fontSize: "0.65rem", background: "#26b35e", color: "#fff",
-    padding: "2px 7px", borderRadius: "20px", fontWeight: "600",
+    fontSize: "0.65rem",
+    background: "#26b35e",
+    color: "#fff",
+    padding: "2px 7px",
+    borderRadius: "20px",
+    fontWeight: "600",
   },
   badgeNext: {
-    fontSize: "0.65rem", background: "#3b82f6", color: "#fff",
-    padding: "2px 7px", borderRadius: "20px", fontWeight: "600",
+    fontSize: "0.65rem",
+    background: "#3b82f6",
+    color: "#fff",
+    padding: "2px 7px",
+    borderRadius: "20px",
+    fontWeight: "600",
   },
   sideStatLabel: { fontSize: "0.75rem", color: "#ccc", marginBottom: "2px" },
   sideStatValue: { fontSize: "1.1rem", fontWeight: "700", color: "#26b35e" },
   sideStatSmall: { fontSize: "0.72rem", color: "#888", marginBottom: "2px" },
   sideBottom: {
-    marginTop: "auto", display: "flex", alignItems: "center",
-    gap: "8px", paddingTop: "16px",
+    marginTop: "auto",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    paddingTop: "16px",
     borderTop: "1px solid rgba(255,255,255,0.06)",
   },
   shopDot: {
-    width: "8px", height: "8px", borderRadius: "50%",
-    background: "#26b35e", display: "inline-block",
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    background: "#26b35e",
+    display: "inline-block",
   },
   shopName: { fontSize: "0.75rem", color: "#aaa" },
   main: {
-    flex: 1, padding: "48px 56px",
-    display: "flex", flexDirection: "column", justifyContent: "center",
+    flex: 1,
+    padding: "48px 56px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    position: "relative",
+    zIndex: 1,
   },
   centerBox: { textAlign: "center", maxWidth: "420px", margin: "0 auto" },
   spinner: {
-    width: "48px", height: "48px",
+    width: "48px",
+    height: "48px",
     border: "4px solid rgba(38,179,94,0.15)",
     borderTop: "4px solid #26b35e",
     borderRadius: "50%",
@@ -270,62 +313,110 @@ const styles = {
     margin: "0 auto 24px",
   },
   progressBar: {
-    width: "280px", height: "4px",
+    width: "280px",
+    height: "4px",
     background: "rgba(255,255,255,0.1)",
-    borderRadius: "4px", margin: "24px auto 0", overflow: "hidden",
+    borderRadius: "4px",
+    margin: "24px auto 0",
+    overflow: "hidden",
   },
   progressFill: {
-    height: "100%", width: "60%", background: "#26b35e",
+    height: "100%",
+    width: "60%",
+    background: "#26b35e",
     animation: "pulse 1.5s ease-in-out infinite",
   },
   heading: {
-    fontSize: "1.5rem", fontWeight: "600",
-    color: "#fff", marginBottom: "12px",
+    fontSize: "1.5rem",
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: "12px",
   },
   insightCard: {
     background: "rgba(38,179,94,0.08)",
     border: "1px solid rgba(38,179,94,0.25)",
-    borderRadius: "12px", padding: "20px 24px",
-    marginBottom: "32px", maxWidth: "560px",
+    borderRadius: "12px",
+    padding: "20px 24px",
+    marginBottom: "32px",
+    maxWidth: "560px",
   },
   insightTitle: {
-    fontSize: "0.85rem", color: "#26b35e",
-    marginBottom: "14px", fontWeight: "600",
+    fontSize: "0.85rem",
+    color: "#26b35e",
+    marginBottom: "14px",
+    fontWeight: "600",
   },
   insightNumbers: { display: "flex", gap: "48px", marginBottom: "14px" },
   numValue: {
-    fontSize: "1.3rem", fontWeight: "700",
-    color: "#fff", marginBottom: "2px",
+    fontSize: "1.3rem",
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: "2px",
   },
-  numLabel:  { fontSize: "0.72rem", color: "#aaa" },
+  numLabel: { fontSize: "0.72rem", color: "#aaa" },
   insightDesc: { fontSize: "0.82rem", color: "#ccc", lineHeight: "1.6" },
-  stepText:  { fontSize: "0.8rem", color: "#26b35e", marginBottom: "12px" },
+  stepText: { fontSize: "0.8rem", color: "#26b35e", marginBottom: "12px" },
   headline: {
-    fontSize: "2.2rem", fontWeight: "700",
-    color: "#fff", lineHeight: "1.2",
-    marginBottom: "16px", maxWidth: "480px",
+    fontSize: "2.2rem",
+    fontWeight: "700",
+    color: "#fff",
+    lineHeight: "1.2",
+    marginBottom: "16px",
+    maxWidth: "480px",
   },
   headlineGreen: { color: "#26b35e" },
   subText: {
-    fontSize: "0.95rem", color: "#aaa",
-    marginBottom: "28px", maxWidth: "440px",
+    fontSize: "0.95rem",
+    color: "#aaa",
+    marginBottom: "28px",
+    maxWidth: "440px",
   },
   ctaRow: {
-    display: "flex", gap: "16px",
-    alignItems: "center", marginBottom: "12px",
+    display: "flex",
+    gap: "16px",
+    alignItems: "center",
+    marginBottom: "12px",
   },
   btnPrimary: {
-    background: "#26b35e", color: "#fff", border: "none",
-    padding: "14px 28px", borderRadius: "8px",
-    fontSize: "0.95rem", fontWeight: "600", cursor: "pointer",
+    background: "#26b35e",
+    color: "#fff",
+    border: "none",
+    padding: "14px 28px",
+    borderRadius: "8px",
+    fontSize: "0.95rem",
+    fontWeight: "600",
+    cursor: "pointer",
   },
   btnSecondary: {
-    background: "transparent", color: "#aaa",
+    background: "transparent",
+    color: "#aaa",
     border: "1px solid rgba(255,255,255,0.15)",
-    padding: "14px 24px", borderRadius: "8px",
-    fontSize: "0.95rem", cursor: "pointer",
+    padding: "14px 24px",
+    borderRadius: "8px",
+    fontSize: "0.95rem",
+    cursor: "pointer",
   },
   ctaNote: { fontSize: "0.78rem", color: "#666" },
+  blob: {
+    position: "absolute",
+    width: "380px",
+    height: "380px",
+    filter: "blur(80px)",
+    opacity: 0.14,
+    zIndex: 0,
+    borderRadius: "50%",
+    background: "#5fc61f",
+    pointerEvents: "none",
+  },
+  blobLeft: {
+    left: "-120px",
+    top: "100%",
+    transform: "translateY(-50%)",
+  },
+  blobRight: {
+    right: "-120px",
+    top: "0%",
+  },
 };
 
 // CSS animations

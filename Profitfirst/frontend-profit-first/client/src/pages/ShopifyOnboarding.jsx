@@ -79,6 +79,9 @@ const ShopifyOnboarding = () => {
   // ── Render ────────────────────────────────────────────────────
   return (
     <div style={styles.page}>
+      <div style={{ ...styles.blob, ...styles.blobLeft }}></div>
+      <div style={{ ...styles.blob, ...styles.blobRight }}></div>
+
       {/* LEFT SIDEBAR */}
       <div style={styles.sidebar}>
         <div style={styles.logo}>
@@ -279,18 +282,21 @@ const styles = {
   page: {
     display: "flex",
     minHeight: "100vh",
-    background: "#0a1628",
-    color: "#fff",
-    fontFamily: "Inter, sans-serif",
+    background: "#101218",
+    position: "relative",
+    overflow: "hidden",
   },
   sidebar: {
     width: "220px",
     minWidth: "220px",
-    background: "#0d1f35",
+    background: "rgba(255,255,255,0.02)",
+    backdropFilter: "blur(10px)",
     padding: "24px 16px",
     display: "flex",
     flexDirection: "column",
     borderRight: "1px solid rgba(255,255,255,0.06)",
+    position: "relative",
+    zIndex: 1,
   },
   logo: { marginBottom: "28px" },
   sideSection: { marginBottom: "24px" },
@@ -357,7 +363,8 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    alignItems:"center",
+    position: "relative",
+    zIndex: 1,
   },
   centerBox: { textAlign: "center", maxWidth: "420px", margin: "0 auto" },
   spinner: {
@@ -454,6 +461,26 @@ const styles = {
     cursor: "pointer",
   },
   ctaNote: { fontSize: "0.78rem", color: "#666" },
+  blob: {
+    position: "absolute",
+    width: "380px",
+    height: "380px",
+    filter: "blur(80px)",
+    opacity: 0.14,
+    zIndex: 0,
+    borderRadius: "50%",
+    background: "#5fc61f",
+    pointerEvents: "none",
+  },
+  blobLeft: {
+    left: "-120px",
+    top: "100%",
+    transform: "translateY(-50%)",
+  },
+  blobRight: {
+    right: "-120px",
+    top: "0%",
+  },
 };
 
 // CSS animations
