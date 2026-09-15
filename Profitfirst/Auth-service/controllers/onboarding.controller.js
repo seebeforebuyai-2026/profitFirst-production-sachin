@@ -1,6 +1,6 @@
 const onboardingService = require("../services/onboarding.service");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
-const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 
 class OnboardingController {
   async getCurrentStep(req, res) {
@@ -463,6 +463,98 @@ class OnboardingController {
     } catch (error) {
       console.error("completeShopifyOnboarding error:", error.message);
       return res.status(500).json({ error: "Failed to update onboarding" });
+    }
+  }
+
+  async getMetaInsight(req, res) {
+    try {
+      const merchantId = req.user.userId;
+
+      console.log(`\n📊 Meta Insight: fetching for merchant=${merchantId}`);
+
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+
+      // 1. Sync status check karo
+      const syncRes = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#META" },
+        }),
+      );
+
+      const isCompleted = syncRes.Item?.status === "completed";
+
+      if (!isCompleted) {
+        return res.status(200).json({
+          success: true,
+          syncStatus: "in_progress",
+        });
+      }
+
+      // 2. Last 30 days ADS# records fetch karo
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+
+      const startDate = thirtyDaysAgo.toISOString().split("T")[0];
+      const endDate = today.toISOString().split("T")[0];
+
+      const adsRes = await newDynamoDB.send(
+        new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND SK BETWEEN :start AND :end",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":start": `ADS#${startDate}`,
+            ":end": `ADS#${endDate}`,
+          },
+        }),
+      );
+
+      const adsItems = adsRes.Items || [];
+
+      // 3. Aggregate
+      const totalAdSpend = adsItems.reduce(
+        (s, d) => s + Number(d.spend || 0),
+        0,
+      );
+
+      // 4. SUMMARY# se revenue fetch karo ROAS calculate karne ke liye
+      const summaryRes = await newDynamoDB.send(
+        new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND SK BETWEEN :start AND :end",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":start": `SUMMARY#${startDate}`,
+            ":end": `SUMMARY#${endDate}`,
+          },
+        }),
+      );
+
+      const totalRevenue = (summaryRes.Items || []).reduce(
+        (s, d) => s + Number(d.revenueGenerated || 0),
+        0,
+      );
+
+      const roas =
+        totalAdSpend > 0 ? Number((totalRevenue / totalAdSpend).toFixed(2)) : 0;
+
+      console.log(
+        `✅ Meta Insight ready: adSpend=${totalAdSpend}, roas=${roas}`,
+      );
+
+      return res.status(200).json({
+        success: true,
+        syncStatus: "completed",
+        totalAdSpend: Math.round(totalAdSpend),
+        totalRevenue: Math.round(totalRevenue),
+        roas,
+      });
+    } catch (error) {
+      console.error("❌ getMetaInsight error:", error.message);
+      return res.status(500).json({ error: "Failed to fetch Meta insight" });
     }
   }
 }

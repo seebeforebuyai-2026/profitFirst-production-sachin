@@ -41,5 +41,6 @@ router.post('/step5', onboardingController.connectShipping);
 router.get('/shopify-insight', onboardingController.getShopifyInsight);
 router.post('/complete-shopify', onboardingController.completeShopifyOnboarding);
 
+router.get('/meta-insight', onboardingController.getMetaInsight);
 
 module.exports = router;
