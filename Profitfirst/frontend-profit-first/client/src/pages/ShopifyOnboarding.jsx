@@ -357,6 +357,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    alignItems:"center",
   },
   centerBox: { textAlign: "center", maxWidth: "420px", margin: "0 auto" },
   spinner: {
