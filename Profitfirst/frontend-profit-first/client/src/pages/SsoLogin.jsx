@@ -48,14 +48,8 @@ const SsoLogin = () => {
         // 5. redirectTo ke hisaab se navigate karo
         console.log(`🚀 Redirecting to ${redirectTo}`);
         // redirectTo ke hisaab se decide karo
-        if (redirectTo === "/onboarding") {
-          navigate("/onboarding/shopify", { replace: true });
-        } else {
-          navigate(redirectTo, {
-            replace: true,
-            state: { userId: user.userId, email: user.email },
-          });
-        }
+        // Hamesha ShopifyOnboarding pe bhejo
+        window.location.href = "/onboarding/shopify";
       } catch (err) {
         console.error("❌ SSO verification failed:", err);
 

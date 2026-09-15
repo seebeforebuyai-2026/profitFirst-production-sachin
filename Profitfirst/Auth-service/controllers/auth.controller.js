@@ -1593,7 +1593,8 @@ class AuthController {
       const { AccessToken, IdToken, RefreshToken } = authResult.data;
 
       // 7. redirectTo decide karo
-      const redirectTo = onboardingCompleted ? "/dashboard" : "/onboarding";
+    const redirectTo = (onboardingCompleted === true) ? "/dashboard" : "/onboarding";
+
 
       console.log(`✅ SSO verified for ${email} → ${redirectTo}`);
 

@@ -39,6 +39,7 @@ router.post('/step5', onboardingController.connectShipping);
 
 // Shopify insight for new merchant onboarding screen
 router.get('/shopify-insight', onboardingController.getShopifyInsight);
+router.post('/complete-shopify', onboardingController.completeShopifyOnboarding);
 
 
 module.exports = router;

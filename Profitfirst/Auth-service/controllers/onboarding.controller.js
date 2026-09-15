@@ -448,6 +448,23 @@ class OnboardingController {
       });
     }
   }
+
+  async completeShopifyOnboarding(req, res) {
+    try {
+      const merchantId = req.user.userId;
+
+      await dynamoDBService.updateUserProfileOnboarding(merchantId, {
+        onboardingCompleted: true,
+        onboardingStep: 2,
+      });
+
+      console.log(`✅ Shopify onboarding marked complete for ${merchantId}`);
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("completeShopifyOnboarding error:", error.message);
+      return res.status(500).json({ error: "Failed to update onboarding" });
+    }
+  }
 }
 
 module.exports = new OnboardingController();
