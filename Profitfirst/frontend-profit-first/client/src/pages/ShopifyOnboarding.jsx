@@ -21,6 +21,29 @@ const ShopifyOnboarding = () => {
     fetchInsight();
   }, []);
 
+  const handleMetaConnect = async () => {
+    try {
+      console.log("🔗 Initiating Meta OAuth...");
+      const token = localStorage.getItem("accessToken");
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in"}/api/meta/connect`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      if (!response.data?.authUrl) {
+        console.log("Invalid auth response");
+        return;
+      }
+
+      // Meta OAuth page pe redirect karo
+      window.location.href = response.data.authUrl;
+    } catch (err) {
+      console.error("❌ Meta connect error:", err);
+    }
+  };
+
   // ── Polling + Fetch ───────────────────────────────────────────
   const fetchInsight = async () => {
     try {
@@ -214,10 +237,7 @@ const ShopifyOnboarding = () => {
             </p>
 
             <div style={styles.ctaRow}>
-              <button
-                style={styles.btnPrimary}
-                onClick={() => navigate("/onboarding")}
-              >
+              <button style={styles.btnPrimary} onClick={handleMetaConnect}>
                 Connect Meta Ads →
               </button>
               <button

@@ -13,7 +13,7 @@ const { profile, loading, fetchProfile } = useProfile();
   // -------------------------------
   // 🔐 Lock Logic
   // -------------------------------
-  const isDashboardLocked = profile?.dashboardUnlocked !== true;
+  const isDashboardLocked = false;
   const isProductsPage = location.pathname.includes("products");
   const isExpensesPage = location.pathname.includes("business-expenses");
 
@@ -40,28 +40,28 @@ const { profile, loading, fetchProfile } = useProfile();
   // -------------------------------
   // 🔄 Auto Redirect Logic
   // -------------------------------
-  useEffect(() => {
-    if (!loading && profile) {
-      if (!cogsDone && !isProductsPage) {
-        navigate("/dashboard/products");
-      } else if (
-        cogsDone &&
-        !expensesDone &&
-        !isExpensesPage
-      ) {
-        navigate("/dashboard/business-expenses");
-      }
-    }
-  }, [
-    profile,
-    loading,
-    location.pathname,
-    navigate,
-    cogsDone,
-    expensesDone,
-    isProductsPage,
-    isExpensesPage,
-  ]);
+  // useEffect(() => {
+  //   if (!loading && profile) {
+  //     if (!cogsDone && !isProductsPage) {
+  //       navigate("/dashboard/products");
+  //     } else if (
+  //       cogsDone &&
+  //       !expensesDone &&
+  //       !isExpensesPage
+  //     ) {
+  //       navigate("/dashboard/business-expenses");
+  //     }
+  //   }
+  // }, [
+  //   profile,
+  //   loading,
+  //   location.pathname,
+  //   navigate,
+  //   cogsDone,
+  //   expensesDone,
+  //   isProductsPage,
+  //   isExpensesPage,
+  // ]);
 
   // -------------------------------
   // 🌫 Blur Logic (OLD DESIGN PRESERVED)

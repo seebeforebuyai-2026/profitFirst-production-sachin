@@ -14,9 +14,9 @@ const ProtectedRoute = ({ children, requireUnlock = false }) => {
   }
 
   // If requireUnlock is true, check dashboardUnlocked
-  if (requireUnlock && profile?.dashboardUnlocked === false) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // if (requireUnlock && profile?.dashboardUnlocked === false) {
+  //   return <Navigate to="/dashboard" replace />;
+  // }
 
   return children;
 };

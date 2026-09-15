@@ -1,24 +1,23 @@
-const { QueryCommand,GetCommand } = require("@aws-sdk/lib-dynamodb");
+const { QueryCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
-
 
 class DashboardService {
   async getAggregatedSummary(merchantId, startDate, endDate) {
     try {
-
-       const profileResult = await newDynamoDB.send(new GetCommand({
-        TableName: newTableName,
-        Key: {
-          PK: `MERCHANT#${merchantId}`,
-          SK: "PROFILE"
-        }
-      }));
+      const profileResult = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: "PROFILE",
+          },
+        }),
+      );
 
       const profile = profileResult.Item || {};
       const staffSalary = Number(profile.staffSalary || 0);
       const officeRent = Number(profile.officeRent || 0);
       const agencyFees = Number(profile.agencyFees || 0);
-
 
       let days = [];
       let lastKey = null;
@@ -44,14 +43,14 @@ class DashboardService {
         staffSalary: staffSalary,
         officeRent: officeRent,
         agencyFees: agencyFees,
-        pastOrdersCount: 0,    
-        currentOrdersCount: 0, 
+        pastOrdersCount: 0,
+        currentOrdersCount: 0,
         revenueGenerated: 0,
-        revenueEarned: 0, 
-        prepaidRevenue: 0, 
+        revenueEarned: 0,
+        prepaidRevenue: 0,
         codRevenue: 0,
-        revenueFromPastOrders: 0, 
-        revenueFromCurrentOrders: 0, 
+        revenueFromPastOrders: 0,
+        revenueFromCurrentOrders: 0,
         partialCodOrders: 0,
         partialPrepaidAmount: 0,
         partialCodAmount: 0,
@@ -98,7 +97,8 @@ class DashboardService {
           ? totals.revenueGenerated / totals.totalOrders
           : 0;
 
-          const realaov = totals.deliveredOrders > 0
+      const realaov =
+        totals.deliveredOrders > 0
           ? totals.revenueEarned / totals.deliveredOrders
           : 0;
 
@@ -122,13 +122,13 @@ class DashboardService {
           ? (contributionProfit / totals.revenueEarned) * 100
           : 0;
 
-
       const marginBeforeAds =
         totals.revenueEarned > 0
           ? (contributionProfit + totals.adsSpend) / totals.revenueEarned
           : 0;
       // const breakEvenROAS = marginBeforeAds > 0 ? 1 / marginBeforeAds : 0;
-      const breakEvenROAS = 1 / contributionMargin * 100;
+      const breakEvenROAS =
+        contributionMargin > 0 ? (1 / contributionMargin) * 100 : 0;
 
       // 5. PERIOD FORECASTING (Merchant Specific)
       const totalDecided = totals.deliveredOrders + totals.rtoOrders;
@@ -147,7 +147,12 @@ class DashboardService {
         startDate,
         endDate,
       );
-      const contributionCost = totals.cogs + totals.shippingSpend + totals.gatewayFees + totals.rtoHandlingFees + totals.adsSpend;
+      const contributionCost =
+        totals.cogs +
+        totals.shippingSpend +
+        totals.gatewayFees +
+        totals.rtoHandlingFees +
+        totals.adsSpend;
       return {
         success: true,
         summary: {
@@ -178,7 +183,11 @@ class DashboardService {
         },
         moneyFlowData: [
           // { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
-          {name :"Shopify Generated / Gross Revenue  ", value: totals.revenueGenerated, type: "positive"},
+          {
+            name: "Shopify Generated / Gross Revenue  ",
+            value: totals.revenueGenerated,
+            type: "positive",
+          },
           {
             name: "Revenue Earned",
             value: totals.revenueEarned,
@@ -188,9 +197,17 @@ class DashboardService {
           { name: "COGS", value: -totals.cogs, type: "negative" },
           { name: "Ads", value: -totals.adsSpend, type: "negative" },
           { name: "Shipping", value: -totals.shippingSpend, type: "negative" },
-          { name: "Gateway Fees", value: -totals.gatewayFees, type: "negative" },
-          { name: "RTO Repacking Cost", value: -totals.rtoHandlingFees, type: "negative" },
-          
+          {
+            name: "Gateway Fees",
+            value: -totals.gatewayFees,
+            type: "negative",
+          },
+          {
+            name: "RTO Repacking Cost",
+            value: -totals.rtoHandlingFees,
+            type: "negative",
+          },
+
           // {
           //   name: "Fees",
           //   value: -(totals.gatewayFees + totals.rtoHandlingFees),
@@ -202,10 +219,10 @@ class DashboardService {
             type: "negative",
           },
           {
-  name: "Money Kept",
-  value: totals.moneyKept,
-  type: totals.moneyKept >= 0 ? "positive" : "negative",
-},
+            name: "Money Kept",
+            value: totals.moneyKept,
+            type: totals.moneyKept >= 0 ? "positive" : "negative",
+          },
         ],
         forecast: {
           successRate: Number(successRate.toFixed(2)),
@@ -223,12 +240,12 @@ class DashboardService {
         staffSalary,
         officeRent,
         agencyFees,
-        
+
         revenueSourceBreakdown: {
           fromPastOrders: Number(totals.revenueFromPastOrders.toFixed(2)),
           fromCurrentOrders: Number(totals.revenueFromCurrentOrders.toFixed(2)),
-          pastOrdersCount: totals.pastOrdersCount,       
-          currentOrdersCount: totals.currentOrdersCount, 
+          pastOrdersCount: totals.pastOrdersCount,
+          currentOrdersCount: totals.currentOrdersCount,
           totalPrepaid: Number(totals.prepaidRevenue.toFixed(2)),
           totalCOD: Number(totals.codRevenue.toFixed(2)),
         },

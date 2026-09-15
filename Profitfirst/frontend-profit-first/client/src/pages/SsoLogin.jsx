@@ -22,7 +22,7 @@ const SsoLogin = () => {
 
         // 2. Backend ko call karo
         const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || "http://api.profitfirstanalytics.co.in"}/api/auth/sso-verify`,
+          `${import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in"}/api/auth/sso-verify`,
           { token },
           { headers: { "Content-Type": "application/json" } },
         );
