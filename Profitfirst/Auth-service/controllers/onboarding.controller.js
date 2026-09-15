@@ -1,6 +1,6 @@
 const onboardingService = require("../services/onboarding.service");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
-const { GetCommand } = require("@aws-sdk/lib-dynamodb");
+const { GetCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
 class OnboardingController {
   async getCurrentStep(req, res) {
