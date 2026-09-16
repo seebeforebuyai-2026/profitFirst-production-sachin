@@ -44,6 +44,7 @@ import MetaBridge from "./components/MetaBridge";
 import SsoLogin from "./pages/SsoLogin";
 import ShopifyOnboarding from "./pages/ShopifyOnboarding";
 import MetaOnboarding from "./pages/MetaOnboarding";
+import ShiprocketOnboarding from "./pages/ShiprocketOnboarding";
 
 function AppWrapper() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -153,6 +154,10 @@ function AppWrapper() {
           <Route path="/sso-login" element={<SsoLogin />} />
           <Route path="/onboarding/shopify" element={<ShopifyOnboarding />} />
           <Route path="/onboarding/meta" element={<MetaOnboarding />} />
+          <Route
+            path="/onboarding/shiprocket"
+            element={<ShiprocketOnboarding />}
+          />
 
           <Route
             path="/onboarding"

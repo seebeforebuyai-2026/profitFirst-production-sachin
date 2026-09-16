@@ -7,5 +7,8 @@ const { authenticateToken } = require('../middleware/auth.middleware'); // ✅ F
 router.post('/trigger-fetch', authenticateToken, productsController.triggerProductFetch);
 router.get('/list', authenticateToken, productsController.getProductsList);
 router.post('/save-cogs', authenticateToken, productsController.saveCogs);
+router.get('/top-selling', authenticateToken, productsController.getTopSelling);
+router.post('/save-cogs-bulk', authenticateToken, productsController.saveCogsBulk);
+
 
 module.exports = router;

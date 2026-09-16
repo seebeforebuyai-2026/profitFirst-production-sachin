@@ -42,5 +42,7 @@ router.get('/shopify-insight', onboardingController.getShopifyInsight);
 router.post('/complete-shopify', onboardingController.completeShopifyOnboarding);
 
 router.get('/meta-insight', onboardingController.getMetaInsight);
+router.get('/shiprocket-insight', onboardingController.getShiprocketInsight);
+
 
 module.exports = router;

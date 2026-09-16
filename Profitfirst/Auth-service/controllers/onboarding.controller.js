@@ -327,6 +327,37 @@ class OnboardingController {
 
       console.log(`✅ ${platform} connected successfully`);
 
+      // Last 30 days Shiprocket sync trigger karo
+      try {
+        const {
+          sqsClient,
+          shiprocketQueueUrl,
+        } = require("../config/aws.config");
+        const { SendMessageCommand } = require("@aws-sdk/client-sqs");
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        await sqsClient.send(
+          new SendMessageCommand({
+            QueueUrl: shiprocketQueueUrl,
+            MessageBody: JSON.stringify({
+              type: "SHIPROCKET_SYNC",
+              merchantId,
+              sinceDate: thirtyDaysAgo.toISOString(),
+              mode: "shiprocket_onboarding",
+              stage: "collect",
+              affectedDates: [],
+            }),
+          }),
+        );
+        console.log(`📡 Shiprocket sync triggered for ${merchantId}`);
+      } catch (sqsErr) {
+        console.error(
+          `⚠️ Shiprocket SQS trigger failed (non-critical): ${sqsErr.message}`,
+        );
+      }
+
       res.status(200).json({
         success: true,
         message: `${platform} connected successfully`,
@@ -555,6 +586,88 @@ class OnboardingController {
     } catch (error) {
       console.error("❌ getMetaInsight error:", error.message);
       return res.status(500).json({ error: "Failed to fetch Meta insight" });
+    }
+  }
+
+  async getShiprocketInsight(req, res) {
+    try {
+      const merchantId = req.user.userId;
+
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+
+      // 1. Sync status check
+      const syncRes = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#SHIPROCKET" },
+        }),
+      );
+
+      const isCompleted = syncRes.Item?.status === "completed";
+
+      if (!isCompleted) {
+        return res.status(200).json({
+          success: true,
+          syncStatus: "in_progress",
+        });
+      }
+
+      // 2. Last 30 days SUMMARY# records se aggregate karo
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      const startDate = thirtyDaysAgo.toISOString().split("T")[0];
+      const endDate = today.toISOString().split("T")[0];
+
+      const summaryRes = await newDynamoDB.send(
+        new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND SK BETWEEN :start AND :end",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":start": `SUMMARY#${startDate}`,
+            ":end": `SUMMARY#${endDate}`,
+          },
+        }),
+      );
+
+      const items = summaryRes.Items || [];
+
+      const deliveredOrders = items.reduce(
+        (s, d) => s + Number(d.deliveredOrders || 0),
+        0,
+      );
+      const rtoOrders = items.reduce((s, d) => s + Number(d.rtoOrders || 0), 0);
+      const shippingSpend = items.reduce(
+        (s, d) => s + Number(d.shippingSpend || 0),
+        0,
+      );
+      const moneyKept = items.reduce((s, d) => s + Number(d.moneyKept || 0), 0);
+      const rtoHandlingFees = items.reduce(
+        (s, d) => s + Number(d.rtoHandlingFees || 0),
+        0,
+      );
+      const revenueEarned = items.reduce(
+        (s, d) => s + Number(d.revenueEarned || 0),
+        0,
+      );
+
+      return res.status(200).json({
+        success: true,
+        syncStatus: "completed",
+        deliveredOrders,
+        rtoOrders,
+        shippingSpend: Math.round(shippingSpend),
+        moneyKept: Math.round(moneyKept),
+        rtoHandlingFees: Math.round(rtoHandlingFees),
+        revenueEarned: Math.round(revenueEarned),
+      });
+    } catch (error) {
+      console.error("❌ getShiprocketInsight error:", error.message);
+      return res
+        .status(500)
+        .json({ error: "Failed to fetch Shiprocket insight" });
     }
   }
 }

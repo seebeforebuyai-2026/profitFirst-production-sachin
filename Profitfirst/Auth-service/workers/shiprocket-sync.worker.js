@@ -15,7 +15,7 @@ const {
   sqsClient,
   shiprocketQueueUrl,
   summaryQueueUrl,
-  newDynamoDB, 
+  newDynamoDB,
   newTableName,
 } = require("../config/aws.config");
 const axios = require("axios");
@@ -29,26 +29,50 @@ let isShuttingDown = false;
 // ======================================================================
 
 const STATUS_CODE_MAP = {
-  1: "NEW", 2: "CANCELED", 3: "OTHER", 4: "READY_TO_SHIP",
-  5: "PICKUP_SCHEDULED", 6: "SHIPPED", 7: "DELIVERED", 8: "UNDELIVERED",
-  9: "RTO", 10: "RTO_DELIVERED", 11: "PICKUP_GENERATED", 12: "PICKUP_QUEUED",
-  13: "OUT_FOR_PICKUP", 14: "PICKUP_RESCHEDULED", 15: "PICKED_UP",
-  16: "OUT_FOR_DELIVERY", 17: "IN_TRANSIT", 18: "AWB_ASSIGNED",
-  19: "LABEL_GENERATED", 20: "MANIFEST_GENERATED", 21: "PICKUP_EXCEPTION",
-  22: "UNDELIVERED_1ST", 23: "UNDELIVERED_2ND", 24: "UNDELIVERED_3RD",
-  25: "RTO_INITIATED", 26: "RTO_ACKNOWLEDGED", 27: "RTO_IN_TRANSIT",
-  38: "REACHED_DESTINATION_HUB", 42: "MISROUTED",
-  43: "CUSTOMER_NOT_AVAILABLE", 44: "ADDRESS_INCORRECT", 45: "DELAYED",
-  46: "PARTIAL_DELIVERED", 47: "OUT_FOR_DELIVERY_TODAY", 48: "HANDED_OVER",
+  1: "NEW",
+  2: "CANCELED",
+  3: "OTHER",
+  4: "READY_TO_SHIP",
+  5: "PICKUP_SCHEDULED",
+  6: "SHIPPED",
+  7: "DELIVERED",
+  8: "UNDELIVERED",
+  9: "RTO",
+  10: "RTO_DELIVERED",
+  11: "PICKUP_GENERATED",
+  12: "PICKUP_QUEUED",
+  13: "OUT_FOR_PICKUP",
+  14: "PICKUP_RESCHEDULED",
+  15: "PICKED_UP",
+  16: "OUT_FOR_DELIVERY",
+  17: "IN_TRANSIT",
+  18: "AWB_ASSIGNED",
+  19: "LABEL_GENERATED",
+  20: "MANIFEST_GENERATED",
+  21: "PICKUP_EXCEPTION",
+  22: "UNDELIVERED_1ST",
+  23: "UNDELIVERED_2ND",
+  24: "UNDELIVERED_3RD",
+  25: "RTO_INITIATED",
+  26: "RTO_ACKNOWLEDGED",
+  27: "RTO_IN_TRANSIT",
+  38: "REACHED_DESTINATION_HUB",
+  42: "MISROUTED",
+  43: "CUSTOMER_NOT_AVAILABLE",
+  44: "ADDRESS_INCORRECT",
+  45: "DELAYED",
+  46: "PARTIAL_DELIVERED",
+  47: "OUT_FOR_DELIVERY_TODAY",
+  48: "HANDED_OVER",
 };
 
-const DDB_BATCH_SIZE = 25;     // DynamoDB BatchWrite hard limit
+const DDB_BATCH_SIZE = 25; // DynamoDB BatchWrite hard limit
 const DDB_BATCH_GET_SIZE = 100; // DynamoDB BatchGet hard limit
 const PER_PAGE = 100;
 
 // 🟢 SCALABILITY CONFIG - TUNED FOR HIGH VOLUME
 const RATE_LIMIT = {
-  BASE_DELAY_MS: 1200,     // Slightly tighter — 50 req/min
+  BASE_DELAY_MS: 1200, // Slightly tighter — 50 req/min
   RETRY_DELAY_MS: 5000,
   BACKOFF_MULTIPLIER: 2,
   MAX_RETRIES: 5,
@@ -77,10 +101,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const normalizeOrderName = (name) => {
   if (!name) return "";
   return String(name)
-    .replace(/^R_/i, "")          // strip return prefix  e.g. R_#4067-77946 → #4067-77946
-    .replace(/^#/, "")             // strip leading #
-    .replace(/-[A-Z]$/i, "")       // strip trailing single-letter suffix e.g. -C, -A
-    .replace(/-\d{5,}$/, "")       // strip trailing Shopify internal ID  e.g. -85624, -37266
+    .replace(/^R_/i, "") // strip return prefix  e.g. R_#4067-77946 → #4067-77946
+    .replace(/^#/, "") // strip leading #
+    .replace(/-[A-Z]$/i, "") // strip trailing single-letter suffix e.g. -C, -A
+    .replace(/-\d{5,}$/, "") // strip trailing Shopify internal ID  e.g. -85624, -37266
     .trim()
     .toLowerCase();
 };
@@ -96,7 +120,10 @@ const parseShiprocketDate = (dateStr) => {
 const getNormalizedStatus = (status) => {
   if (!status) return "UNKNOWN";
   let textStatus = status;
-  if (typeof status === "number" || (!isNaN(Number(status)) && String(status).trim() !== "")) {
+  if (
+    typeof status === "number" ||
+    (!isNaN(Number(status)) && String(status).trim() !== "")
+  ) {
     textStatus = STATUS_CODE_MAP[Number(status)] || String(status);
   }
   const s = String(textStatus).toLowerCase().trim();
@@ -117,7 +144,8 @@ const getNormalizedStatus = (status) => {
     s === "reached back at the seller city" ||
     s === "reached back at seller city" ||
     s.includes("return_to_seller")
-  ) return "RTO";
+  )
+    return "RTO";
 
   // ── DELIVERED (exact match to avoid false positives) ─────────────────────
   // PARTIAL_DELIVERED counts as DELIVERED (Shiprocket dashboard groups these)
@@ -125,7 +153,8 @@ const getNormalizedStatus = (status) => {
     s === "delivered" ||
     s === "partial_delivered" ||
     s === "partial delivered"
-  ) return "DELIVERED";
+  )
+    return "DELIVERED";
 
   // ── NDR — delivery attempted but failed ──────────────────────────────────
   // Only UNDELIVERED family counts as NDR in SR dashboard
@@ -134,13 +163,21 @@ const getNormalizedStatus = (status) => {
     s === "undelivered_1st" ||
     s === "undelivered_2nd" ||
     s === "undelivered_3rd"
-  ) return "NDR";
+  )
+    return "NDR";
 
   // ── PICKUP PENDING ────────────────────────────────────────────────────────
   const up = String(textStatus).toUpperCase().trim();
   const PICKUP_SET = new Set([
-    "NEW","READY_TO_SHIP","PICKUP_SCHEDULED","PICKUP_GENERATED","PICKUP_QUEUED",
-    "LABEL_GENERATED","MANIFEST_GENERATED","PICKUP RESCHEDULED","PICKUP_RESCHEDULED",
+    "NEW",
+    "READY_TO_SHIP",
+    "PICKUP_SCHEDULED",
+    "PICKUP_GENERATED",
+    "PICKUP_QUEUED",
+    "LABEL_GENERATED",
+    "MANIFEST_GENERATED",
+    "PICKUP RESCHEDULED",
+    "PICKUP_RESCHEDULED",
     "AWB_ASSIGNED",
   ]);
   if (PICKUP_SET.has(up)) return "PICKUP_PENDING";
@@ -198,7 +235,9 @@ async function callShiprocketAPI(url, token, params, label = "API") {
       attempt++;
 
       if (status === 429) {
-        console.warn(`   ⏳ [${label}] 429 Rate limit. Retry ${attempt} after ${delay}ms`);
+        console.warn(
+          `   ⏳ [${label}] 429 Rate limit. Retry ${attempt} after ${delay}ms`,
+        );
         await sleep(delay);
         delay *= RATE_LIMIT.BACKOFF_MULTIPLIER;
         continue;
@@ -213,7 +252,9 @@ async function callShiprocketAPI(url, token, params, label = "API") {
       }
 
       if (attempt < RATE_LIMIT.MAX_RETRIES) {
-        console.warn(`   ⚠️ [${label}] Error ${status || "net"}: ${errorMsg}. Retry ${attempt}`);
+        console.warn(
+          `   ⚠️ [${label}] Error ${status || "net"}: ${errorMsg}. Retry ${attempt}`,
+        );
         await sleep(delay);
         delay *= RATE_LIMIT.BACKOFF_MULTIPLIER;
         continue;
@@ -358,7 +399,9 @@ async function batchDeleteItems(keys) {
       await newDynamoDB.send(
         new BatchWriteCommand({
           RequestItems: {
-            [newTableName]: chunk.map((key) => ({ DeleteRequest: { Key: key } })),
+            [newTableName]: chunk.map((key) => ({
+              DeleteRequest: { Key: key },
+            })),
           },
         }),
       );
@@ -372,7 +415,13 @@ async function batchDeleteItems(keys) {
 // STAGE 1: COLLECT SHIPMENTS (chunked by date window)
 // ======================================================================
 
-async function collectShipmentsForWindow(merchantId, token, fromStr, toStr, heartbeat) {
+async function collectShipmentsForWindow(
+  merchantId,
+  token,
+  fromStr,
+  toStr,
+  heartbeat,
+) {
   let page = 1;
   let totalCollected = 0;
   const itemsToWrite = [];
@@ -507,7 +556,7 @@ async function processOrdersPage(merchantId, srOrders, dirtyDates) {
         codPart = order.codAmount || 0;
 
         if (orderCreatedDateIST) dirtyDates.add(orderCreatedDateIST);
-        if (srCreatedAtIST) dirtyDates.add(srCreatedAtIST);   // Shiprocket creation date must also recalculate
+        if (srCreatedAtIST) dirtyDates.add(srCreatedAtIST); // Shiprocket creation date must also recalculate
         if (deliveryStatus === "RTO" && rtoAtIST) dirtyDates.add(rtoAtIST);
 
         if (deliveryStatus === "DELIVERED" && deliveredAtIST) {
@@ -670,7 +719,9 @@ function createHeartbeat(receiptHandle, queueUrl) {
           }),
         );
         lastExtension = now;
-        console.log(`   💓 SQS heartbeat (elapsed: ${Math.round((now - startTime) / 1000)}s)`);
+        console.log(
+          `   💓 SQS heartbeat (elapsed: ${Math.round((now - startTime) / 1000)}s)`,
+        );
       } catch (err) {
         console.warn("Heartbeat failed:", err.message);
       }
@@ -712,7 +763,10 @@ async function processShiprocketSync(job, heartbeat) {
     const startDateObj =
       mode === "incremental"
         ? new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000)
-        : new Date(sinceDate);
+        : mode === "shiprocket_onboarding"
+          ? new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000) // 30 days
+          : new Date(sinceDate);
+
     const fromStr = formatDate(startDateObj);
     const toStr = formatDate(today);
 
@@ -805,7 +859,9 @@ async function processShiprocketSync(job, heartbeat) {
       while (true) {
         const shouldReshard = await heartbeat();
         if (shouldReshard && pagesProcessedThisRun > 0) {
-          console.log(`   ⏰ Re-sharding at page ${currentPage} to prevent timeout`);
+          console.log(
+            `   ⏰ Re-sharding at page ${currentPage} to prevent timeout`,
+          );
           break;
         }
 
@@ -1002,70 +1058,98 @@ async function markSyncComplete(merchantId, finalAffectedDates) {
       let allShips = [];
       let lastKey;
       do {
-        const res = await newDynamoDB.send(new QueryCommand({
-          TableName: newTableName,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          ExpressionAttributeValues: {
-            ":pk": `MERCHANT#${merchantId}`,
-            ":sk": "SHIPMENT#",
-          },
-          ProjectionExpression: "srCreatedAtIST, orderCreatedAtIST, deliveredAtIST, rtoAtIST, deliveryStatus, rawStatus, isOrphan",
-          ExclusiveStartKey: lastKey,
-        }));
+        const res = await newDynamoDB.send(
+          new QueryCommand({
+            TableName: newTableName,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+              ":pk": `MERCHANT#${merchantId}`,
+              ":sk": "SHIPMENT#",
+            },
+            ProjectionExpression:
+              "srCreatedAtIST, orderCreatedAtIST, deliveredAtIST, rtoAtIST, deliveryStatus, rawStatus, isOrphan",
+            ExclusiveStartKey: lastKey,
+          }),
+        );
         allShips.push(...(res.Items || []));
         lastKey = res.LastEvaluatedKey;
       } while (lastKey);
 
-      const total      = allShips.length;
-      const hasSrDate  = allShips.filter(s => s.srCreatedAtIST).length;
-      const hasOrdDate = allShips.filter(s => s.orderCreatedAtIST).length;
-      const hasDelDate = allShips.filter(s => s.deliveredAtIST).length;
-      const hasRtoDate = allShips.filter(s => s.rtoAtIST).length;
-      const rtoTotal   = allShips.filter(s => {
-        const ds = (s.deliveryStatus||"").toUpperCase();
-        const rs = (s.rawStatus||"").toUpperCase();
+      const total = allShips.length;
+      const hasSrDate = allShips.filter((s) => s.srCreatedAtIST).length;
+      const hasOrdDate = allShips.filter((s) => s.orderCreatedAtIST).length;
+      const hasDelDate = allShips.filter((s) => s.deliveredAtIST).length;
+      const hasRtoDate = allShips.filter((s) => s.rtoAtIST).length;
+      const rtoTotal = allShips.filter((s) => {
+        const ds = (s.deliveryStatus || "").toUpperCase();
+        const rs = (s.rawStatus || "").toUpperCase();
         return ds === "RTO" || rs.includes("RTO");
       }).length;
-      const rtoNoDate = allShips.filter(s => {
-        const ds = (s.deliveryStatus||"").toUpperCase();
-        const rs = (s.rawStatus||"").toUpperCase();
+      const rtoNoDate = allShips.filter((s) => {
+        const ds = (s.deliveryStatus || "").toUpperCase();
+        const rs = (s.rawStatus || "").toUpperCase();
         return (ds === "RTO" || rs.includes("RTO")) && !s.rtoAtIST;
       }).length;
 
       // Count by status
       const bySt = {};
-      allShips.forEach(s => {
+      allShips.forEach((s) => {
         const k = s.deliveryStatus || "NULL";
         bySt[k] = (bySt[k] || 0) + 1;
       });
 
-      console.log("\n╔══════════════════════════════════════════════════════════════╗");
-      console.log(  "║         SHIPROCKET POST-SYNC QUALITY REPORT                  ║");
-      console.log(  "╚══════════════════════════════════════════════════════════════╝");
+      console.log(
+        "\n╔══════════════════════════════════════════════════════════════╗",
+      );
+      console.log(
+        "║         SHIPROCKET POST-SYNC QUALITY REPORT                  ║",
+      );
+      console.log(
+        "╚══════════════════════════════════════════════════════════════╝",
+      );
       console.log(`  Total SHIPMENT records written : ${total}`);
-      console.log(`  srCreatedAtIST populated       : ${hasSrDate}/${total} (${Math.round(hasSrDate/total*100||0)}%)`);
+      console.log(
+        `  srCreatedAtIST populated       : ${hasSrDate}/${total} (${Math.round((hasSrDate / total) * 100 || 0)}%)`,
+      );
       console.log(`  orderCreatedAtIST populated    : ${hasOrdDate}/${total}`);
       console.log(`  deliveredAtIST populated       : ${hasDelDate}/${total}`);
       console.log(`  rtoAtIST populated             : ${hasRtoDate}/${total}`);
       console.log(`  RTO shipments (total)          : ${rtoTotal}`);
-      console.log(`  RTO shipments with NO rtoAtIST : ${rtoNoDate} ← these won't count in any date range`);
+      console.log(
+        `  RTO shipments with NO rtoAtIST : ${rtoNoDate} ← these won't count in any date range`,
+      );
       console.log(`\n  deliveryStatus breakdown:`);
       console.table(bySt);
 
       if (hasSrDate < total) {
-        console.log(`\n  ⚠️  ${total - hasSrDate} shipments missing srCreatedAtIST.`);
-        console.log(`      These are old records not yet re-synced. Run full sync again to fix.`);
+        console.log(
+          `\n  ⚠️  ${total - hasSrDate} shipments missing srCreatedAtIST.`,
+        );
+        console.log(
+          `      These are old records not yet re-synced. Run full sync again to fix.`,
+        );
       } else {
-        console.log(`\n  ✅ All shipments have srCreatedAtIST. Date anchor is correct.`);
+        console.log(
+          `\n  ✅ All shipments have srCreatedAtIST. Date anchor is correct.`,
+        );
       }
       if (rtoNoDate > 0) {
         console.log(`\n  ⚠️  ${rtoNoDate} RTO shipments have no rtoAtIST.`);
-        console.log(`      Shiprocket did not return rto_delivered_date for these.`);
-        console.log(`      They WILL be counted in totalShipments but NOT in rtoOrders for any date.`);
+        console.log(
+          `      Shiprocket did not return rto_delivered_date for these.`,
+        );
+        console.log(
+          `      They WILL be counted in totalShipments but NOT in rtoOrders for any date.`,
+        );
       }
-      console.log("  ──────────────────────────────────────────────────────────────\n");
+      console.log(
+        "  ──────────────────────────────────────────────────────────────\n",
+      );
     } catch (debugErr) {
-      console.warn("  Post-sync debug scan failed (non-fatal):", debugErr.message);
+      console.warn(
+        "  Post-sync debug scan failed (non-fatal):",
+        debugErr.message,
+      );
     }
     // ── END QUALITY REPORT ────────────────────────────────────────────
 
@@ -1134,6 +1218,3 @@ process.on("SIGTERM", () => {
 });
 
 pollQueue();
-
-
-
