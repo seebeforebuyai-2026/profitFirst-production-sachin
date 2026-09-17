@@ -205,7 +205,7 @@ const ShiprocketOnboarding = () => {
               </button>
               <button
                 style={styles.btnSecondary}
-                onClick={() => (window.location.href = "/dashboard")}
+                onClick={() => (window.location.href = "/business-expenses")}
               >
                 I don't use Shiprocket — skip this →
               </button>

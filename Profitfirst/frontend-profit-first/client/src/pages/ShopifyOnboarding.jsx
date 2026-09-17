@@ -260,7 +260,7 @@ const ShopifyOnboarding = () => {
                       e.message,
                     );
                   }
-                  window.location.href = "/dashboard";
+                  window.location.href = "/onboarding/shiprocket";
                 }}
               >
                 I'll do this later →
