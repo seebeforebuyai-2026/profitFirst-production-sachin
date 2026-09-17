@@ -26,6 +26,15 @@ const ShopifyOnboarding = () => {
       console.log("🔗 Initiating Meta OAuth...");
       const token = localStorage.getItem("accessToken");
 
+      // Step 3 set karo — Meta connect karne ja rahe hain
+      await axios
+        .post(
+          `${API_URL}/api/onboard/set-step`,
+          { step: 3 },
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        .catch((e) => console.warn("set-step warning:", e.message));
+
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in"}/api/meta/connect`,
         {},
@@ -248,19 +257,23 @@ const ShopifyOnboarding = () => {
                 onClick={async () => {
                   try {
                     const token = localStorage.getItem("accessToken");
-                    await axios.post(
-                      `${import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in"}/api/onboard/complete-shopify`,
-                      {},
-                      { headers: { Authorization: `Bearer ${token}` } },
-                    );
+
+                    // 🟢 Step 4 set karo — Meta skip kiya, agla step Shipping hai
+                    await axios
+                      .post(
+                        `${API_URL}/api/onboard/set-step`,
+                        { step: 4 },
+                        { headers: { Authorization: `Bearer ${token}` } },
+                      )
+                      .catch((e) =>
+                        console.warn("set-step warning:", e.message),
+                      );
                   } catch (e) {
-                    // Non-critical — dashboard pe jaana zaroori hai
-                    console.warn(
-                      "Could not mark onboarding complete:",
-                      e.message,
-                    );
+                    console.warn("set-step failed:", e.message);
                   }
-                  window.location.href = "/onboarding/shiprocket";
+
+                  // Onboarding par bhejo — jahan Step 4 (Shiprocket Connect) khulega
+                  window.location.href = "/onboarding";
                 }}
               >
                 I'll do this later →
@@ -357,7 +370,7 @@ const styles = {
     display: "inline-block",
   },
   shopName: { fontSize: "0.75rem", color: "#aaa" },
-  main: { 
+  main: {
     flex: 1,
     padding: "48px 56px",
     display: "flex",

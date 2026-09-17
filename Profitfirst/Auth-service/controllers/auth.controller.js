@@ -1431,6 +1431,11 @@ class AuthController {
         );
 
         console.log(`✅ New merchant created: merchantId=${merchantId}`);
+        // Profile create ke baad ye add karo
+        await dynamoDBService.updateUserProfileOnboarding(merchantId, {
+          onboardingStep: 2,
+          shopifyConnected: true,
+        });
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1462,6 +1467,8 @@ class AuthController {
         console.log(`🔄 Returning merchant: ${normalizedEmail}`);
         merchantId = existingUser.data.userId;
         onboardingCompleted = existingUser.data.onboardingCompleted || false;
+        // onboardingStep bhi fetch karo
+        const returningStep = existingUser.data.onboardingStep || 2;
 
         // appInstalled: true update karo (reinstall case)
         await dynamoDBService.updateUserProfileOnboarding(merchantId, {
@@ -1484,6 +1491,8 @@ class AuthController {
 
       // 4. redirectPath decide karo
       const redirectPath = onboardingCompleted ? "/dashboard" : "/onboarding";
+      // Note: /onboarding pe jane ke baad Onboarding.jsx
+      // onboardingStep check karke sahi step pe bhejega
 
       console.log(
         `✅ SSO token generated for ${shop} → redirecting to ${redirectPath}`,
@@ -1593,8 +1602,8 @@ class AuthController {
       const { AccessToken, IdToken, RefreshToken } = authResult.data;
 
       // 7. redirectTo decide karo
-    const redirectTo = (onboardingCompleted === true) ? "/dashboard" : "/onboarding";
-
+      const redirectTo =
+        onboardingCompleted === true ? "/dashboard" : "/onboarding";
 
       console.log(`✅ SSO verified for ${email} → ${redirectTo}`);
 

@@ -36,7 +36,7 @@ import CarouselCompletion from "./pages/CarouselCompletion";
 import ForgotPassword from "./pages/ForgotPassword";
 import OAuthCallback from "./pages/OAuthCallback";
 import BusinessExpenses from "./pages/BusinessExpenses";
-import { isTokenValid } from "./utils/auth";
+import { isTokenValid, refreshAccessToken } from "./utils/auth";
 import { useState, useEffect } from "react";
 import { ProfileProvider } from "./ProfileContext";
 import ProtectedRoute from "./ProtectedRoute";
@@ -47,6 +47,27 @@ import MetaOnboarding from "./pages/MetaOnboarding";
 import ShiprocketOnboarding from "./pages/ShiprocketOnboarding";
 
 function AppWrapper() {
+  // Cache clear — har 4 ghante mein non-auth keys clear karo
+  const lastClear = localStorage.getItem("lastCacheCheck");
+  const now = Date.now();
+  const FOUR_HOURS = 4 * 60 * 60 * 1000;
+
+  if (!lastClear || now - Number(lastClear) > FOUR_HOURS) {
+    const keysToKeep = new Set([
+      "accessToken",
+      "refreshToken",
+      "idToken",
+      "token",
+      "userData",
+      "userId",
+      "lastCacheCheck",
+    ]);
+    Object.keys(localStorage).forEach((key) => {
+      if (!keysToKeep.has(key)) localStorage.removeItem(key);
+    });
+    localStorage.setItem("lastCacheCheck", String(now));
+  }
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // STEP 1: Check for OAuth tokens in URL hash FIRST
     // OAuth callback redirects with tokens in hash: #auth={...}
@@ -88,9 +109,20 @@ function AppWrapper() {
   });
 
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const isValid = isTokenValid();
-      setIsAuthenticated(isValid);
+      if (isValid) {
+        setIsAuthenticated(true);
+        return;
+      }
+
+      // Token expire hua — refresh try karo
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
     };
 
     // Listen for storage changes (cross-tab synchronization)

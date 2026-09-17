@@ -1,73 +1,100 @@
 import axios from "axios";
-import { isTokenValid, logout } from "./src/utils/auth";
+import { isTokenValid, logout, refreshAccessToken } from "./src/utils/auth";
 
-// Use full URL for development, relative for production
 const isDev =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
-// const API_BASE_URL = isDev ? 'http://localhost:3000/api' : '/api'; 
+
 const API_BASE_URL = isDev
   ? "http://localhost:3000/api"
   : "https://api.profitfirstanalytics.co.in/api";
 
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL, 
-}); 
+  baseURL: API_BASE_URL,
+});
 
+// ── Request interceptor ───────────────────────────────────────
 axiosInstance.interceptors.request.use((config) => {
-  // Try new token structure first, fallback to legacy token
   const accessToken = localStorage.getItem("accessToken");
   const legacyToken = localStorage.getItem("token");
   const token = accessToken || legacyToken;
 
   if (token) {
-    if (!isTokenValid(token)) {
-      logout(); // auto-logout if token expired
-      return Promise.reject({ message: "Token expired" });
-    }
+    // Token expired check — but DON'T logout here
+    // Let response interceptor handle refresh
     config.headers.Authorization = `Bearer ${token}`;
   }
 
   return config;
 });
 
-// Response interceptor to handle token refresh
+// ── Concurrent refresh lock ───────────────────────────────────
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// ── Response interceptor ─────────────────────────────────────
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
-const originalRequest = error.config || {};
-    // If 401 and we haven't retried yet, try to refresh token
+    const originalRequest = error.config || {};
+
+    // Only handle 401 — not refresh endpoint itself
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes("/auth/refresh-token")
+      !originalRequest.url?.includes("/auth/refresh-token")
     ) {
+      if (isRefreshing) {
+        // Another refresh already in progress — queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return axiosInstance(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken) {
-          const response = await axiosInstance.post(`/auth/refresh-token`, {
-            refreshToken,
-          });
+        // refreshAccessToken uses plain axios — no loop
+        const refreshed = await refreshAccessToken();
 
-          const { accessToken, idToken } = response.data.tokens;
-          localStorage.setItem("accessToken", accessToken);
-          localStorage.setItem("idToken", idToken);
-
-          // Retry original request with new token
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        if (refreshed) {
+          const newToken = localStorage.getItem("accessToken");
+          processQueue(null, newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return axiosInstance(originalRequest);
+        } else {
+          processQueue(new Error("Refresh failed"), null);
+          logout();
+          return Promise.reject(error);
         }
       } catch (refreshError) {
-        // Refresh failed, logout user
+        processQueue(refreshError, null);
         logout();
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
     return Promise.reject(error);
-  },
+  }
 );
 
 export default axiosInstance;

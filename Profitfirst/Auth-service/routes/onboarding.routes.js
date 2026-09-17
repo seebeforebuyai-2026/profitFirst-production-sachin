@@ -43,6 +43,8 @@ router.post('/complete-shopify', onboardingController.completeShopifyOnboarding)
 
 router.get('/meta-insight', onboardingController.getMetaInsight);
 router.get('/shiprocket-insight', onboardingController.getShiprocketInsight);
+router.post('/set-step', onboardingController.setOnboardingStep);
+
 
 
 module.exports = router;

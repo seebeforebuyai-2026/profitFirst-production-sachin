@@ -256,6 +256,7 @@ class OnboardingController {
       res.redirect(errorUrl);
     }
   }
+  
   async connectShipping(req, res) {
     try {
       const merchantId = req.user.userId;
@@ -668,6 +669,30 @@ class OnboardingController {
       return res
         .status(500)
         .json({ error: "Failed to fetch Shiprocket insight" });
+    }
+  }
+
+  async setOnboardingStep(req, res) {
+    try {
+      const merchantId = req.user.userId;
+      const { step, onboardingCompleted } = req.body;
+
+      if (!step || step < 1) {
+        return res.status(400).json({ error: "Valid step required" });
+      }
+
+      const updates = { onboardingStep: step };
+      if (onboardingCompleted === true) {
+        updates.onboardingCompleted = true;
+      }
+
+      await dynamoDBService.updateUserProfileOnboarding(merchantId, updates);
+
+      console.log(`✅ Step set to ${step} for merchant: ${merchantId}`);
+      return res.status(200).json({ success: true, step });
+    } catch (error) {
+      console.error("setOnboardingStep error:", error.message);
+      return res.status(500).json({ error: "Failed to update step" });
     }
   }
 }

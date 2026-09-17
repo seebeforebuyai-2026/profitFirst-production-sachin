@@ -170,6 +170,46 @@ const BusinessExpenses = () => {
           </div>
 
           {/* Row 4: Other Fixed Costs */}
+          {/* Row 4: RTO Handling Fees */}
+          <div className="flex items-center justify-between py-4">
+            <div>
+              <p className="font-semibold text-white text-sm">RTO Handling Fees</p>
+              <p className="text-xs text-gray-500 mt-0.5">Monthly RTO and return handling costs</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-sm">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={expenses.rtoHandlingFees === 0 ? "" : expenses.rtoHandlingFees}
+                onChange={(e) => handleInputChange("rtoHandlingFees", e.target.value)}
+                placeholder="0"
+                className="w-36 px-3 py-2 rounded-xl bg-[#06140D] border border-gray-800 text-white text-right font-medium text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/40 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Row 5: Payment Gateway Fee */}
+          <div className="flex items-center justify-between py-4">
+            <div>
+              <p className="font-semibold text-white text-sm">Payment Gateway Fee</p>
+              <p className="text-xs text-gray-500 mt-0.5">Percentage charged per payment</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={expenses.paymentGatewayFeePercent === 0 ? "" : expenses.paymentGatewayFeePercent}
+                onChange={(e) => handleInputChange("paymentGatewayFeePercent", e.target.value)}
+                placeholder="2.5"
+                className="w-36 px-3 py-2 rounded-xl bg-[#06140D] border border-gray-800 text-white text-right font-medium text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/40 transition-all"
+              />
+              <span className="text-gray-500 text-sm">%</span>
+            </div>
+          </div>
+
+          {/* Row 6: Other Fixed Costs */}
           <div className="flex items-center justify-between py-4 last:pb-0">
             <div>
               <p className="font-semibold text-white text-sm">Other Fixed Costs</p>

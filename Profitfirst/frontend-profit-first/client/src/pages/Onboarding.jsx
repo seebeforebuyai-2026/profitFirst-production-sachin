@@ -4,67 +4,85 @@ import axiosInstance from "../../axios";
 import { PulseLoader } from "react-spinners";
 import { toast } from "react-toastify";
 import Step1 from "../components/Step1";
-import Step2 from "../components/Step2"; 
+import Step2 from "../components/Step2";
 import Step3 from "../components/Step3";
 import Step4 from "../components/Step4";
 
 const Onboarding = () => {
-  const [loading, setLoading] = useState(true);  // Start with loading = true to prevent flash
-  const [currentStep, setCurrentStep] = useState(null);  // Start with null until we know the actual step
+  const [loading, setLoading] = useState(true); // Start with loading = true to prevent flash
+  const [currentStep, setCurrentStep] = useState(null); // Start with null until we know the actual step
   const [transitioning, setTransitioning] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
     // Remove Facebook's #_=_ hash fragment
-    if (window.location.hash === '#_=_') {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (window.location.hash === "#_=_") {
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
     }
 
     // Check if coming back from Meta OAuth
 
-      const metaStatus = searchParams.get('meta');
-    if (metaStatus === 'connected' || metaStatus === 'error') {
-      // ❌ Purana: setCurrentStep(4); 
+    const metaStatus = searchParams.get("meta");
+    if (metaStatus === "connected" || metaStatus === "error") {
+      // ❌ Purana: setCurrentStep(4);
       // ✅ Naya Fix: Stay on Step 3 to allow account selection
-      console.log('📥 Meta OAuth callback detected, staying on Step 3 for selection');
-      setCurrentStep(3); 
+      console.log(
+        "📥 Meta OAuth callback detected, staying on Step 3 for selection",
+      );
+      setCurrentStep(3);
       setLoading(false);
       return;
     }
 
-    console.log('🔄 Fetching onboarding step...');
+    console.log("🔄 Fetching onboarding step...");
     // loading is already true by default
-    
+
     axiosInstance
       .get("/onboard/step")
       .then((response) => {
-        console.log('✅ Onboarding step response:', response.data);
+        console.log("✅ Onboarding step response:", response.data);
         const step = response.data.step;
         const isCompleted = response.data.isCompleted;
-        
-        if (step === 6 || isCompleted) {
-          console.log('🎉 Onboarding complete, redirecting to dashboard');
+
+        if (step === 2) {
+          // Shopify connected — ShopifyOnboarding screen pe bhejo
+          navigate("/onboarding/shopify", { replace: true });
+        } else if (step === 5) {
+          // Shiprocket done — COGS page pe bhejo
+          navigate("/dashboard/products", { replace: true });
+        } else if (step === 6) {
+          // COGS done — Business Expenses pe bhejo
+          navigate("/dashboard/business-expenses", { replace: true });
+        } else if (step >= 7 || isCompleted) {
+          // Sab complete — Dashboard pe bhejo
           navigate("/dashboard", { replace: true });
         } else {
-          console.log('📍 Setting current step to:', step);
+          // Step 3 → Step3.jsx (Meta)
+          // Step 4 → Step4.jsx (Shiprocket credentials)
           setCurrentStep(step);
         }
       })
       .catch((error) => {
         console.error("❌ Error fetching onboarding step:", error);
-        
+
         // Handle specific errors
         if (error.response?.status === 401) {
-          console.error('🔒 Unauthorized - redirecting to login');
-          toast.error("Session expired. Please login again", { autoClose: 3000 });
+          console.error("🔒 Unauthorized - redirecting to login");
+          toast.error("Session expired. Please login again", {
+            autoClose: 3000,
+          });
           localStorage.clear();
           setTimeout(() => navigate("/login", { replace: true }), 1500);
         } else if (error.response?.status === 404) {
-          console.log('📝 User not found in onboarding, starting from step 1');
+          console.log("📝 User not found in onboarding, starting from step 1");
           setCurrentStep(1);
         } else {
-          console.error('⚠️ Unknown error, starting from step 1');
+          console.error("⚠️ Unknown error, starting from step 1");
           setCurrentStep(1);
         }
       })
@@ -75,51 +93,61 @@ const Onboarding = () => {
 
   const handleStepComplete = async () => {
     console.log(`✅ Step ${currentStep} completed`);
-    
+
     // Start transition animation
     setTransitioning(true);
-    
+
     // Wait for fade out
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     // Fetch updated step from backend
     try {
       const response = await axiosInstance.get("/onboard/step");
       const nextStep = response.data.step;
       const isCompleted = response.data.isCompleted;
-      
-      console.log(`📍 Backend says next step is: ${nextStep}, completed: ${isCompleted}`);
-      
-      if (nextStep === 6 || isCompleted) {
-        // Onboarding complete, go to dashboard
-        console.log('🎉 Onboarding complete, redirecting to dashboard');
-        toast.success("🎉 Onboarding complete! Welcome to your dashboard", { autoClose: 2000 });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      console.log(
+        `📍 Backend says next step is: ${nextStep}, completed: ${isCompleted}`,
+      );
+
+      if (nextStep === 2) {
+        navigate("/onboarding/shopify", { replace: true });
+      } else if (nextStep === 5) {
+        navigate("/dashboard/products", { replace: true });
+      } else if (nextStep === 6) {
+        navigate("/dashboard/business-expenses", { replace: true });
+      } else if (nextStep >= 7 || isCompleted) {
+        toast.success("🎉 Onboarding complete! Welcome to your dashboard", {
+          autoClose: 2000,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         navigate("/dashboard");
       } else {
-        // Move to next step
         setCurrentStep(nextStep);
-        // Wait for fade in
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         setTransitioning(false);
       }
     } catch (error) {
-      console.error('❌ Error fetching next step:', error);
+      console.error("❌ Error fetching next step:", error);
       // Fallback: increment locally
       const next = currentStep + 1;
-      if (next === 6) {
-        toast.success("🎉 Onboarding complete! Welcome to your dashboard", { autoClose: 2000 });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (next === 2) {
+        navigate("/onboarding/shopify", { replace: true });
+      } else if (next === 5) {
+        navigate("/dashboard/products", { replace: true });
+      } else if (next === 6) {
+        navigate("/dashboard/business-expenses", { replace: true });
+      } else if (next >= 7) {
         navigate("/dashboard");
       } else {
         setCurrentStep(next);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         setTransitioning(false);
       }
     }
   };
 
-  if (loading || currentStep === null) { 
+  if (loading || currentStep === null) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0D1D1E]">
         <PulseLoader size={60} color="#12EB8E" />
@@ -161,8 +189,10 @@ const Onboarding = () => {
           }
         }
       `}</style>
-      
-      <div className={transitioning ? 'step-transition-out' : 'step-transition'}>
+
+      <div
+        className={transitioning ? "step-transition-out" : "step-transition"}
+      >
         {currentStep === 1 && <Step1 onComplete={handleStepComplete} />}
         {currentStep === 2 && <Step2 onComplete={handleStepComplete} />}
         {currentStep === 3 && <Step3 onComplete={handleStepComplete} />}
@@ -170,7 +200,6 @@ const Onboarding = () => {
       </div>
     </div>
   );
-
 };
 
 export default Onboarding;

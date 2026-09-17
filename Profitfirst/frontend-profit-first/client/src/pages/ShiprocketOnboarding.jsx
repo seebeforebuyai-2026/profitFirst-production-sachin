@@ -199,15 +199,50 @@ const ShiprocketOnboarding = () => {
             <div style={styles.ctaRow}>
               <button
                 style={styles.btnPrimary}
-                onClick={() => (window.location.href = "/dashboard/products")}
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem("accessToken");
+                    await axios
+                      .post(
+                        `${API_URL}/api/onboard/set-step`,
+                        { step: 5 },
+                        { headers: { Authorization: `Bearer ${token}` } },
+                      )
+                      .catch((e) =>
+                        console.warn("set-step warning:", e.message),
+                      );
+                  } catch (e) {
+                    console.warn("set-step failed:", e.message);
+                  }
+                  window.location.href = "/dashboard/products";
+                }}
               >
                 Add product costs →
               </button>
               <button
                 style={styles.btnSecondary}
-                onClick={() => (window.location.href = "/business-expenses")}
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem("accessToken");
+                    // Shiprocket done, COGS skip, Business Expenses pe ja rahe hain
+                    // step 6 already set hai from connectShipping
+                    // sirf onboardingCompleted nahi hai abhi — ye theek hai
+                    await axios
+                      .post(
+                        `${API_URL}/api/onboard/set-step`,
+                        { step: 6 },
+                        { headers: { Authorization: `Bearer ${token}` } },
+                      )
+                      .catch((e) =>
+                        console.warn("set-step warning:", e.message),
+                      );
+                  } catch (e) {
+                    console.warn("set-step failed:", e.message);
+                  }
+                  window.location.href = "/dashboard/business-expenses";
+                }}
               >
-                I don't use Shiprocket — skip this →
+                I Will Do This Later →
               </button>
             </div>
 

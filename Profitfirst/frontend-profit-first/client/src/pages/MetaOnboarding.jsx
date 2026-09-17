@@ -196,15 +196,29 @@ const MetaOnboarding = () => {
             <div style={styles.ctaRow}>
               <button
                 style={styles.btnPrimary}
-                onClick={() =>
-                  (window.location.href = "/onboarding")
-                }
+                onClick={() => (window.location.href = "/onboarding")}
               >
                 Connect Shiprocket →
               </button>
               <button
                 style={styles.btnSecondary}
-                onClick={() => (window.location.href = "/dashboard")}
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem("accessToken");
+                    await axios
+                      .post(
+                        `${API_URL}/api/onboard/set-step`,
+                        { step: 5},
+                        { headers: { Authorization: `Bearer ${token}` } },
+                      )
+                      .catch((e) =>
+                        console.warn("set-step warning:", e.message),
+                      );
+                  } catch (e) {
+                    console.warn("set-step failed:", e.message);
+                  }
+                  window.location.href = "/dashboard/products";
+                }}
               >
                 I'll do this later →
               </button>
