@@ -197,7 +197,7 @@ const MetaOnboarding = () => {
               <button
                 style={styles.btnPrimary}
                 onClick={() =>
-                  (window.location.href = "/onboarding/shiprocket")
+                  (window.location.href = "/onboarding")
                 }
               >
                 Connect Shiprocket →

@@ -357,7 +357,7 @@ const styles = {
     display: "inline-block",
   },
   shopName: { fontSize: "0.75rem", color: "#aaa" },
-  main: {
+  main: { 
     flex: 1,
     padding: "48px 56px",
     display: "flex",
