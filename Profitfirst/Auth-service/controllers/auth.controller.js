@@ -1422,7 +1422,6 @@ class AuthController {
               accessToken: req.body.accessToken
                 ? encryptionService.encrypt(req.body.accessToken)
                 : "",
-
               appInstalled: true,
               shopName: shopInfo.name,
               currency: shopInfo.currency,
