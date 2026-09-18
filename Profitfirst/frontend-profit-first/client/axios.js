@@ -81,6 +81,7 @@ axiosInstance.interceptors.response.use(
           return axiosInstance(originalRequest);
         } else {
           processQueue(new Error("Refresh failed"), null);
+
           const hasToken = !!(
             localStorage.getItem("accessToken") || localStorage.getItem("token")
           );
@@ -89,6 +90,33 @@ axiosInstance.interceptors.response.use(
           if (hasToken && !isAlreadyOnLogin) {
             logout();
           }
+
+          // 🚨 CRITICAL FIX: Public pages par user ko redirect mat karo
+          const publicPages = [
+            "/",
+            "/login",
+            "/signup",
+            "/forgot-password",
+            "/contact",
+            "/blogs",
+            "/privacy-policy",
+          ];
+          const isPublicPage =
+            publicPages.includes(window.location.pathname) ||
+            window.location.pathname.startsWith("/sso-login");
+
+          // Stale tokens saaf karo
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("token");
+          localStorage.removeItem("idToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userData");
+
+          // Sirf protected pages (Dashboard / Onboarding) par user ko /login bhejo
+          if (!isPublicPage) {
+            logout();
+          }
+
           return Promise.reject(error);
         }
       } catch (refreshError) {

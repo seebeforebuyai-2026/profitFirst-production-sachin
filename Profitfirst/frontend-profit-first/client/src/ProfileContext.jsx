@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import axiosInstance from "../axios";
+import { isTokenValid } from "./utils/auth";
 
 const ProfileContext = createContext();
 
@@ -20,9 +21,15 @@ export const ProfileProvider = ({ children }) => {
   }, []);
 
   const fetchProfile = async (silent = false) => {
+    if (window.location.pathname.startsWith("/sso-login")) {
+      if (!silent) setLoading(false);
+      return null;
+    }
+
     const token =
       localStorage.getItem("accessToken") || localStorage.getItem("token");
-    if (!token) {
+    // 🚨 THE REAL FIX: Agar token nahi hai YA token EXPIRED hai, toh API call mat karo!
+    if (!token || !isTokenValid(token)) {
       if (!silent) setLoading(false);
       setProfile(null);
       return null;

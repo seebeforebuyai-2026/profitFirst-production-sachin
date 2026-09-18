@@ -29,7 +29,7 @@ const ShopifyOnboarding = () => {
       const d = res.data;
       if (d.syncStatus === "in_progress") {
         setStatus("syncing");
-        setTimeout(fetchInsight, 5000);
+        setTimeout(fetchInsight, 50000);
         return;
       }
       setData(d);
@@ -245,7 +245,7 @@ const ShopifyOnboarding = () => {
                 </h2>
                 <button
                   style={styles.btnG}
-                  onClick={() => window.location.reload()}
+                  onClick={fetchInsight}
                 >
                   Retry
                 </button>

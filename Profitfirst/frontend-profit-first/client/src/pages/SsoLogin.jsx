@@ -18,6 +18,10 @@ const SsoLogin = () => {
           return;
         }
 
+        // 🧹 Purana expired token turant clear karo taaki background hooks use na padhein
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("token");
+
         console.log("🔐 Verifying SSO token...");
 
         // 2. Backend ko call karo
