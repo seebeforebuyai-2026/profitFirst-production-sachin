@@ -81,7 +81,14 @@ axiosInstance.interceptors.response.use(
           return axiosInstance(originalRequest);
         } else {
           processQueue(new Error("Refresh failed"), null);
-          logout();
+          const hasToken = !!(
+            localStorage.getItem("accessToken") || localStorage.getItem("token")
+          );
+          const isAlreadyOnLogin = window.location.pathname === "/login";
+
+          if (hasToken && !isAlreadyOnLogin) {
+            logout();
+          }
           return Promise.reject(error);
         }
       } catch (refreshError) {
@@ -94,7 +101,7 @@ axiosInstance.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default axiosInstance;

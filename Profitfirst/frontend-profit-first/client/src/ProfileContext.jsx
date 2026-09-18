@@ -20,6 +20,13 @@ export const ProfileProvider = ({ children }) => {
   }, []);
 
   const fetchProfile = async (silent = false) => {
+    const token =
+      localStorage.getItem("accessToken") || localStorage.getItem("token");
+    if (!token) {
+      if (!silent) setLoading(false);
+      setProfile(null);
+      return null;
+    }
     if (!silent) setLoading(true);
     try {
       const response = await axiosInstance.get("/auth/profile");
