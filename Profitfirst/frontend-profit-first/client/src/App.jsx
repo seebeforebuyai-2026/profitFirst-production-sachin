@@ -46,6 +46,8 @@ import ShopifyOnboarding from "./pages/ShopifyOnboarding";
 import MetaOnboarding from "./pages/MetaOnboarding";
 import ShiprocketOnboarding from "./pages/ShiprocketOnboarding";
 
+let isCheckingAuth = false; // Loop guard
+
 function AppWrapper() {
   // Cache clear — har 4 ghante mein non-auth keys clear karo
   const lastClear = localStorage.getItem("lastCacheCheck");
@@ -110,40 +112,47 @@ function AppWrapper() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const isValid = isTokenValid();
-      if (isValid) {
-        setIsAuthenticated(true);
+      // CRITICAL: SSO login page par checkAuth mat chalao
+      if (window.location.pathname.startsWith("/sso-login")) {
         return;
       }
 
-      // Token expire hua — refresh try karo
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        setIsAuthenticated(true);
-      } else {
+      if (isCheckingAuth) return;
+      isCheckingAuth = true;
+
+      try {
+        const isValid = isTokenValid();
+        if (isValid) {
+          setIsAuthenticated(true);
+          return;
+        }
+
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
         setIsAuthenticated(false);
+      } finally {
+        isCheckingAuth = false;
       }
     };
 
-    // Listen for storage changes (cross-tab synchronization)
-    // Fires when localStorage is modified in another tab
+    // Cross-tab sync
     window.addEventListener("storage", checkAuth);
 
-    // Custom event for same-tab token updates
-    // Fired after login, token refresh, or OAuth callback
+    // Same-tab token updates
     window.addEventListener("tokenUpdated", checkAuth);
 
-    // Check auth when user returns to tab
-    // Ensures tokens haven't expired while user was away
-    document.addEventListener("visibilitychange", checkAuth);
-
-    // Cleanup event listeners on unmount
+    // Cleanup (visibilitychange successfully removed!)
     return () => {
       window.removeEventListener("storage", checkAuth);
       window.removeEventListener("tokenUpdated", checkAuth);
-      document.removeEventListener("visibilitychange", checkAuth);
     };
   }, []);
+
   return (
     <>
       <ProfileProvider>
