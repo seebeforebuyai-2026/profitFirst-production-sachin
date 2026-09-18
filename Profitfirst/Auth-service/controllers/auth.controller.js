@@ -15,6 +15,7 @@ const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
 const { SendMessageCommand } = require("@aws-sdk/client-sqs");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
 const { GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
+const encryptionService = require('../utils/encryption');
 
 class AuthController {
   renderErrorPage = (res, message, errorCode = "unknown") => {
@@ -1418,7 +1419,10 @@ class AuthController {
               platform: "SHOPIFY",
               shopDomain: shop,
               shopifyStore: shop,
-              accessToken: req.body.accessToken || "",
+              accessToken: req.body.accessToken
+                ? encryptionService.encrypt(req.body.accessToken)
+                : "",
+
               appInstalled: true,
               shopName: shopInfo.name,
               currency: shopInfo.currency,

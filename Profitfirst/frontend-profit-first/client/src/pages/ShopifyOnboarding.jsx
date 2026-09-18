@@ -66,7 +66,7 @@ const ShopifyOnboarding = () => {
       if (d.syncStatus === "in_progress") {
         // Sync chal raha hai — 5 sec baad dobara try karo
         setStatus("syncing");
-        setTimeout(fetchInsight, 5000);
+        setTimeout(fetchInsight, 50000);
         return;
       }
 
