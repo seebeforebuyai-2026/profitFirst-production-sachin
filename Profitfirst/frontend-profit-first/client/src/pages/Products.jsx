@@ -214,7 +214,7 @@ const Products = () => {
               title="Refresh Products"
               className="p-2.5 bg-white/5 hover:bg-white/10 border border-gray-800 rounded-xl text-gray-300 transition-all"
             >
-              <FiRefreshCw size={18} />
+              <FiRefreshCw size={18} /> 
             </button>
           </div>
         </div>

@@ -5,9 +5,10 @@ const API_URL =
   import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in";
 
 const ShiprocketOnboarding = () => {
-  const [status, setStatus] = useState("loading");
-  const [data, setData] = useState(null);
+  const [status, setStatus] = useState("loading"); // loading | syncing | ready | error
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [data, setData] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
@@ -34,6 +35,7 @@ const ShiprocketOnboarding = () => {
       setData(res.data);
       setStatus("ready");
     } catch (err) {
+      console.error("Shiprocket insight error:", err);
       setErrorMsg(err.response?.data?.error || "Failed to load data.");
       setStatus("error");
     }
@@ -42,6 +44,7 @@ const ShiprocketOnboarding = () => {
   const fmt = (num) =>
     "₹" +
     Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
   const fmtN = (num) => {
     const n = Number(num || 0);
     return (
@@ -50,414 +53,715 @@ const ShiprocketOnboarding = () => {
     );
   };
 
+  const storeEmail = localStorage.getItem("userData")
+    ? JSON.parse(localStorage.getItem("userData"))?.email
+    : "atlance-clothing";
+
+  const storeInitial = (storeEmail || "A")[0].toUpperCase();
+
   return (
-    <div style={styles.page}>
-      <div style={{ ...styles.blob, ...styles.blobLeft }}></div>
-      <div style={{ ...styles.blob, ...styles.blobRight }}></div>
-
-      {/* SIDEBAR */}
-      <div style={styles.sidebar}>
-        <div style={styles.logo}>
-          <img
-            src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
-            alt="ProfitFirst"
-            style={{ width: "140px" }}
-          />
-        </div>
-
-        <div style={styles.sideSection}>
-          <p style={styles.sideLabel}>Connections</p>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>🛍️</span>
-            <span style={styles.sideText}>Shopify</span>
-            <span style={styles.badgeLive}>Live</span>
-          </div>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>📘</span>
-            <span style={styles.sideText}>Meta Ads</span>
-            <span style={styles.badgeLive}>Live</span>
-          </div>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>🚚</span>
-            <span style={styles.sideText}>Shiprocket</span>
-            <span style={styles.badgeLive}>Live</span>
-          </div>
-        </div>
-
-        {status === "ready" && data && (
-          <div style={styles.sideSection}>
-            <p style={styles.sideLabel}>Data unlocked</p>
-            <p style={styles.sideStatLabel}>Revenue Earned</p>
-            <p style={styles.sideStatValue}>{fmt(data.revenueEarned)}</p>
-            <p style={{ ...styles.sideStatLabel, marginTop: "12px" }}>
-              Shipping Cost
-            </p>
-            <p style={styles.sideStatValue}>{fmt(data.shippingSpend)}</p>
-            <p style={{ ...styles.sideStatLabel, marginTop: "12px" }}>
-              Net Profit
-            </p>
-            <p
-              style={{
-                ...styles.sideStatValue,
-                color: data.moneyKept < 0 ? "#ff6b6b" : "#26b35e",
-              }}
-            >
-              {fmtN(data.moneyKept)}
-            </p>
-          </div>
-        )}
-
-        <div style={styles.sideBottom}>
-          <span style={styles.shopDot}></span>
-          <span style={styles.shopName}>Almost there...</span>
-        </div>
+    <div style={styles.shell}>
+      {/* ── TOP FIXED PROGRESS BAR (70%) ── */}
+      <div style={styles.prog}>
+        <div style={styles.progFill}></div>
       </div>
 
-      {/* MAIN */}
-      <div style={styles.main}>
-        {/* LOADING */}
-        {status === "loading" && (
-          <div style={styles.centerBox}>
-            <div style={styles.spinner}></div>
-            <h2 style={styles.heading}>Loading shipment data...</h2>
+      {/* ── LEFT SIDEBAR (.pf-sb) ── */}
+      <aside style={styles.sb}>
+        {/* Brand */}
+        <div style={styles.brand}>
+          <div style={styles.mark}>P₹</div>
+          <div style={styles.bname}>
+            Profit <em style={styles.bnameEm}>First</em>
           </div>
-        )}
+        </div>
 
-        {/* SYNCING */}
-        {status === "syncing" && (
-          <div style={styles.centerBox}>
-            <div style={styles.spinner}></div>
-            <h2 style={styles.heading}>Syncing your shipment data...</h2>
-            <p style={styles.subText}>
-              Fetching last 30 days of orders. This takes 1–2 minutes.
-            </p>
-            <div style={styles.progressBar}>
-              <div style={styles.progressFill}></div>
+        {/* Connections Section - All 3 Live! */}
+        <div style={styles.conns}>
+          <div style={styles.pfcLabel}>Connections ✓</div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoSh}>S</div>
+            <span style={styles.connNm}>Shopify</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoMt}>M</div>
+            <span style={styles.connNm}>Meta Ads</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={{ ...styles.connRow, borderBottom: "none" }}>
+            <div style={styles.connIcoSr}>🚚</div>
+            <span style={styles.connNm}>Shiprocket</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+        </div>
+
+        {/* Data Unlocked Section */}
+        <div style={styles.pfd}>
+          <div style={styles.pfdLabel}>Data unlocked</div>
+
+          <div style={styles.ds}>
+            <div style={styles.dsL}>Revenue Earned</div>
+            <div style={styles.dsVG}>
+              {data ? fmt(data.revenueEarned) : "—"}
             </div>
           </div>
-        )}
 
-        {/* ERROR */}
-        {status === "error" && (
-          <div style={styles.centerBox}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
-            <h2 style={styles.heading}>Something went wrong</h2>
-            <p style={{ color: "#ff6b6b", marginBottom: "24px" }}>{errorMsg}</p>
-            <button style={styles.btnPrimary} onClick={fetchInsight}>
-              Try Again
-            </button>
+          <div style={styles.ds}>
+            <div style={styles.dsL}>Shipping Cost</div>
+            <div style={styles.dsV}>{data ? fmt(data.shippingSpend) : "—"}</div>
           </div>
-        )}
 
-        {/* READY */}
-        {status === "ready" && data && (
-          <>
-            {/* Insight card */}
-            <div style={styles.insightCard}>
-              <p style={styles.insightTitle}>
-                ✅ Shiprocket connected — full picture unlocked
-              </p>
-              <div style={styles.insightNumbers}>
-                <div>
-                  <p style={styles.numValue}>{data.deliveredOrders}</p>
-                  <p style={styles.numLabel}>Delivered</p>
-                </div>
-                <div>
-                  <p style={{ ...styles.numValue, color: "#ff6b6b" }}>
-                    {data.rtoOrders}
-                  </p>
-                  <p style={styles.numLabel}>RTOs</p>
-                </div>
-                <div>
-                  <p
-                    style={{
-                      ...styles.numValue,
-                      color: data.moneyKept < 0 ? "#ff6b6b" : "#26b35e",
-                    }}
-                  >
-                    {fmtN(data.moneyKept)}
-                  </p>
-                  <p style={styles.numLabel}>Net profit</p>
+          <div style={{ ...styles.ds, borderBottom: "none", marginBottom: 0 }}>
+            <div style={styles.dsL}>Net Profit</div>
+            <div style={data?.moneyKept < 0 ? styles.dsVR : styles.dsVG}>
+              {data ? fmtN(data.moneyKept) : "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* Store Pill Footer */}
+        <div style={styles.foot}>
+          <div style={styles.storePill}>
+            <div style={styles.spAv}>{storeInitial}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={styles.spNm}>
+                {storeEmail.replace(".myshopify.com", "")}
+              </div>
+            </div>
+            <div style={styles.spDot}></div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── RIGHT MAIN CONTENT (.pf-right) ── */}
+      <div style={styles.right}>
+        <div style={styles.obRight}>
+          <div style={styles.cardWrap}>
+            {/* LOADING STATE */}
+            {status === "loading" && (
+              <div style={styles.centerBox}>
+                <div style={styles.spinner}></div>
+                <p style={{ fontSize: "13px", color: "var(--t2)" }}>
+                  Loading shipment data...
+                </p>
+              </div>
+            )}
+
+            {/* SYNCING STATE */}
+            {status === "syncing" && (
+              <div style={styles.centerBox}>
+                <div style={styles.spinner}></div>
+                <h2
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: "700",
+                    color: "var(--t1)",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Syncing your shipment data...
+                </h2>
+                <p
+                  style={{
+                    fontSize: "12.5px",
+                    color: "var(--t2)",
+                    marginBottom: "16px",
+                  }}
+                >
+                  Fetching last 30 days of deliveries & RTOs. This takes 30–60
+                  seconds.
+                </p>
+                <div style={styles.progressBar}>
+                  <div style={styles.progressFill}></div>
                 </div>
               </div>
-              <p style={styles.insightDesc}>
-                <strong>
-                  Real net profit is {fmtN(data.moneyKept)} this month.
-                </strong>{" "}
-                Shipping {fmt(data.shippingSpend)} + RTO costs + ads are
-                consuming your earned revenue. Your dashboard is now live.
-              </p>
-            </div>
+            )}
 
-            <p style={styles.stepText}>— Step 4 of 7</p>
+            {/* ERROR STATE */}
+            {status === "error" && (
+              <div style={styles.centerBox}>
+                <div style={{ fontSize: "36px", marginBottom: "12px" }}>⚠️</div>
+                <h2
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: "700",
+                    color: "#ff3d5a",
+                    marginBottom: "8px",
+                  }}
+                >
+                  {errorMsg || "Failed to load shipment data."}
+                </h2>
+                <button
+                  style={styles.btnG}
+                  onClick={() => window.location.reload()}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
 
-            <h1 style={styles.headline}>
-              Your numbers are complete.{" "}
-              <span style={styles.headlineGreen}>Dashboard is live.</span>
-            </h1>
+            {/* READY STATE */}
+            {status === "ready" && data && (
+              <>
+                {/* ── REVEAL / INSIGHT CARD ── */}
+                <div style={styles.reveal}>
+                  <div style={styles.revT}>
+                    Shiprocket connected — full picture unlocked
+                  </div>
 
-            <div style={styles.ctaRow}>
-              <button
-                style={styles.btnPrimary}
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem("accessToken");
-                    await axios
-                      .post(
-                        `${API_URL}/api/onboard/set-step`,
-                        { step: 5 },
-                        { headers: { Authorization: `Bearer ${token}` } },
-                      )
-                      .catch((e) =>
-                        console.warn("set-step warning:", e.message),
-                      );
-                  } catch (e) {
-                    console.warn("set-step failed:", e.message);
-                  }
-                  window.location.href = "/dashboard/products";
-                }}
-              >
-                Add product costs →
-              </button>
-              <button
-                style={styles.btnSecondary}
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem("accessToken");
-                    // Shiprocket done, COGS skip, Business Expenses pe ja rahe hain
-                    // step 6 already set hai from connectShipping
-                    // sirf onboardingCompleted nahi hai abhi — ye theek hai
-                    await axios
-                      .post(
-                        `${API_URL}/api/onboard/set-step`,
-                        { step: 6 },
-                        { headers: { Authorization: `Bearer ${token}` } },
-                      )
-                      .catch((e) =>
-                        console.warn("set-step warning:", e.message),
-                      );
-                  } catch (e) {
-                    console.warn("set-step failed:", e.message);
-                  }
-                  window.location.href = "/dashboard/business-expenses";
-                }}
-              >
-                I Will Do This Later →
-              </button>
-            </div>
+                  <div style={styles.revNums}>
+                    <div style={styles.rnFirst}>
+                      <div style={styles.rnV}>{data.deliveredOrders}</div>
+                      <div style={styles.rnL}>Delivered</div>
+                    </div>
+                    <div style={styles.rn}>
+                      <div style={styles.rnVR}>{data.rtoOrders}</div>
+                      <div style={styles.rnL}>RTOs</div>
+                    </div>
+                    <div style={styles.rnLast}>
+                      <div
+                        style={data.moneyKept < 0 ? styles.rnVR : styles.rnVG}
+                      >
+                        {fmtN(data.moneyKept)}
+                      </div>
+                      <div style={styles.rnL}>Net profit</div>
+                    </div>
+                  </div>
 
-            {/* Coming soon chips */}
-            <div style={styles.chipsRow}>
-              {[
-                "Shipway — coming soon",
-                "Delhivery — coming soon",
-                "Xpressbees — coming soon",
-              ].map((c) => (
-                <span key={c} style={styles.chip}>
-                  {c}
-                </span>
-              ))}
-            </div>
-          </>
-        )}
+                  <div style={styles.revIns}>
+                    <strong style={{ color: "var(--t1)" }}>
+                      Real net profit is {fmtN(data.moneyKept)} this month.
+                    </strong>{" "}
+                    Shipping {fmt(data.shippingSpend)} + RTO costs + ads are
+                    consuming your earned revenue. Your dashboard is now live.
+                  </div>
+                </div>
+
+                {/* ── EYEBROW STEP ── */}
+                <div style={styles.eyebrow}>
+                  <span style={styles.eyebrowLine}></span>
+                  Step 4 of 7
+                </div>
+
+                {/* ── HEADLINE ── */}
+                <h1 style={styles.h1}>
+                  Your numbers are complete.
+                  <br />
+                  <em style={{ color: "#00c853", fontStyle: "normal" }}>
+                    Dashboard is live.
+                  </em>
+                </h1>
+
+                {/* ── SUBTITLE ── */}
+                <p style={styles.sub}>
+                  All 3 core data sources are connected. You can now add product
+                  unit costs (COGS) for exact SKU-level profitability, or
+                  continue to dashboard.
+                </p>
+
+                {/* ── BUTTON ROW ── */}
+                <div style={styles.btnRow}>
+                  <button
+                    style={styles.btnG}
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("accessToken");
+                        // Step 5 (Products/COGS) set karo
+                        await axios
+                          .post(
+                            `${API_URL}/api/onboard/set-step`,
+                            { step: 5 },
+                            { headers: { Authorization: `Bearer ${token}` } },
+                          )
+                          .catch((e) =>
+                            console.warn("set-step warning:", e.message),
+                          );
+                      } catch (e) {
+                        console.warn("set-step failed:", e.message);
+                      }
+                      window.location.href = "/dashboard/products";
+                    }}
+                  >
+                    Add product costs →
+                  </button>
+
+                  <button
+                    style={styles.btnOutline}
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("accessToken");
+                        // COGS skip kiya -> Step 6 (Business Expenses) pe bhejo
+                        await axios
+                          .post(
+                            `${API_URL}/api/onboard/set-step`,
+                            { step: 6 },
+                            { headers: { Authorization: `Bearer ${token}` } },
+                          )
+                          .catch((e) =>
+                            console.warn("set-step warning:", e.message),
+                          );
+                      } catch (e) {
+                        console.warn("set-step failed:", e.message);
+                      }
+                      window.location.href = "/dashboard/business-expenses";
+                    }}
+                  >
+                    I'll do this later →
+                  </button>
+                </div>
+
+                {/* ── COMING SOON CHIPS ── */}
+                <div style={styles.chipsRow}>
+                  {[
+                    "Shipway — coming soon",
+                    "Delhivery — coming soon",
+                    "Xpressbees — coming soon",
+                  ].map((c) => (
+                    <span key={c} style={styles.chip}>
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
+// ── EXACT CSS DESIGN SYSTEM FROM PROTOTYPE ─────────────────────────
 const styles = {
-  page: {
+  shell: {
     display: "flex",
     minHeight: "100vh",
-    background: "#101218",
-    color: "#fff",
-    fontFamily: "Inter, sans-serif",
-    position: "relative",
-    overflow: "hidden",
+    background: "#0a1a12", // var(--bg)
+    color: "#e0ede4", // var(--t1)
+    fontFamily: "'Inter', -apple-system, sans-serif",
   },
-  blob: {
-    position: "absolute",
-    width: "380px",
-    height: "380px",
-    filter: "blur(80px)",
-    opacity: 0.14,
-    borderRadius: "50%",
-    background: "#5fc61f",
-    pointerEvents: "none",
+  prog: {
+    position: "fixed",
+    top: 0,
+    left: "210px",
+    right: 0,
+    height: "3px",
+    background: "rgba(255, 255, 255, 0.07)",
+    zIndex: 99,
   },
-  blobLeft: { left: "-120px", top: "100%", transform: "translateY(-50%)" },
-  blobRight: { right: "-120px", top: "0%" },
-  sidebar: {
-    width: "220px",
-    minWidth: "220px",
-    background: "rgba(255,255,255,0.02)",
-    backdropFilter: "blur(10px)",
-    padding: "24px 16px",
+  progFill: {
+    height: "100%",
+    background: "#00c853",
+    width: "70%", // Step 4 Complete in prototype
+    transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
+  },
+  sb: {
+    width: "210px",
+    minHeight: "100vh",
+    background: "#0d1f15", // var(--s1)
+    borderRight: "1px solid rgba(255, 255, 255, 0.07)",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
     display: "flex",
     flexDirection: "column",
-    borderRight: "1px solid rgba(255,255,255,0.06)",
-    position: "relative",
-    zIndex: 1,
+    zIndex: 100,
   },
-  logo: { marginBottom: "28px" },
-  sideSection: { marginBottom: "24px" },
-  sideLabel: {
-    fontSize: "0.7rem",
-    color: "#aaa",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    marginBottom: "10px",
-  },
-  sideItem: {
+  brand: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    marginBottom: "10px",
+    gap: "9px",
+    padding: "14px 15px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
   },
-  sideIcon: { fontSize: "14px" },
-  sideText: { fontSize: "0.85rem", flex: 1 },
-  badgeLive: {
-    fontSize: "0.65rem",
-    background: "#26b35e",
-    color: "#fff",
-    padding: "2px 7px",
-    borderRadius: "20px",
+  mark: {
+    width: "26px",
+    height: "26px",
+    background: "#00c853",
+    borderRadius: "7px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "10px",
+    fontWeight: "800",
+    color: "#000",
+  },
+  bname: {
+    fontSize: "13px",
+    fontWeight: "700",
+    color: "#e0ede4",
+  },
+  bnameEm: {
+    color: "#00c853",
+    fontStyle: "normal",
+  },
+  conns: {
+    padding: "11px 13px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  pfcLabel: {
+    fontSize: "10px",
     fontWeight: "600",
+    color: "#3a5040",
+    marginBottom: "7px",
   },
-  sideStatLabel: { fontSize: "0.75rem", color: "#ccc", marginBottom: "2px" },
-  sideStatValue: { fontSize: "1.1rem", fontWeight: "700", color: "#26b35e" },
-  sideBottom: {
-    marginTop: "auto",
+  connRow: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    paddingTop: "16px",
-    borderTop: "1px solid rgba(255,255,255,0.06)",
+    gap: "7px",
+    padding: "5px 0",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
   },
-  shopDot: {
-    width: "8px",
-    height: "8px",
+  connIcoSh: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#96bf48",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoMt: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#1877f2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoSr: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#e83b3b",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connNm: {
+    flex: 1,
+    fontSize: "11.5px",
+    color: "#7a9880",
+  },
+  connStLive: {
+    fontSize: "9px",
+    fontWeight: "600",
+    padding: "2px 6px",
+    borderRadius: "7px",
+    whiteSpace: "nowrap",
+    background: "rgba(0, 200, 83, 0.13)",
+    color: "#00c853",
+  },
+  pfd: {
+    flex: 1,
+    padding: "11px 13px",
+    overflowY: "auto",
+  },
+  pfdLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    color: "#3a5040",
+    marginBottom: "7px",
+  },
+  ds: {
+    marginBottom: "9px",
+    paddingBottom: "9px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  dsL: {
+    fontSize: "10px",
+    color: "#3a5040",
+    marginBottom: "2px",
+  },
+  dsV: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  dsVG: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#00c853",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  dsVR: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#ff3d5a",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  foot: {
+    padding: "10px 13px",
+    borderTop: "1px solid rgba(255, 255, 255, 0.07)",
+    marginTop: "auto",
+  },
+  storePill: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.07)",
+    borderRadius: "7px",
+    padding: "7px 10px",
+  },
+  spAv: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "5px",
+    background: "#96bf48",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+  },
+  spNm: {
+    fontSize: "11px",
+    fontWeight: "500",
+    color: "#e0ede4",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  spDot: {
+    width: "5px",
+    height: "5px",
     borderRadius: "50%",
-    background: "#26b35e",
+    background: "#00c853",
+    marginLeft: "auto",
+    animation: "pls 2s infinite",
+  },
+  right: {
+    marginLeft: "210px",
+    flex: 1,
+    minHeight: "100vh",
+  },
+  obRight: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    padding: "36px",
+  },
+  cardWrap: {
+    width: "100%",
+    maxWidth: "440px",
+  },
+  reveal: {
+    background: "rgba(0, 200, 83, 0.13)",
+    border: "1px solid rgba(0, 200, 83, 0.18)",
+    borderRadius: "10px",
+    padding: "13px 16px",
+    marginBottom: "18px",
+  },
+  revT: {
+    fontSize: "11px",
+    fontWeight: "600",
+    color: "#00c853",
+    marginBottom: "9px",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  revNums: {
+    display: "flex",
+    borderTop: "1px solid rgba(0, 200, 83, 0.15)",
+    paddingTop: "9px",
+    marginBottom: "9px",
+  },
+  rnFirst: {
+    flex: 1,
+    padding: "0 9px 0 0",
+    borderRight: "1px solid rgba(0, 200, 83, 0.12)",
+  },
+  rn: {
+    flex: 1,
+    padding: "0 9px",
+    borderRight: "1px solid rgba(0, 200, 83, 0.12)",
+  },
+  rnLast: {
+    flex: 1,
+    padding: "0 0 0 9px",
+    borderRight: "none",
+  },
+  rnV: {
+    fontSize: "17px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.04em",
+    lineHeight: 1,
+    marginBottom: "2px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  rnVG: {
+    fontSize: "17px",
+    fontWeight: "800",
+    color: "#00c853",
+    letterSpacing: "-.04em",
+    lineHeight: 1,
+    marginBottom: "2px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  rnVR: {
+    fontSize: "17px",
+    fontWeight: "800",
+    color: "#ff3d5a",
+    letterSpacing: "-.04em",
+    lineHeight: 1,
+    marginBottom: "2px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  rnL: {
+    fontSize: "10px",
+    color: "#7a9880",
+  },
+  revIns: {
+    fontSize: "12px",
+    color: "#7a9880",
+    lineHeight: "1.6",
+    borderTop: "1px solid rgba(0, 200, 83, 0.12)",
+    paddingTop: "8px",
+  },
+  eyebrow: {
+    fontSize: "11px",
+    fontWeight: "600",
+    color: "#7a9880",
+    marginBottom: "11px",
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+  },
+  eyebrowLine: {
+    width: "14px",
+    height: "1.5px",
+    background: "#00c853",
     display: "inline-block",
   },
-  shopName: { fontSize: "0.75rem", color: "#aaa" },
-  main: {
-    flex: 1,
-    padding: "48px 56px",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    position: "relative",
-    zIndex: 1,
+  h1: {
+    fontSize: "27px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.5px",
+    lineHeight: "1.15",
+    marginBottom: "8px",
+    maxWidth: "460px",
   },
-  centerBox: { textAlign: "center", maxWidth: "420px", margin: "0 auto" },
+  sub: {
+    fontSize: "13px",
+    color: "#7a9880",
+    lineHeight: "1.65",
+    maxWidth: "420px",
+    marginBottom: "22px",
+  },
+  btnRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    flexWrap: "wrap",
+    maxWidth: "420px",
+    marginBottom: "14px",
+  },
+  btnG: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    background: "#00c853",
+    color: "#000",
+    border: "none",
+    borderRadius: "8px",
+    padding: "11px 20px",
+    fontSize: "13px",
+    fontWeight: "700",
+    transition: "all .18s",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  btnOutline: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    color: "#7a9880",
+    border: "1px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "8px",
+    padding: "10px 16px",
+    fontSize: "12.5px",
+    fontWeight: "500",
+    transition: "all .18s",
+    cursor: "pointer",
+  },
+  chipsRow: {
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap",
+  },
+  chip: {
+    fontSize: "10.5px",
+    padding: "3px 9px",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "16px",
+    color: "#3a5040",
+  },
+  centerBox: {
+    textAlign: "center",
+    padding: "30px 0",
+  },
   spinner: {
-    width: "48px",
-    height: "48px",
-    border: "4px solid rgba(38,179,94,0.15)",
-    borderTop: "4px solid #26b35e",
+    width: "28px",
+    height: "28px",
+    border: "2.5px solid rgba(255, 255, 255, 0.12)",
+    borderTopColor: "#00c853",
     borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-    margin: "0 auto 24px",
+    animation: "spin .75s linear infinite",
+    margin: "0 auto 12px",
   },
   progressBar: {
-    width: "280px",
+    width: "240px",
     height: "4px",
-    background: "rgba(255,255,255,0.1)",
-    borderRadius: "4px",
-    margin: "24px auto 0",
+    background: "rgba(255,255,255,0.07)",
+    borderRadius: "3px",
+    margin: "0 auto",
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
     width: "60%",
-    background: "#26b35e",
+    background: "#00c853",
     animation: "pulse 1.5s ease-in-out infinite",
-  },
-  heading: {
-    fontSize: "1.5rem",
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: "12px",
-  },
-  insightCard: {
-    background: "rgba(38,179,94,0.08)",
-    border: "1px solid rgba(38,179,94,0.25)",
-    borderRadius: "12px",
-    padding: "20px 24px",
-    marginBottom: "32px",
-    maxWidth: "560px",
-  },
-  insightTitle: {
-    fontSize: "0.85rem",
-    color: "#26b35e",
-    marginBottom: "14px",
-    fontWeight: "600",
-  },
-  insightNumbers: { display: "flex", gap: "40px", marginBottom: "14px" },
-  numValue: {
-    fontSize: "1.3rem",
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: "2px",
-  },
-  numLabel: { fontSize: "0.72rem", color: "#aaa" },
-  insightDesc: { fontSize: "0.82rem", color: "#ccc", lineHeight: "1.6" },
-  stepText: { fontSize: "0.8rem", color: "#26b35e", marginBottom: "12px" },
-  headline: {
-    fontSize: "2.2rem",
-    fontWeight: "700",
-    color: "#fff",
-    lineHeight: "1.2",
-    marginBottom: "24px",
-    maxWidth: "480px",
-  },
-  headlineGreen: { color: "#26b35e" },
-  subText: {
-    fontSize: "0.95rem",
-    color: "#aaa",
-    marginBottom: "24px",
-    maxWidth: "420px",
-  },
-  ctaRow: {
-    display: "flex",
-    gap: "16px",
-    alignItems: "center",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-  },
-  btnPrimary: {
-    background: "#26b35e",
-    color: "#fff",
-    border: "none",
-    padding: "14px 28px",
-    borderRadius: "8px",
-    fontSize: "0.95rem",
-    fontWeight: "600",
-    cursor: "pointer",
-  },
-  btnSecondary: {
-    background: "transparent",
-    color: "#aaa",
-    border: "1px solid rgba(255,255,255,0.15)",
-    padding: "14px 24px",
-    borderRadius: "8px",
-    fontSize: "0.9rem",
-    cursor: "pointer",
-  },
-  chipsRow: { display: "flex", flexWrap: "wrap", gap: "8px" },
-  chip: {
-    fontSize: "0.75rem",
-    color: "#666",
-    border: "1px solid rgba(255,255,255,0.1)",
-    padding: "4px 12px",
-    borderRadius: "20px",
   },
 };
 
+// ── KEYFRAME ANIMATIONS ───────────────────────────────────────────
 const styleSheet = document.createElement("style");
-styleSheet.textContent = `@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`;
+styleSheet.textContent = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes pls { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+`;
 document.head.appendChild(styleSheet);
 
 export default ShiprocketOnboarding;

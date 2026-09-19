@@ -83,458 +83,704 @@ const Step3 = ({ onComplete }) => {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────
+  const storeName = localStorage.getItem("userData")
+    ? JSON.parse(localStorage.getItem("userData"))?.email?.split("@")[0]
+    : "atlance-clothing";
+
   return (
-    <div style={styles.page}>
-      <div style={{ ...styles.blob, ...styles.blobLeft }}></div>
-      <div style={{ ...styles.blob, ...styles.blobRight }}></div>
-
-      {/* LEFT SIDEBAR */}
-      <div style={styles.sidebar}>
-        <div style={styles.logo}>
-          <img
-            src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
-            alt="ProfitFirst"
-            style={{ width: "140px" }}
-          />
-        </div>
-
-        <div style={styles.sideSection}>
-          <p style={styles.sideLabel}>Connections</p>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>🛍️</span>
-            <span style={styles.sideText}>Shopify</span>
-            <span style={styles.badgeLive}>Live</span>
-          </div>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>📘</span>
-            <span style={styles.sideText}>Meta Ads</span>
-            <span style={styles.badgeCurrent}>Setup</span>
-          </div>
-          <div style={styles.sideItem}>
-            <span style={styles.sideIcon}>🚚</span>
-            <span style={styles.sideText}>Shiprocket</span>
-            <span style={styles.badgePending}>Pending</span>
-          </div>
-        </div>
-
-        <div style={styles.sideSection}>
-          <p style={styles.sideLabel}>What you'll unlock</p>
-          <p style={styles.sideStatSmall}>📊 Real ad spend vs revenue</p>
-          <p style={styles.sideStatSmall}>📈 Accurate ROAS per campaign</p>
-          <p style={styles.sideStatSmall}>💡 Profit on Ad Spend (POAS)</p>
-          <p style={styles.sideStatSmall}>🎯 Break-even ROAS</p>
-        </div>
-
-        <div style={styles.sideBottom}>
-          <span style={styles.shopDot}></span>
-          <span style={styles.shopName}>Step 2 of 7</span>
-        </div>
+    <div style={styles.shell}>
+      {/* ── TOP FIXED PROGRESS BAR (40%) ── */}
+      <div style={styles.prog}>
+        <div style={styles.progFill}></div>
       </div>
 
-      {/* RIGHT MAIN CONTENT */}
-      <div style={styles.main}>
-        <p style={styles.stepText}>— Step 2 of 7</p>
+      {/* ── LEFT SIDEBAR (.pf-sb) ── */}
+      <aside style={styles.sb}>
+        {/* Brand */}
+        <div style={styles.brand}>
+          <div style={styles.mark}>P₹</div>
+          <div style={styles.bname}>
+            Profit <em style={styles.bnameEm}>First</em>
+          </div>
+        </div>
 
-        <h1 style={styles.headline}>
-          Connect your <span style={styles.headlineGreen}>Meta Ads</span>{" "}
-          account
-        </h1>
+        {/* Connections Section */}
+        <div style={styles.conns}>
+          <div style={styles.pfcLabel}>Connections</div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoSh}>S</div>
+            <span style={styles.connNm}>Shopify</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoMt}>M</div>
+            <span style={styles.connNm}>Meta Ads</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={{ ...styles.connRow, borderBottom: "none" }}>
+            <div style={styles.connIcoNd}>🚚</div>
+            <span style={styles.connNm}>Shiprocket</span>
+            <span style={styles.connStNext}>Next</span>
+          </div>
+        </div>
 
-        <p style={styles.subText}>
-          We read your ad spend and campaign data. We never post, create, or
-          change anything in your account.
-        </p>
+        {/* Data Unlocked Section */}
+        <div style={styles.pfd}>
+          <div style={styles.pfdLabel}>Data unlocked</div>
 
-        {/* ── Meta not connected yet ── */}
-        {adAccounts.length === 0 && !fetchingAccounts && (
-          <div style={styles.connectCard}>
-            <div style={styles.connectIcon}>📘</div>
-            <div>
-              <p style={styles.connectTitle}>Meta Ads not connected</p>
-              <p style={styles.connectDesc}>
-                Click below to authorize access to your Facebook Ad accounts.
-              </p>
+          <div style={styles.ds}>
+            <div style={styles.dsL}>Real revenue</div>
+            <div style={styles.dsVG}>₹1,87,863</div>
+          </div>
+
+          <div style={styles.ds}>
+            <div style={styles.dsL}>Ad spend</div>
+            <div style={styles.dsV}>
+              {selectedAdAccountIds.length > 0 ? "Connecting..." : "Pending"}
             </div>
-            <button style={styles.btnConnect} onClick={handleMetaConnect}>
-              Connect Meta Ads →
-            </button>
           </div>
-        )}
 
-        {/* ── Loading accounts ── */}
-        {fetchingAccounts && (
-          <div style={styles.loadingBox}>
-            <div style={styles.spinner}></div>
-            <p style={{ color: "#aaa", fontSize: "0.9rem" }}>
-              Loading your ad accounts...
-            </p>
+          <div style={styles.ds}>
+            <div style={styles.dsL}>ROAS</div>
+            <div style={styles.dsV}>
+              {selectedAdAccountIds.length > 0 ? "Calculating..." : "—"}
+            </div>
           </div>
-        )}
 
-        {/* ── Accounts list ── */}
-        {adAccounts.length > 0 && !fetchingAccounts && (
-          <>
-            <p style={styles.selectLabel}>
-              Select the ad accounts to track{" "}
-              <span style={{ color: "#26b35e" }}>
-                ({selectedAdAccountIds.length} selected)
-              </span>
+          <div style={{ ...styles.ds, borderBottom: "none", marginBottom: 0 }}>
+            <div style={styles.dsL}>Net profit</div>
+            <div style={styles.dsVDim}>Connect Shiprocket →</div>
+          </div>
+        </div>
+
+        {/* Store Pill Footer */}
+        <div style={styles.foot}>
+          <div style={styles.storePill}>
+            <div style={styles.spAv}>{storeName[0]?.toUpperCase() || "A"}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={styles.spNm}>{storeName}</div>
+            </div>
+            <div style={styles.spDot}></div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── RIGHT MAIN CONTENT (.pf-right) ── */}
+      <div style={styles.right}>
+        <div style={styles.obRight}>
+          <div style={styles.cardWrap}>
+            {/* Step eyebrow */}
+            <div style={styles.eyebrow}>
+              <span style={styles.eyebrowLine}></span>
+              Step 3 of 7
+            </div>
+
+            {/* Headline */}
+            <h1 style={styles.h1}>
+              Which ad account
+              <br />
+              should we{" "}
+              <em style={{ color: "#00c853", fontStyle: "normal" }}>track?</em>
+            </h1>
+
+            {/* Subtitle */}
+            <p style={styles.sub}>
+              Select the accounts running ads for this store. You can manage more
+              accounts later in Settings.
             </p>
 
-            <div style={styles.accountsList}>
-              {adAccounts.map((acc) => {
-                const isSelected = selectedAdAccountIds.includes(acc.accountId);
-                return (
-                  <div
-                    key={acc.accountId}
-                    onClick={() => toggleAccount(acc.accountId)}
-                    style={{
-                      ...styles.accountItem,
-                      border: isSelected
-                        ? "1px solid #26b35e"
-                        : "1px solid rgba(255,255,255,0.08)",
-                      background: isSelected
-                        ? "rgba(38,179,94,0.08)"
-                        : "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    {/* Checkbox */}
-                    <div
-                      style={{
-                        ...styles.checkbox,
-                        background: isSelected ? "#26b35e" : "transparent",
-                        border: isSelected
-                          ? "2px solid #26b35e"
-                          : "2px solid rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      {isSelected && (
-                        <span style={{ color: "#fff", fontSize: "11px" }}>
-                          ✓
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Account info */}
-                    <div style={{ flex: 1 }}>
-                      <p style={styles.accName}>{acc.name}</p>
-                      <p style={styles.accMeta}>
-                        {acc.currency} · {acc.id}
-                      </p>
-                    </div>
-
-                    {isSelected && (
-                      <span style={styles.selectedBadge}>Selected</span>
-                    )}
+            {/* ── STATE 1: Meta not connected yet ── */}
+            {adAccounts.length === 0 && !fetchingAccounts && (
+              <div style={styles.connCard}>
+                <div style={styles.ccHd}>
+                  <div style={styles.ccLogoMt}>M</div>
+                  <div>
+                    <div style={styles.ccPnm}>Meta Ads Manager</div>
+                    <div style={styles.ccPs}>Facebook & Instagram ads</div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-            {/* CTA Buttons */}
-            <div style={styles.ctaRow}>
+                <div style={styles.ccPerms}>
+                  <div style={styles.ccPerm}>Ad spend by campaign and day</div>
+                  <div style={styles.ccPerm}>Purchase and ROAS data</div>
+                  <div style={styles.ccPerm}>Campaign performance — read only</div>
+                </div>
+
+                <button
+                  style={{ ...styles.btnG, width: "100%" }}
+                  onClick={handleMetaConnect}
+                >
+                  Continue with Facebook →
+                </button>
+              </div>
+            )}
+
+            {/* ── STATE 2: Loading accounts ── */}
+            {fetchingAccounts && (
+              <div style={styles.centerBox}>
+                <div style={styles.spinner}></div>
+                <p style={{ fontSize: "13px", color: "var(--t2)" }}>
+                  Reading your Meta ad accounts...
+                </p>
+              </div>
+            )}
+
+            {/* ── STATE 3: Accounts list (Multiple Select Checkboxes) ── */}
+            {adAccounts.length > 0 && !fetchingAccounts && (
+              <>
+                <div style={styles.accOpts}>
+                  {adAccounts.map((acc) => {
+                    const isSelected = selectedAdAccountIds.includes(
+                      acc.accountId,
+                    );
+                    return (
+                      <div
+                        key={acc.accountId}
+                        onClick={() => toggleAccount(acc.accountId)}
+                        style={{
+                          ...styles.accOpt,
+                          ...(isSelected ? styles.accOptOn : {}),
+                        }}
+                      >
+                        {/* Checkbox */}
+                        <div
+                          style={{
+                            ...styles.accCheckbox,
+                            ...(isSelected ? styles.accCheckboxOn : {}),
+                          }}
+                        >
+                          {isSelected && <span style={styles.checkMark}>✓</span>}
+                        </div>
+
+                        {/* Account Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={styles.accNm}>{acc.name}</div>
+                          <div style={styles.accId}>
+                            Act ID: {acc.id || acc.accountId} · {acc.currency}
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <span style={styles.badgeSelected}>Selected</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Button Row */}
+                <div style={styles.btnRow}>
+                  <button
+                    style={{
+                      ...styles.btnG,
+                      opacity:
+                        selectedAdAccountIds.length === 0 || submitting ? 0.5 : 1,
+                      cursor:
+                        selectedAdAccountIds.length === 0 || submitting
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                    onClick={handleSubmit}
+                    disabled={submitting || selectedAdAccountIds.length === 0}
+                  >
+                    {submitting ? "Saving..." : "Confirm and continue →"}
+                  </button>
+                  <button
+                    style={styles.btnOutline}
+                    onClick={() => (window.location.href = "/dashboard")}
+                  >
+                    I'll do this later →
+                  </button>
+                </div>
+
+                <div style={styles.secNote}>
+                  <span>🔒</span> Read-only access. We never change your campaigns.
+                </div>
+              </>
+            )}
+
+            {/* ── Fallback if no accounts found ── */}
+            {adAccounts.length === 0 && !fetchingAccounts && (
               <button
-                style={{
-                  ...styles.btnPrimary,
-                  opacity:
-                    selectedAdAccountIds.length === 0 || submitting ? 0.5 : 1,
-                  cursor:
-                    selectedAdAccountIds.length === 0 || submitting
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-                onClick={handleSubmit}
-                disabled={submitting || selectedAdAccountIds.length === 0}
-              >
-                {submitting ? "Saving..." : "Save & Continue →"}
-              </button>
-              <button
-                style={styles.btnSecondary}
+                style={{ ...styles.btnOutline, marginTop: "12px" }}
                 onClick={() => (window.location.href = "/dashboard")}
               >
-                I'll do this later →
+                Skip for now →
               </button>
-            </div>
-
-            <p style={styles.ctaNote}>
-              Skipping shows ₹0 for ad spend on your dashboard
-            </p>
-          </>
-        )}
-
-        {/* ── If connected but no accounts found ── */}
-        {adAccounts.length === 0 && !fetchingAccounts && (
-          <button
-            style={{ ...styles.btnSecondary, marginTop: "16px" }}
-            onClick={() => (window.location.href = "/dashboard")}
-          >
-            Skip for now →
-          </button>
-        )}
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-// ── STYLES ──────────────────────────────────────────────────
+// ── EXACT CSS DESIGN SYSTEM MATCHING SHOPIFY ONBOARDING ──────────
 const styles = {
-  page: {
+  shell: {
     display: "flex",
     minHeight: "100vh",
-    background: "#101218",
-    position: "relative",
-    overflow: "hidden",
+    background: "#0a1a12", // var(--bg)
+    color: "#e0ede4",      // var(--t1)
+    fontFamily: "'Inter', -apple-system, sans-serif",
   },
-  sidebar: {
-    width: "220px",
-    minWidth: "220px",
-    background: "rgba(255,255,255,0.02)",
-    backdropFilter: "blur(10px)",
-    padding: "24px 16px",
+  prog: {
+    position: "fixed",
+    top: 0,
+    left: "210px",
+    right: 0,
+    height: "3px",
+    background: "rgba(255, 255, 255, 0.07)",
+    zIndex: 99,
+  },
+  progFill: {
+    height: "100%",
+    background: "#00c853",
+    width: "40%", // Step 3 of 7 in prototype
+    transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
+  },
+  sb: {
+    width: "210px",
+    minHeight: "100vh",
+    background: "#0d1f15", // var(--s1)
+    borderRight: "1px solid rgba(255, 255, 255, 0.07)",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
     display: "flex",
     flexDirection: "column",
-    borderRight: "1px solid rgba(255,255,255,0.06)",
-    position: "relative",
-    zIndex: 1,
+    zIndex: 100,
   },
-  logo: { marginBottom: "28px" },
-  sideSection: { marginBottom: "24px" },
-  sideLabel: {
-    fontSize: "0.7rem",
-    color: "#aaa",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    marginBottom: "10px",
-  },
-  sideItem: {
+  brand: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    marginBottom: "10px",
+    gap: "9px",
+    padding: "14px 15px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
   },
-  sideIcon: { fontSize: "14px" },
-  sideText: { fontSize: "0.85rem", flex: 1 },
-  badgeLive: {
-    fontSize: "0.65rem",
-    background: "#26b35e",
-    color: "#fff",
-    padding: "2px 7px",
-    borderRadius: "20px",
-    fontWeight: "600",
-  },
-  badgeCurrent: {
-    fontSize: "0.65rem",
-    background: "#f59e0b",
-    color: "#000",
-    padding: "2px 7px",
-    borderRadius: "20px",
-    fontWeight: "600",
-  },
-  badgePending: {
-    fontSize: "0.65rem",
-    background: "rgba(255,255,255,0.1)",
-    color: "#aaa",
-    padding: "2px 7px",
-    borderRadius: "20px",
-  },
-  sideStatSmall: {
-    fontSize: "0.75rem",
-    color: "#888",
-    marginBottom: "8px",
-    lineHeight: "1.4",
-  },
-  sideBottom: {
-    marginTop: "auto",
+  mark: {
+    width: "26px",
+    height: "26px",
+    background: "#00c853",
+    borderRadius: "7px",
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    paddingTop: "16px",
-    borderTop: "1px solid rgba(255,255,255,0.06)",
-  },
-  shopDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "50%",
-    background: "#26b35e",
-    display: "inline-block",
-  },
-  shopName: { fontSize: "0.75rem", color: "#aaa" },
-
-  main: {
-    flex: 1,
-    padding: "48px 56px",
-    display: "flex",
-    flexDirection: "column",
     justifyContent: "center",
-    position: "relative",
-    zIndex: 1,
+    fontSize: "10px",
+    fontWeight: "800",
+    color: "#000",
   },
-  stepText: { fontSize: "0.8rem", color: "#26b35e", marginBottom: "12px" },
-  headline: {
-    fontSize: "2.2rem",
+  bname: {
+    fontSize: "13px",
     fontWeight: "700",
-    color: "#fff",
-    lineHeight: "1.2",
-    marginBottom: "16px",
-    maxWidth: "520px",
+    color: "#e0ede4",
   },
-  headlineGreen: { color: "#26b35e" },
-  subText: {
-    fontSize: "0.95rem",
-    color: "#aaa",
-    marginBottom: "32px",
-    maxWidth: "480px",
-    lineHeight: "1.6",
+  bnameEm: {
+    color: "#00c853",
+    fontStyle: "normal",
   },
-
-  // Not connected card
-  connectCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "16px",
-    background: "rgba(38,179,94,0.06)",
-    border: "1px solid rgba(38,179,94,0.2)",
-    borderRadius: "12px",
-    padding: "20px 24px",
-    marginBottom: "24px",
-    maxWidth: "520px",
-    flexWrap: "wrap",
+  conns: {
+    padding: "11px 13px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
   },
-  connectIcon: { fontSize: "32px" },
-  connectTitle: { fontSize: "0.95rem", fontWeight: "600", marginBottom: "4px" },
-  connectDesc: { fontSize: "0.82rem", color: "#aaa" },
-  btnConnect: {
-    background: "#1877f2",
-    color: "#fff",
-    border: "none",
-    padding: "12px 24px",
-    borderRadius: "8px",
-    fontSize: "0.9rem",
+  pfcLabel: {
+    fontSize: "10px",
     fontWeight: "600",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
+    color: "#3a5040",
+    marginBottom: "7px",
   },
-
-  // Loading
-  loadingBox: {
+  connRow: {
     display: "flex",
     alignItems: "center",
-    gap: "16px",
-    marginBottom: "24px",
+    gap: "7px",
+    padding: "5px 0",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
   },
-  spinner: {
-    width: "32px",
-    height: "32px",
-    border: "3px solid rgba(38,179,94,0.15)",
-    borderTop: "3px solid #26b35e",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-
-  // Accounts list
-  selectLabel: {
-    fontSize: "0.85rem",
-    color: "#ccc",
-    marginBottom: "12px",
-    fontWeight: "500",
-  },
-  accountsList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    maxWidth: "520px",
-    maxHeight: "280px",
-    overflowY: "auto",
-    marginBottom: "28px",
-  },
-  accountItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "14px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    transition: "all 0.15s ease",
-  },
-  checkbox: {
+  connIcoSh: {
     width: "20px",
     height: "20px",
     borderRadius: "5px",
+    background: "#96bf48",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
-    transition: "all 0.15s ease",
-  },
-  accName: {
-    fontSize: "0.9rem",
-    fontWeight: "600",
+    fontSize: "9px",
+    fontWeight: "700",
     color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoMt: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#1877f2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoNd: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#1c3a22",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    color: "#7a9880",
+    flexShrink: 0,
+  },
+  connNm: {
+    flex: 1,
+    fontSize: "11.5px",
+    color: "#7a9880",
+  },
+  connStLive: {
+    fontSize: "9px",
+    fontWeight: "600",
+    padding: "2px 6px",
+    borderRadius: "7px",
+    whiteSpace: "nowrap",
+    background: "rgba(0, 200, 83, 0.13)",
+    color: "#00c853",
+  },
+  connStNext: {
+    fontSize: "9px",
+    fontWeight: "600",
+    padding: "2px 6px",
+    borderRadius: "7px",
+    whiteSpace: "nowrap",
+    background: "rgba(76, 138, 255, 0.12)",
+    color: "#4c8aff",
+  },
+  pfd: {
+    flex: 1,
+    padding: "11px 13px",
+    overflowY: "auto",
+  },
+  pfdLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    color: "#3a5040",
+    marginBottom: "7px",
+  },
+  ds: {
+    marginBottom: "9px",
+    paddingBottom: "9px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  dsL: {
+    fontSize: "10px",
+    color: "#3a5040",
     marginBottom: "2px",
   },
-  accMeta: { fontSize: "0.75rem", color: "#888" },
-  selectedBadge: {
-    fontSize: "0.65rem",
-    background: "#26b35e",
+  dsV: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  dsVG: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#00c853",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  },
+  dsVDim: {
+    color: "#3a5040",
+    fontSize: "11px",
+    fontWeight: "400",
+  },
+  foot: {
+    padding: "10px 13px",
+    borderTop: "1px solid rgba(255, 255, 255, 0.07)",
+    marginTop: "auto",
+  },
+  storePill: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.07)",
+    borderRadius: "7px",
+    padding: "7px 10px",
+  },
+  spAv: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "5px",
+    background: "#96bf48",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
     color: "#fff",
-    padding: "2px 8px",
-    borderRadius: "20px",
+  },
+  spNm: {
+    fontSize: "11px",
+    fontWeight: "500",
+    color: "#e0ede4",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  spDot: {
+    width: "5px",
+    height: "5px",
+    borderRadius: "50%",
+    background: "#00c853",
+    marginLeft: "auto",
+    animation: "pls 2s infinite",
+  },
+  right: {
+    marginLeft: "210px",
+    flex: 1,
+    minHeight: "100vh",
+  },
+  obRight: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    padding: "36px",
+  },
+  cardWrap: {
+    width: "100%",
+    maxWidth: "440px",
+  },
+  eyebrow: {
+    fontSize: "11px",
     fontWeight: "600",
+    color: "#7a9880",
+    marginBottom: "11px",
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+  },
+  eyebrowLine: {
+    width: "14px",
+    height: "1.5px",
+    background: "#00c853",
+    display: "inline-block",
+  },
+  h1: {
+    fontSize: "27px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.5px",
+    lineHeight: "1.15",
+    marginBottom: "8px",
+    maxWidth: "460px",
+  },
+  sub: {
+    fontSize: "13px",
+    color: "#7a9880",
+    lineHeight: "1.65",
+    maxWidth: "420px",
+    marginBottom: "22px",
   },
 
-  // CTA
-  ctaRow: {
+  // Connect Card if not authorized yet
+  connCard: {
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "13px",
+    padding: "20px 22px",
+    width: "100%",
+    maxWidth: "420px",
+    marginBottom: "18px",
+  },
+  ccHd: {
     display: "flex",
-    gap: "16px",
     alignItems: "center",
-    marginBottom: "12px",
+    gap: "11px",
+    marginBottom: "13px",
   },
-  btnPrimary: {
-    background: "#26b35e",
+  ccLogoMt: {
+    width: "42px",
+    height: "42px",
+    borderRadius: "10px",
+    background: "#1877f2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
     color: "#fff",
-    border: "none",
-    padding: "14px 28px",
-    borderRadius: "8px",
-    fontSize: "0.95rem",
-    fontWeight: "600",
-    transition: "opacity 0.2s",
+    fontWeight: "bold",
+    flexShrink: 0,
   },
-  btnSecondary: {
-    background: "transparent",
-    color: "#aaa",
-    border: "1px solid rgba(255,255,255,0.15)",
-    padding: "14px 24px",
+  ccPnm: {
+    fontSize: "15px",
+    fontWeight: "700",
+    color: "#e0ede4",
+  },
+  ccPs: {
+    fontSize: "11px",
+    color: "#7a9880",
+    marginTop: "2px",
+  },
+  ccPerms: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    marginBottom: "16px",
+  },
+  ccPerm: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    fontSize: "12px",
+    color: "#7a9880",
+  },
+
+  // Accounts List
+  accOpts: {
+    width: "100%",
+    maxWidth: "420px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "7px",
+    marginBottom: "16px",
+    maxHeight: "300px",
+    overflowY: "auto",
+  },
+  accOpt: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "#112418", // var(--s2)
+    border: "1.5px solid rgba(255, 255, 255, 0.07)",
     borderRadius: "8px",
-    fontSize: "0.95rem",
+    padding: "11px 13px",
+    transition: "all .18s",
     cursor: "pointer",
   },
-  ctaNote: { fontSize: "0.78rem", color: "#666" },
-  blob: {
-    position: "absolute",
-    width: "380px",
-    height: "380px",
-    filter: "blur(80px)",
-    opacity: 0.14,
-    zIndex: 0,
+  accOptOn: {
+    borderColor: "#00c853",
+    background: "rgba(0, 200, 83, 0.06)",
+  },
+  accCheckbox: {
+    width: "18px",
+    height: "18px",
+    borderRadius: "5px",
+    border: "2px solid rgba(255, 255, 255, 0.12)",
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all .18s",
+  },
+  accCheckboxOn: {
+    borderColor: "#00c853",
+    background: "#00c853",
+  },
+  checkMark: {
+    fontSize: "11px",
+    fontWeight: "800",
+    color: "#000",
+  },
+  accNm: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#e0ede4",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  accId: {
+    fontSize: "10.5px",
+    color: "#3a5040",
+    marginTop: "1px",
+  },
+  badgeSelected: {
+    fontSize: "9px",
+    fontWeight: "600",
+    padding: "2px 7px",
+    borderRadius: "7px",
+    background: "rgba(0, 200, 83, 0.13)",
+    color: "#00c853",
+    whiteSpace: "nowrap",
+  },
+
+  // Buttons
+  btnRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    flexWrap: "wrap",
+    maxWidth: "420px",
+  },
+  btnG: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    background: "#00c853",
+    color: "#000",
+    border: "none",
+    borderRadius: "8px",
+    padding: "11px 20px",
+    fontSize: "13px",
+    fontWeight: "700",
+    transition: "all .18s",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  btnOutline: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    color: "#7a9880",
+    border: "1px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "8px",
+    padding: "10px 16px",
+    fontSize: "12.5px",
+    fontWeight: "500",
+    transition: "all .18s",
+    cursor: "pointer",
+  },
+  secNote: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    fontSize: "11px",
+    color: "#3a5040",
+    maxWidth: "420px",
+    marginTop: "9px",
+  },
+  centerBox: {
+    textAlign: "center",
+    padding: "24px 0",
+  },
+  spinner: {
+    width: "28px",
+    height: "28px",
+    border: "2.5px solid rgba(255, 255, 255, 0.12)",
+    borderTopColor: "#00c853",
     borderRadius: "50%",
-    background: "#5fc61f",
-    pointerEvents: "none",
-  },
-  blobLeft: {
-    left: "-120px",
-    top: "100%",
-    transform: "translateY(-50%)",
-  },
-  blobRight: {
-    right: "-120px",
-    top: "0%",
+    animation: "spin .75s linear infinite",
+    margin: "0 auto 12px",
   },
 };
 
-// CSS animation
+// Keyframe animations
 const styleSheet = document.createElement("style");
-styleSheet.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+styleSheet.textContent = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pls { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+`;
 document.head.appendChild(styleSheet);
 
 export default Step3;

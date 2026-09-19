@@ -9,7 +9,7 @@ const ShopifyOnboarding = () => {
   const navigate = useNavigate();
   const [status, setStatus] = useState("loading"); // loading | syncing | ready | error
   const [errorMsg, setErrorMsg] = useState("");
-    const [data, setData] = useState(null);
+  const [data, setData] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
@@ -106,9 +106,14 @@ const ShopifyOnboarding = () => {
       <aside style={styles.sb}>
         {/* Brand */}
         <div style={styles.brand}>
-          <div style={styles.mark}>P₹</div>
+          <div style={styles.mark}>₹</div>
           <div style={styles.bname}>
             Profit <em style={styles.bnameEm}>First</em>
+            {/* <img
+              src="https://res.cloudinary.com/dqdvr35aj/image/upload/v1748330108/Logo1_zbbbz4.png"
+              alt="ProfitFirst"
+              style={{ width: "140px" }}
+            /> */}
           </div>
         </div>
 
@@ -243,10 +248,7 @@ const ShopifyOnboarding = () => {
                 >
                   {errorMsg || "Failed to load store data."}
                 </h2>
-                <button
-                  style={styles.btnG}
-                  onClick={fetchInsight}
-                >
+                <button style={styles.btnG} onClick={fetchInsight}>
                   Retry
                 </button>
               </div>
