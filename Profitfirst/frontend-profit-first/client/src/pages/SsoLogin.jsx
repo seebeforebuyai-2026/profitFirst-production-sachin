@@ -52,8 +52,17 @@ const SsoLogin = () => {
         // 5. redirectTo ke hisaab se navigate karo
         console.log(`🚀 Redirecting to ${redirectTo}`);
         // redirectTo ke hisaab se decide karo
-        // Hamesha ShopifyOnboarding pe bhejo
-        window.location.href = "/onboarding/shopify";
+        // redirectTo ke hisaab se decide karo
+        if (redirectTo === "/onboarding") {
+          // Onboarding.jsx pe jao — wo onboardingStep check karke sahi page pe bhejega
+          // Step 2 → /onboarding/shopify
+          // Step 3 → Step3.jsx (Meta)
+          // Step 4 → Step4.jsx (Shiprocket)
+          window.location.href = "/onboarding";
+        } else {
+          // Dashboard ya koi aur path
+          window.location.href = redirectTo;
+        }
       } catch (err) {
         console.error("❌ SSO verification failed:", err);
 
