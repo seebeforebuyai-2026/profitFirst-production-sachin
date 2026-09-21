@@ -15,7 +15,7 @@ const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
 const { SendMessageCommand } = require("@aws-sdk/client-sqs");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
 const { GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
-const encryptionService = require('../utils/encryption');
+const encryptionService = require("../utils/encryption");
 
 class AuthController {
   renderErrorPage = (res, message, errorCode = "unknown") => {
@@ -1357,17 +1357,29 @@ class AuthController {
         `\n🛍️ Shopify SSO: Processing for shop=${shop}, email=${normalizedEmail}`,
       );
 
-      // 2. DynamoDB mein check karo — kya ye shop pehle se registered hai?
-      let existingUser = await dynamoDBService.getUserByEmail(normalizedEmail);
+      // 2. Pehle Cognito se check karo ki kya merchant already registered hai
+      const cognitoCheck =
+        await cognitoService.adminGetUserByEmail(normalizedEmail);
+
+      let existingProfile = null;
+      if (cognitoCheck.success && cognitoCheck.userId) {
+        // User Cognito me hai -> Direct Primary Key se DynamoDB Profile read karo (No GSI needed!)
+        const existingMerchantId = cognitoCheck.userId;
+        const profileResult =
+          await dynamoDBService.getUserProfile(existingMerchantId);
+        if (profileResult.success && profileResult.data) {
+          existingProfile = profileResult.data;
+          existingProfile.userId = existingMerchantId;
+        }
+      }
+
       let merchantId;
       let isNewUser = false;
       let onboardingCompleted = false;
 
-      if (!existingUser.success) {
-        // ─── NAYA USER ───────────────────────────────────────────────
-        console.log(
-          `🆕 New merchant: ${normalizedEmail} — creating Cognito account`,
-        );
+      if (!existingProfile) {
+        // ─── NAYA USER (Pehli Baar Install) ─────────────────────────
+        console.log(`🆕 New merchant: ${normalizedEmail} — creating account`);
         isNewUser = true;
 
         // a. Cognito mein account banao
@@ -1383,7 +1395,7 @@ class AuthController {
             .json({ error: "Failed to create merchant account" });
         }
 
-        // b. Password set karo aur Cognito tokens lo
+        // b. Password set + auth
         const authResult =
           await cognitoService.adminSetPasswordAndAuth(normalizedEmail);
         if (!authResult.success) {
@@ -1392,14 +1404,14 @@ class AuthController {
             .json({ error: "Failed to authenticate new merchant" });
         }
 
-        // c. Cognito sub (userId) nikalo tokens se
+        // c. Sub ID nikalo
         const userDetails = await cognitoService.getUserDetails(
           authResult.data.AccessToken,
         );
         const userAttributes = userDetails.data.UserAttributes || [];
         merchantId = userAttributes.find((a) => a.Name === "sub")?.Value;
 
-        // d. DynamoDB mein PROFILE banao
+        // d. DynamoDB PROFILE banao
         await dynamoDBService.createUserProfile({
           userId: merchantId,
           email: normalizedEmail,
@@ -1408,6 +1420,12 @@ class AuthController {
           authProvider: "shopify",
           isVerified: true,
         });
+
+        // e. INTEGRATION#SHOPIFY record banao (with encrypted token)
+        const encryptionService = require("../services/encryption.service");
+        const encryptedToken = req.body.accessToken
+          ? encryptionService.encrypt(req.body.accessToken)
+          : "";
 
         await newDynamoDB.send(
           new PutCommand({
@@ -1419,9 +1437,7 @@ class AuthController {
               platform: "SHOPIFY",
               shopDomain: shop,
               shopifyStore: shop,
-              accessToken: req.body.accessToken
-                ? encryptionService.encrypt(req.body.accessToken)
-                : "",
+              accessToken: encryptedToken,
               appInstalled: true,
               shopName: shopInfo.name,
               currency: shopInfo.currency,
@@ -1434,16 +1450,16 @@ class AuthController {
         );
 
         console.log(`✅ New merchant created: merchantId=${merchantId}`);
-        // Profile create ke baad ye add karo
+
+        // Naye user ke liye Step 2 set karo
         await dynamoDBService.updateUserProfileOnboarding(merchantId, {
           onboardingStep: 2,
           shopifyConnected: true,
         });
 
+        // 30-day SQS Sync trigger karo
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const sinceDate = thirtyDaysAgo.toISOString();
-
         try {
           await sqsClient.send(
             new SendMessageCommand({
@@ -1451,29 +1467,21 @@ class AuthController {
               MessageBody: JSON.stringify({
                 type: "SHOPIFY_SYNC",
                 merchantId: merchantId,
-                sinceDate: sinceDate,
+                sinceDate: thirtyDaysAgo.toISOString(),
                 mode: "shopify_onboarding",
                 affectedDates: [],
               }),
             }),
           );
-          console.log(
-            `📡 Shopify sync triggered for new merchant: ${merchantId}`,
-          );
-        } catch (sqsErr) {
-          console.error(
-            `⚠️ SQS trigger failed (non-critical): ${sqsErr.message}`,
-          );
-        }
+        } catch (sqsErr) {}
       } else {
-        // ─── PURANA USER ──────────────────────────────────────────────
-        console.log(`🔄 Returning merchant: ${normalizedEmail}`);
-        merchantId = existingUser.data.userId;
-        onboardingCompleted = existingUser.data.onboardingCompleted || false;
-        // onboardingStep bhi fetch karo
-        const returningStep = existingUser.data.onboardingStep || 2;
+        // ─── PURANA USER (Returning / Reopening Merchant) ────────────
+        console.log(`🔄 Returning merchant detected: ${normalizedEmail}`);
+        merchantId = existingProfile.userId;
+        onboardingCompleted = existingProfile.onboardingCompleted || false;
 
-        // appInstalled: true update karo (reinstall case)
+        // 🚨 CRITICAL: onboardingStep ko TOUCH BHI MAT KARO!
+        // User jis step par tha, wo step safe rahega!
         await dynamoDBService.updateUserProfileOnboarding(merchantId, {
           appInstalled: true,
         });

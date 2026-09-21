@@ -1,80 +1,107 @@
-const { QueryCommand, DeleteCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
-const { ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
-const { newDynamoDB, newTableName, s3Client, s3BucketName } = require("../config/aws.config");
+const {
+  QueryCommand,
+  DeleteCommand,
+  UpdateCommand,
+} = require("@aws-sdk/lib-dynamodb");
+const {
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} = require("@aws-sdk/client-s3");
+const {
+  newDynamoDB,
+  newTableName,
+  s3Client,
+  s3BucketName,
+} = require("../config/aws.config");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
-const MERCHANT_ID = "898a557c-c0d1-708a-5249-cc713438c565";
+//tekas
+const MERCHANT_ID = "f93a45fc-c0f1-70c3-48a6-54b26604ccd7";
 async function ultimateClean() {
-    console.log(`🧹 Starting Targeted Clean for Merchant: ${MERCHANT_ID}`);
+  console.log(`🧹 Starting Targeted Clean for Merchant: ${MERCHANT_ID}`);
 
-    try {
-        // 1. DYNAMODB RECURSIVE DELETE (Targeted)
-        console.log("⏳ Step 1: Cleaning DynamoDB Data Records...");
-        let lastKey = null;
-        let totalDeleted = 0;
+  try {
+    // 1. DYNAMODB RECURSIVE DELETE (Targeted)
+    console.log("⏳ Step 1: Cleaning DynamoDB Data Records...");
+    let lastKey = null;
+    let totalDeleted = 0;
 
-        do {
-            const params = {
-                TableName: newTableName,
-                KeyConditionExpression: "PK = :pk",
-                ExpressionAttributeValues: { ":pk": `MERCHANT#${MERCHANT_ID}` }
-            };
-            if (lastKey) params.ExclusiveStartKey = lastKey;
+    do {
+      const params = {
+        TableName: newTableName,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: { ":pk": `MERCHANT#${MERCHANT_ID}` },
+      };
+      if (lastKey) params.ExclusiveStartKey = lastKey;
 
-            const res = await newDynamoDB.send(new QueryCommand(params));
-            
-            for (const item of res.Items) {
-                const sk = item.SK;
-                // Sirf in prefixes wale records ko delete karenge (Baki PROFILE/INTEGRATION safe rahenge)
-                const isDataRecord = ['ORDER#', 'ADS#', 'SUMMARY#', 'SHIPMENT#', 'SYNC#', 'VARIANT#', 'PRODUCT#'].some(p => sk.startsWith(p));
-                
-                if (isDataRecord) {
-                    await newDynamoDB.send(new DeleteCommand({ 
-                        TableName: newTableName, 
-                        Key: { PK: item.PK, SK: item.SK } 
-                    }));
-                    totalDeleted++;
-                }
-            }
-            lastKey = res.LastEvaluatedKey;
-        } while (lastKey);
-        
-        console.log(`✅ DynamoDB: ${totalDeleted} records deleted.`);
+      const res = await newDynamoDB.send(new QueryCommand(params));
 
-        // 2. WATERMARK & FLAG RESET
-        console.log("⏳ Step 2: Resetting Watermarks and Flags...");
-        const platforms = ['SHOPIFY', 'META', 'SHIPROCKET'];
-        
-        for (const p of platforms) {
-            try {
-                await newDynamoDB.send(new UpdateCommand({
-                    TableName: newTableName,
-                    Key: { PK: `MERCHANT#${MERCHANT_ID}`, SK: `INTEGRATION#${p}` },
-                    UpdateExpression: "REMOVE lastSyncTime, lastSyncedOrderId, lastSyncedDate, lastSyncedShipmentId, syncStatus"
-                }));
-            } catch (e) { /* skip if record doesn't exist yet */ }
+      for (const item of res.Items) {
+        const sk = item.SK;
+        // Sirf in prefixes wale records ko delete karenge (Baki PROFILE/INTEGRATION safe rahenge)
+        const isDataRecord = [
+          "ORDER#",
+          "ADS#",
+          "SUMMARY#",
+          "SHIPMENT#",
+          "SYNC#",
+          "VARIANT#",
+          "PRODUCT#",
+        ].some((p) => sk.startsWith(p));
+
+        if (isDataRecord) {
+          await newDynamoDB.send(
+            new DeleteCommand({
+              TableName: newTableName,
+              Key: { PK: item.PK, SK: item.SK },
+            }),
+          );
+          totalDeleted++;
         }
+      }
+      lastKey = res.LastEvaluatedKey;
+    } while (lastKey);
 
-        await newDynamoDB.send(new UpdateCommand({
+    console.log(`✅ DynamoDB: ${totalDeleted} records deleted.`);
+
+    // 2. WATERMARK & FLAG RESET
+    console.log("⏳ Step 2: Resetting Watermarks and Flags...");
+    const platforms = ["SHOPIFY", "META", "SHIPROCKET"];
+
+    for (const p of platforms) {
+      try {
+        await newDynamoDB.send(
+          new UpdateCommand({
             TableName: newTableName,
-            Key: { PK: `MERCHANT#${MERCHANT_ID}`, SK: 'PROFILE' },
-            UpdateExpression: "SET onboardingCompleted = :t, onboardingStep = :s, cogsCompleted = :f, expensesCompleted = :f, initialSyncCompleted = :f, dashboardUnlocked = :f REMOVE lastSyncTime",
-            ExpressionAttributeValues: { ":t": true, ":s": 5, ":f": false }
-        }));
-
-        console.log("🏆 SUCCESS: All systems reset. You can now onboard/sync fresh.");
-    } catch (error) {
-        console.error("❌ CLEAN FAILED:", error.message);
+            Key: { PK: `MERCHANT#${MERCHANT_ID}`, SK: `INTEGRATION#${p}` },
+            UpdateExpression:
+              "REMOVE lastSyncTime, lastSyncedOrderId, lastSyncedDate, lastSyncedShipmentId, syncStatus",
+          }),
+        );
+      } catch (e) {
+        /* skip if record doesn't exist yet */
+      }
     }
+
+    await newDynamoDB.send(
+      new UpdateCommand({
+        TableName: newTableName,
+        Key: { PK: `MERCHANT#${MERCHANT_ID}`, SK: "PROFILE" },
+        UpdateExpression:
+          "SET onboardingCompleted = :t, onboardingStep = :s, cogsCompleted = :f, expensesCompleted = :f, initialSyncCompleted = :f, dashboardUnlocked = :f REMOVE lastSyncTime",
+        ExpressionAttributeValues: { ":t": true, ":s": 5, ":f": false },
+      }),
+    );
+
+    console.log(
+      "🏆 SUCCESS: All systems reset. You can now onboard/sync fresh.",
+    );
+  } catch (error) {
+    console.error("❌ CLEAN FAILED:", error.message);
+  }
 }
 
 ultimateClean();
-
-
-
-
-
 
 // const { QueryCommand, DeleteCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 // const { ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
@@ -107,7 +134,7 @@ ultimateClean();
 //         const sk = item.SK;
 //         // Data records delete karo, PROFILE aur INTEGRATION safe
 //         const isDataRecord = [
-//           'ORDER#', 'ADS#', 'SUMMARY#', 'SHIPMENT#', 
+//           'ORDER#', 'ADS#', 'SUMMARY#', 'SHIPMENT#',
 //           'SYNC#', 'VARIANT#', 'PRODUCT#'
 //         ].some(p => sk.startsWith(p));
 
@@ -176,15 +203,15 @@ ultimateClean();
 //       TableName: newTableName,
 //       Key: { PK: `MERCHANT#${MERCHANT_ID}`, SK: 'PROFILE' },
 //       UpdateExpression: `
-//         SET onboardingCompleted = :t, 
-//             onboardingStep = :s, 
+//         SET onboardingCompleted = :t,
+//             onboardingStep = :s,
 //             cogsCompleted = :t,
-//             expensesCompleted = :f, 
-//             initialSyncCompleted = :f, 
-//             dashboardUnlocked = :f 
+//             expensesCompleted = :f,
+//             initialSyncCompleted = :f,
+//             dashboardUnlocked = :f
 //         REMOVE lastSyncTime, lastFullSyncAt
 //       `,
-//       ExpressionAttributeValues: { 
+//       ExpressionAttributeValues: {
 //         ":t": true,    // onboarding done, cogs done
 //         ":s": 6,       // step 6 = after onboarding, before expense save
 //         ":f": false    // expenses, sync, dashboard all fresh

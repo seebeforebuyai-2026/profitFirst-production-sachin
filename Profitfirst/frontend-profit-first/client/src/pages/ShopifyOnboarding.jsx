@@ -269,8 +269,8 @@ const ShopifyOnboarding = () => {
                       <div style={styles.rnL}>Shopify shows</div>
                     </div>
                     <div style={styles.rn}>
-                      <div style={styles.rnVG}>{fmt(data.actualEarned)}</div>
-                      <div style={styles.rnL}>You actually earned</div>
+                      <div style={styles.rnVG}>{fmt(data.shopifyDeliveredRevenue)}</div>
+                      <div style={styles.rnL}>You actually delivered Revenue</div>
                     </div>
                     <div style={styles.rnLast}>
                       <div style={styles.rnVR}>{fmt(data.gap)}</div>

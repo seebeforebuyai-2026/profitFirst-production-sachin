@@ -666,6 +666,24 @@ class CognitoService {
       return { success: false, error: error.message };
     }
   }
+
+ async adminGetUserByEmail(email) {
+    try {
+      const { AdminGetUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
+      const command = new AdminGetUserCommand({
+        UserPoolId: userPoolId,
+        Username: email,
+      });
+      const result = await cognito.send(command);
+      const sub = result.UserAttributes?.find(a => a.Name === 'sub')?.Value;
+      return { success: true, userId: sub };
+    } catch (error) {
+      if (error.name === 'UserNotFoundException') {
+        return { success: false, error: 'User not found' };
+      }
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = new CognitoService();
