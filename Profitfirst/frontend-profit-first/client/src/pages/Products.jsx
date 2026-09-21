@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "react-toastify";
-import { FiSearch, FiPercent, FiBox, FiRefreshCw, FiCheck } from "react-icons/fi";
+import {
+  FiSearch,
+  FiPercent,
+  FiBox,
+  FiRefreshCw,
+  FiCheck,
+} from "react-icons/fi";
 import axiosInstance from "../../axios";
 import { useProfile } from "../ProfileContext";
 import { useNavigate } from "react-router-dom";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in";
 
 const Products = () => {
   const { updateProfile } = useProfile();
@@ -17,7 +26,6 @@ const Products = () => {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [cogs, setCogs] = useState({});
-  const [isInitialSync, setIsInitialSync] = useState(true);
 
   useEffect(() => {
     let pollInterval;
@@ -25,7 +33,6 @@ const Products = () => {
       await triggerProductFetch(); // Fire the SQS job
       const found = await fetchProducts(); // Try to get data immediately
 
-      // If nothing in DB yet, start polling
       if (!found) {
         pollInterval = setInterval(async () => {
           const nowFound = await fetchProducts();
@@ -81,7 +88,6 @@ const Products = () => {
         });
 
         setProducts(Object.values(productsMap));
-        setIsInitialSync(false);
         setLoading(false);
         setLastEvaluatedKey(response.data.lastKey);
 
@@ -120,10 +126,14 @@ const Products = () => {
     }
     const newCogs = { ...cogs };
     allVariantsList.forEach((v) => {
-      newCogs[v.variantId] = Number((Number(v.salePrice) / Number(divisor)).toFixed(2));
+      newCogs[v.variantId] = Number(
+        (Number(v.salePrice) / Number(divisor)).toFixed(2),
+      );
     });
     setCogs(newCogs);
-    toast.success(`Calculated costs using 1/${divisor} of sale price for all variants`);
+    toast.success(
+      `Calculated costs using 1/${divisor} of sale price for all variants`,
+    );
   };
 
   const handleCogsChange = (variantId, value) => {
@@ -135,12 +145,21 @@ const Products = () => {
 
   const filledCount = useMemo(() => {
     const total = allVariantsList.length;
-    const filled = Object.values(cogs).filter((v) => v !== "" && Number(v) > 0).length;
+    const filled = Object.values(cogs).filter(
+      (v) => v !== "" && Number(v) > 0,
+    ).length;
     return { filled, total };
   }, [allVariantsList, cogs]);
 
+  const accuracyPercent =
+    filledCount.total > 0
+      ? Math.round((filledCount.filled / filledCount.total) * 100)
+      : 0;
+
   const handleSaveCogs = async () => {
-    const hasAnyCosts = Object.values(cogs).some((v) => v !== "" && Number(v) > 0);
+    const hasAnyCosts = Object.values(cogs).some(
+      (v) => v !== "" && Number(v) > 0,
+    );
     if (!hasAnyCosts) {
       toast.error("Please enter at least one product cost before saving");
       return;
@@ -159,9 +178,15 @@ const Products = () => {
         variants,
       });
       if (response.data.success) {
-        toast.success("✅ Product costs saved successfully!");
+        toast.success("✅ Product costs saved!");
         updateProfile({ cogsCompleted: true });
-        navigate("/dashboard/business-expenses"); // 🟢 Move to next step
+
+        // Step 6 (Business Expenses) update karo
+        await axiosInstance
+          .post("/onboard/set-step", { step: 6 })
+          .catch(() => {});
+
+        navigate("/dashboard/business-expenses");
       }
     } catch (error) {
       toast.error("Failed to save costs. Please try again.");
@@ -170,242 +195,903 @@ const Products = () => {
     }
   };
 
-  const handleSkip = () => {
-    navigate("/dashboard/business-expenses"); // Skip to next step without blocking
+  const handleSkip = async () => {
+    try {
+      // Step 6 set karo — COGS skip kiya
+      await axiosInstance
+        .post("/onboard/set-step", { step: 6 })
+        .catch(() => {});
+    } catch (e) {}
+    navigate("/dashboard/business-expenses");
   };
 
-  // ── Full Page Loader ──────────────────────────────────────────
-  if (loading && products.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a1628] gap-4">
-        <div className="w-12 h-12 border-4 border-green-500/20 border-t-green-500 rounded-full animate-spin"></div>
-        <p className="text-green-400 text-sm font-semibold tracking-widest uppercase animate-pulse">
-          Connecting to Shopify Catalog...
-        </p>
-      </div>
-    );
-  }
+  const storeEmail = localStorage.getItem("userData")
+    ? JSON.parse(localStorage.getItem("userData"))?.email
+    : "atlance-clothing";
+
+  const storeInitial = (storeEmail || "A")[0].toUpperCase();
+
+  const fmt = (num) =>
+    "₹" +
+    Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-white p-6 md:p-10">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div style={styles.shell}>
+      {/* ── TOP FIXED PROGRESS BAR (75%) ── */}
+      <div style={styles.prog}>
+        <div style={styles.progFill}></div>
+      </div>
 
-        {/* ── HEADER ── */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-gray-800 pb-6">
-          <div>
-            <p className="text-green-400 text-xs font-bold uppercase tracking-widest mb-1">
-              — Step 5 of 7
-            </p>
-            <h1 className="text-3xl font-black text-white tracking-tight">
-              Add Product Costs <span className="text-green-400">(COGS)</span>
+      {/* ── LEFT SIDEBAR (.pf-sb) ── */}
+      <aside style={styles.sb}>
+        {/* Brand */}
+        <div style={styles.brand}>
+          <div style={styles.mark}>P₹</div>
+          <div style={styles.bname}>
+            Profit <em style={styles.bnameEm}>First</em>
+          </div>
+        </div>
+
+        {/* Connections Section - All 3 Live! */}
+        <div style={styles.conns}>
+          <div style={styles.pfcLabel}>Connections ✓</div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoSh}>S</div>
+            <span style={styles.connNm}>Shopify</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={styles.connRow}>
+            <div style={styles.connIcoMt}>M</div>
+            <span style={styles.connNm}>Meta Ads</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+          <div style={{ ...styles.connRow, borderBottom: "none" }}>
+            <div style={styles.connIcoSr}>🚚</div>
+            <span style={styles.connNm}>Shiprocket</span>
+            <span style={styles.connStLive}>Live</span>
+          </div>
+        </div>
+
+        {/* Data Unlocked Section */}
+        <div style={styles.pfd}>
+          <div style={styles.pfdLabel}>Data unlocked</div>
+
+          <div style={styles.ds}>
+            <div style={styles.dsL}>COGS Accuracy</div>
+            <div style={styles.dsVG}>{accuracyPercent}%</div>
+            <div style={styles.dsS}>
+              {filledCount.filled} of {filledCount.total} variants filled
+            </div>
+          </div>
+
+          <div style={styles.ds}>
+            <div style={styles.dsL}>Next Step</div>
+            <div style={{ ...styles.dsV, color: "#f5a623" }}>Step 6 of 7</div>
+            <div style={styles.dsS}>Fixed Business Overheads</div>
+          </div>
+
+          <div style={{ ...styles.ds, borderBottom: "none", marginBottom: 0 }}>
+            <div style={styles.dsL}>Net Profit Truth</div>
+            <div style={styles.dsVDim}>Unlocks on completion</div>
+          </div>
+        </div>
+
+        {/* Store Pill Footer */}
+        <div style={styles.foot}>
+          <div style={styles.storePill}>
+            <div style={styles.spAv}>{storeInitial}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={styles.spNm}>
+                {storeEmail.replace(".myshopify.com", "")}
+              </div>
+            </div>
+            <div style={styles.spDot}></div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── RIGHT MAIN CONTENT (.pf-right) ── */}
+      <div style={styles.right}>
+        <div style={styles.mainContent}>
+          {/* ── HEADER ── */}
+          <div style={{ marginBottom: "20px" }}>
+            <div style={styles.eyebrow}>
+              <span style={styles.eyebrowLine}></span>
+              Step 5 of 7
+            </div>
+            <h1 style={styles.h1}>
+              Add product costs for{" "}
+              <em style={{ color: "#00c853", fontStyle: "normal" }}>
+                exact profit
+              </em>
             </h1>
-            <p className="text-gray-400 text-sm mt-1.5 max-w-xl leading-relaxed">
-              Set per-unit cost for each variant to calculate your real Gross Margin and Net Profit.
-              You can also use the quick estimator or skip and add later.
+            <p style={styles.sub}>
+              Set unit cost for each variant to calculate your real Gross Margin
+              and Net Profit. You can also use the quick formula tool or skip
+              and set costs anytime later.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 bg-white/5 border border-gray-800 px-3 py-1.5 rounded-lg">
-              Filled: <strong className="text-green-400">{filledCount.filled}</strong> / {filledCount.total} variants
-            </span>
-            <button
-              onClick={() => fetchProducts()}
-              title="Refresh Products"
-              className="p-2.5 bg-white/5 hover:bg-white/10 border border-gray-800 rounded-xl text-gray-300 transition-all"
-            >
-              <FiRefreshCw size={18} /> 
-            </button>
+          {/* ── ACCURACY PROGRESS CARD (.acc-card-ob) ── */}
+          <div style={styles.accCard}>
+            <div style={styles.acTop}>
+              <div style={styles.acLabel}>Profit Data Accuracy</div>
+              <div
+                style={{
+                  ...styles.acPct,
+                  color:
+                    accuracyPercent >= 80
+                      ? "#00c853"
+                      : accuracyPercent >= 40
+                        ? "#f5a623"
+                        : "#ff3d5a",
+                }}
+              >
+                {accuracyPercent}%
+              </div>
+            </div>
+            <div style={styles.acBarWrap}>
+              <div
+                style={{
+                  ...styles.acBar,
+                  width: `${Math.min(accuracyPercent, 100)}%`,
+                  background:
+                    accuracyPercent >= 80
+                      ? "#00c853"
+                      : accuracyPercent >= 40
+                        ? "#f5a623"
+                        : "#ff3d5a",
+                }}
+              ></div>
+            </div>
+            <div style={styles.acSub}>
+              {filledCount.filled} of {filledCount.total} variants filled ·{" "}
+              {accuracyPercent === 100
+                ? "100% SKU accurate"
+                : "Remaining show ₹0 until set"}
+            </div>
           </div>
-        </div>
 
-        {/* ── SEARCH & QUICK ESTIMATOR TOOL ── */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-[#0d1f35] p-4 rounded-2xl border border-gray-800/80">
-          
-          {/* Search bar */}
-          <div className="relative md:col-span-6">
-            <FiSearch className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search products by name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-[#061424] border border-gray-700/60 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/40"
-            />
+          {/* ── SEARCH & QUICK ESTIMATOR TOOL ── */}
+          <div style={styles.toolCard}>
+            {/* Search */}
+            <div style={styles.searchBox}>
+              <FiSearch size={15} color="#7a9880" />
+              <input
+                type="text"
+                placeholder="Search products by title..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={styles.searchInput}
+              />
+            </div>
+
+            {/* Quick Estimator Formula */}
+            <div style={styles.estimatorBox}>
+              <span style={styles.estimatorTitle}>
+                <FiPercent size={12} /> Quick Formula:
+              </span>
+              <span style={{ fontSize: "11px", color: "#7a9880" }}>
+                Sale Price ÷
+              </span>
+              <input
+                type="number"
+                placeholder="e.g. 2"
+                value={divisor}
+                onChange={(e) => setDivisor(e.target.value)}
+                style={styles.estimatorInput}
+              />
+              <button
+                type="button"
+                onClick={applyGlobalFormula}
+                style={styles.estimatorBtn}
+              >
+                Apply All
+              </button>
+            </div>
           </div>
 
-          {/* Quick Estimator Formula */}
-          <div className="md:col-span-6 flex items-center justify-start md:justify-end gap-3 bg-green-500/5 border border-green-500/20 p-2 px-4 rounded-xl">
-            <span className="text-green-400 text-xs font-bold flex items-center gap-1.5 flex-shrink-0">
-              <FiPercent size={14} /> Quick Formula:
-            </span>
-            <span className="text-gray-400 text-xs flex-shrink-0">Sale Price ÷</span>
-            <input
-              type="number"
-              placeholder="e.g. 2"
-              value={divisor}
-              onChange={(e) => setDivisor(e.target.value)}
-              className="w-20 px-2.5 py-1 rounded-lg bg-[#061424] border border-gray-700 text-white text-xs text-center focus:outline-none focus:border-green-500"
-            />
-            <button
-              onClick={applyGlobalFormula}
-              className="px-3 py-1.5 bg-green-500 hover:bg-green-400 text-black font-black text-xs rounded-lg transition-all shadow-md shadow-green-500/20 flex-shrink-0"
-            >
-              Apply All
-            </button>
-          </div>
-        </div>
-
-        {/* ── PRODUCT & VARIANTS TABLE ── */}
-        <div className="bg-[#0d1f35] rounded-2xl overflow-hidden border border-gray-800 shadow-xl">
-          <div className="max-h-[620px] overflow-y-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 bg-[#061424] z-10 border-b border-gray-800">
-                <tr className="text-gray-400 text-[11px] uppercase tracking-wider font-bold">
-                  <th className="py-3.5 px-4 w-16">Photo</th>
-                  <th className="py-3.5 px-4">Product</th>
-                  <th className="py-3.5 px-4">Variant Title</th>
-                  <th className="py-3.5 px-4">Selling Price</th>
-                  <th className="py-3.5 px-4 w-44">Your Cost (COGS)</th>
-                  <th className="py-3.5 px-4 w-12 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800/60">
-                {filteredProducts.length > 0 ? (
-                  filteredProducts.map((product) =>
-                    product.variants?.map((variant, idx) => {
-                      const hasCost = cogs[variant.variantId] !== "" && Number(cogs[variant.variantId]) > 0;
-                      return (
-                        <tr
-                          key={variant.variantId}
-                          className="hover:bg-white/[0.02] transition-colors"
-                        >
-                          {/* Image (only first row per product) */}
-                          <td className="py-3 px-4 align-middle">
-                            {idx === 0 && (
-                              <img
-                                src={
-                                  product.productImage ||
-                                  variant.productImage ||
-                                  "https://via.placeholder.com/44?text=📦"
-                                }
-                                className="w-11 h-11 rounded-lg object-cover border border-gray-700/80 bg-black/40"
-                                alt={product.productName}
-                              />
-                            )}
-                          </td>
-
-                          {/* Product Name (only first row per product) */}
-                          <td className="py-3 px-4 align-middle">
-                            {idx === 0 && (
-                              <div>
-                                <p className="font-semibold text-gray-200 text-sm">
-                                  {product.productName}
-                                </p>
-                                <span className="text-[11px] text-gray-500">
-                                  {product.variants.length} variant{product.variants.length > 1 ? "s" : ""}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Variant Name (Every variant) */}
-                          <td className="py-3 px-4 align-middle text-gray-300 text-sm">
-                            <span className="inline-block bg-white/5 border border-gray-700/60 px-2.5 py-1 rounded-md text-xs">
-                              {variant.variantName || "Default"}
-                            </span>
-                          </td>
-
-                          {/* Sale Price */}
-                          <td className="py-3 px-4 align-middle text-gray-200 text-sm font-medium">
-                            ₹{Number(variant.salePrice || 0).toLocaleString("en-IN")}
-                          </td>
-
-                          {/* COGS Input per Variant */}
-                          <td className="py-3 px-4 align-middle">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-gray-500 text-xs">₹</span>
-                              <input
-                                type="number"
-                                placeholder="0.00"
-                                min="0"
-                                step="0.01"
-                                value={cogs[variant.variantId] ?? ""}
-                                onChange={(e) =>
-                                  handleCogsChange(variant.variantId, e.target.value)
-                                }
-                                className="w-28 px-3 py-1.5 rounded-lg bg-[#061424] border border-gray-700 text-white text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/40"
-                              />
-                            </div>
-                          </td>
-
-                          {/* Save Status Checkmark */}
-                          <td className="py-3 px-4 align-middle text-center">
-                            {hasCost ? (
-                              <div className="w-6 h-6 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 inline-flex items-center justify-center">
-                                <FiCheck size={13} />
-                              </div>
-                            ) : (
-                              <div className="w-5 h-5 rounded-full border border-gray-700 inline-block opacity-40"></div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    }),
-                  )
-                ) : (
+          {/* ── PRODUCTS TABLE CARD ── */}
+          <div style={styles.tableCard}>
+            <div style={{ maxHeight: "540px", overflowY: "auto" }}>
+              <table style={styles.table}>
+                <thead style={styles.thead}>
                   <tr>
-                    <td colSpan="6" className="py-20 text-center">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <FiBox size={38} className="text-gray-600 mb-2" />
-                        <p className="text-gray-400 text-sm font-medium">
-                          No active products found.
-                        </p>
-                        <p className="text-gray-500 text-xs">
-                          Click the refresh icon above if you recently created products on Shopify.
-                        </p>
-                      </div>
-                    </td>
+                    <th style={{ ...styles.th, width: "54px" }}>PHOTO</th>
+                    <th style={{ ...styles.th, textAlign: "left" }}>PRODUCT</th>
+                    <th style={{ ...styles.th, textAlign: "left" }}>
+                      VARIANT TITLE
+                    </th>
+                    <th style={{ ...styles.th, textAlign: "right" }}>
+                      SELLING PRICE
+                    </th>
+                    <th
+                      style={{
+                        ...styles.th,
+                        textAlign: "right",
+                        width: "130px",
+                      }}
+                    >
+                      YOUR COST (COGS)
+                    </th>
+                    <th
+                      style={{
+                        ...styles.th,
+                        width: "40px",
+                        textAlign: "center",
+                      }}
+                    >
+                      STATUS
+                    </th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.map((product) =>
+                      product.variants?.map((variant, idx) => {
+                        const hasCost =
+                          cogs[variant.variantId] !== "" &&
+                          Number(cogs[variant.variantId]) > 0;
+                        return (
+                          <tr key={variant.variantId} style={styles.tr}>
+                            {/* Photo (first row only per product) */}
+                            <td style={styles.td}>
+                              {idx === 0 && (
+                                <img
+                                  src={
+                                    product.productImage ||
+                                    variant.productImage ||
+                                    "https://via.placeholder.com/38?text=📦"
+                                  }
+                                  alt={product.productName}
+                                  style={styles.prodThumb}
+                                />
+                              )}
+                            </td>
+
+                            {/* Product Name */}
+                            <td style={styles.td}>
+                              {idx === 0 && (
+                                <div>
+                                  <div style={styles.prodTitle}>
+                                    {product.productName}
+                                  </div>
+                                  <span style={styles.prodMeta}>
+                                    {product.variants.length} variant
+                                    {product.variants.length > 1 ? "s" : ""}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Variant Name */}
+                            <td style={styles.td}>
+                              <span style={styles.variantBadge}>
+                                {variant.variantName || "Default"}
+                              </span>
+                            </td>
+
+                            {/* Selling Price */}
+                            <td
+                              style={{
+                                ...styles.td,
+                                textAlign: "right",
+                                fontWeight: "600",
+                              }}
+                            >
+                              {fmt(variant.salePrice)}
+                            </td>
+
+                            {/* COGS Input */}
+                            <td style={{ ...styles.td, textAlign: "right" }}>
+                              <div style={styles.inputWrap}>
+                                <span
+                                  style={{ fontSize: "11px", color: "#7a9880" }}
+                                >
+                                  ₹
+                                </span>
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  min="0"
+                                  step="0.01"
+                                  value={cogs[variant.variantId] ?? ""}
+                                  onChange={(e) =>
+                                    handleCogsChange(
+                                      variant.variantId,
+                                      e.target.value,
+                                    )
+                                  }
+                                  style={styles.cogsInput}
+                                />
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td style={{ ...styles.td, textAlign: "center" }}>
+                              {hasCost ? (
+                                <div style={styles.chkDone}>✓</div>
+                              ) : (
+                                <div style={styles.chkPending}></div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }),
+                    )
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="6"
+                        style={{ padding: "48px 16px", textAlign: "center" }}
+                      >
+                        <FiBox
+                          size={32}
+                          color="#3a5040"
+                          style={{ margin: "0 auto 8px" }}
+                        />
+                        <p style={{ fontSize: "12.5px", color: "#7a9880" }}>
+                          No active products found. Click refresh above to sync
+                          catalog.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Load More Pagination */}
+            {lastEvaluatedKey && (
+              <button
+                type="button"
+                onClick={() => fetchProducts(true)}
+                style={styles.btnLoadMore}
+              >
+                Load More Products ↓
+              </button>
+            )}
           </div>
 
-          {/* Load More Pagination */}
-          {lastEvaluatedKey && (
-            <button
-              onClick={() => fetchProducts(true)}
-              className="w-full py-3.5 text-green-400 font-bold text-xs uppercase tracking-wider hover:bg-white/5 border-t border-gray-800 transition-all text-center"
-            >
-              Load More Products ↓
+          {/* ── FOOTER ACTIONS ── */}
+          <div style={styles.footerRow}>
+            <button type="button" onClick={handleSkip} style={styles.btnSkip}>
+              Skip — add costs later in Products tab →
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={handleSaveCogs}
+              disabled={isSaving}
+              style={{
+                ...styles.btnG,
+                opacity: isSaving ? 0.6 : 1,
+                cursor: isSaving ? "not-allowed" : "pointer",
+              }}
+            >
+              {isSaving ? "Saving Costs..." : "Save & Continue →"}
+            </button>
+          </div>
         </div>
-
-        {/* ── FOOTER ACTIONS ── */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 pb-12">
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="text-xs text-gray-400 hover:text-white underline transition-colors order-2 sm:order-1"
-          >
-            Skip for now — add costs later from Products tab →
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveCogs}
-            disabled={isSaving}
-            className="w-full sm:w-auto px-8 py-3.5 bg-green-500 hover:bg-green-400 text-black font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-green-500/20 disabled:opacity-40 order-1 sm:order-2"
-          >
-            {isSaving ? "Saving Costs..." : "Save & Continue →"}
-          </button>
-        </div>
-
       </div>
     </div>
   );
+};
+
+// ── EXACT CSS DESIGN SYSTEM FROM PROTOTYPE ─────────────────────────
+const styles = {
+  shell: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#0a1a12", // var(--bg)
+    color: "#e0ede4", // var(--t1)
+    fontFamily: "'Inter', -apple-system, sans-serif",
+  },
+  prog: {
+    position: "fixed",
+    top: 0,
+    left: "210px",
+    right: 0,
+    height: "3px",
+    background: "rgba(255, 255, 255, 0.07)",
+    zIndex: 99,
+  },
+  progFill: {
+    height: "100%",
+    background: "#00c853",
+    width: "75%", // Step 5 of 7
+    transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
+  },
+  sb: {
+    width: "210px",
+    minHeight: "100vh",
+    background: "#0d1f15", // var(--s1)
+    borderRight: "1px solid rgba(255, 255, 255, 0.07)",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    display: "flex",
+    flexDirection: "column",
+    zIndex: 100,
+  },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    padding: "14px 15px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  mark: {
+    width: "26px",
+    height: "26px",
+    background: "#00c853",
+    borderRadius: "7px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "10px",
+    fontWeight: "800",
+    color: "#000",
+  },
+  bname: {
+    fontSize: "13px",
+    fontWeight: "700",
+    color: "#e0ede4",
+  },
+  bnameEm: {
+    color: "#00c853",
+    fontStyle: "normal",
+  },
+  conns: {
+    padding: "11px 13px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  pfcLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    color: "#3a5040",
+    marginBottom: "7px",
+  },
+  connRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    padding: "5px 0",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  connIcoSh: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#96bf48",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoMt: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#1877f2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connIcoSr: {
+    width: "20px",
+    height: "20px",
+    borderRadius: "5px",
+    background: "#e83b3b",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    color: "#fff",
+    flexShrink: 0,
+  },
+  connNm: {
+    flex: 1,
+    fontSize: "11.5px",
+    color: "#7a9880",
+  },
+  connStLive: {
+    fontSize: "9px",
+    fontWeight: "600",
+    padding: "2px 6px",
+    borderRadius: "7px",
+    whiteSpace: "nowrap",
+    background: "rgba(0, 200, 83, 0.13)",
+    color: "#00c853",
+  },
+  pfd: {
+    flex: 1,
+    padding: "11px 13px",
+    overflowY: "auto",
+  },
+  pfdLabel: {
+    fontSize: "10px",
+    fontWeight: "600",
+    color: "#3a5040",
+    marginBottom: "7px",
+  },
+  ds: {
+    marginBottom: "9px",
+    paddingBottom: "9px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  dsL: {
+    fontSize: "10px",
+    color: "#3a5040",
+    marginBottom: "2px",
+  },
+  dsV: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+  },
+  dsVG: {
+    fontSize: "15px",
+    fontWeight: "800",
+    color: "#00c853",
+    letterSpacing: "-.03em",
+    lineHeight: 1,
+  },
+  dsS: {
+    fontSize: "10px",
+    color: "#3a5040",
+    marginTop: "1px",
+  },
+  dsVDim: {
+    color: "#3a5040",
+    fontSize: "11px",
+    fontWeight: "400",
+  },
+  foot: {
+    padding: "10px 13px",
+    borderTop: "1px solid rgba(255, 255, 255, 0.07)",
+    marginTop: "auto",
+  },
+  storePill: {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.07)",
+    borderRadius: "7px",
+    padding: "7px 10px",
+  },
+  spAv: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "5px",
+    background: "#96bf48",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: "700",
+    color: "#fff",
+  },
+  spNm: {
+    fontSize: "11px",
+    fontWeight: "500",
+    color: "#e0ede4",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  spDot: {
+    width: "5px",
+    height: "5px",
+    borderRadius: "50%",
+    background: "#00c853",
+    marginLeft: "auto",
+    animation: "pls 2s infinite",
+  },
+  right: {
+    marginLeft: "210px",
+    flex: 1,
+    minHeight: "100vh",
+    background: "#0a1a12",
+  },
+  mainContent: {
+    maxWidth: "860px",
+    margin: "0 auto",
+    padding: "40px 32px 80px",
+  },
+  eyebrow: {
+    fontSize: "11px",
+    fontWeight: "600",
+    color: "#7a9880",
+    marginBottom: "8px",
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+  },
+  eyebrowLine: {
+    width: "14px",
+    height: "1.5px",
+    background: "#00c853",
+    display: "inline-block",
+  },
+  h1: {
+    fontSize: "27px",
+    fontWeight: "800",
+    color: "#e0ede4",
+    letterSpacing: "-.5px",
+    lineHeight: "1.2",
+    marginBottom: "6px",
+  },
+  sub: {
+    fontSize: "13px",
+    color: "#7a9880",
+    lineHeight: "1.6",
+    maxWidth: "580px",
+  },
+
+  // Accuracy card
+  accCard: {
+    background: "#112418", // var(--s2)
+    border: "1px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "12px",
+    padding: "14px 18px",
+    marginBottom: "16px",
+  },
+  acTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "8px",
+  },
+  acLabel: {
+    fontSize: "11.5px",
+    color: "#7a9880",
+    fontWeight: "600",
+  },
+  acPct: {
+    fontSize: "15px",
+    fontWeight: "800",
+    letterSpacing: "-.03em",
+  },
+  acBarWrap: {
+    height: "6px",
+    background: "#162e1c",
+    borderRadius: "3px",
+    overflow: "hidden",
+    marginBottom: "6px",
+  },
+  acBar: {
+    height: "100%",
+    borderRadius: "3px",
+    transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
+  },
+  acSub: {
+    fontSize: "11px",
+    color: "#3a5040",
+  },
+
+  // Tool card (Search + Estimator)
+  toolCard: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    borderRadius: "12px",
+    padding: "10px 14px",
+    marginBottom: "16px",
+  },
+  searchBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    background: "#0a1a12",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "8px",
+    padding: "6px 12px",
+    flex: "1 1 260px",
+  },
+  searchInput: {
+    background: "transparent",
+    border: "none",
+    color: "#e0ede4",
+    fontSize: "12.5px",
+    outline: "none",
+    width: "100%",
+  },
+  estimatorBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    background: "rgba(0, 200, 83, 0.06)",
+    border: "1px solid rgba(0, 200, 83, 0.18)",
+    borderRadius: "8px",
+    padding: "4px 10px",
+  },
+  estimatorTitle: {
+    fontSize: "11px",
+    fontWeight: "700",
+    color: "#00c853",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  estimatorInput: {
+    width: "50px",
+    background: "#0a1a12",
+    border: "1px solid rgba(255, 255, 255, 0.15)",
+    borderRadius: "5px",
+    color: "#e0ede4",
+    fontSize: "11.5px",
+    padding: "3px 6px",
+    textAlign: "center",
+    outline: "none",
+  },
+  estimatorBtn: {
+    background: "#00c853",
+    color: "#000",
+    border: "none",
+    borderRadius: "6px",
+    padding: "5px 10px",
+    fontSize: "11px",
+    fontWeight: "700",
+    cursor: "pointer",
+  },
+
+  // Table Card
+  tableCard: {
+    background: "#112418",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    borderRadius: "12px",
+    overflow: "hidden",
+    marginBottom: "16px",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+  },
+  thead: {
+    background: "#0d1f15",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+  },
+  th: {
+    fontSize: "10px",
+    fontWeight: "700",
+    color: "#3a5040",
+    letterSpacing: ".06em",
+    padding: "10px 14px",
+  },
+  tr: {
+    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+    transition: "background .15s",
+  },
+  td: {
+    padding: "9px 14px",
+    fontSize: "12px",
+    verticalAlign: "middle",
+  },
+  prodThumb: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "6px",
+    objectCover: "cover",
+    background: "#0a1a12",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+  },
+  prodTitle: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#e0ede4",
+    maxWidth: "240px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  prodMeta: {
+    fontSize: "10.5px",
+    color: "#7a9880",
+  },
+  variantBadge: {
+    fontSize: "11px",
+    color: "#7a9880",
+    background: "rgba(255, 255, 255, 0.04)",
+    padding: "3px 8px",
+    borderRadius: "5px",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+  },
+  inputWrap: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  cogsInput: {
+    width: "84px",
+    background: "#162e1c",
+    border: "1.5px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "6px",
+    padding: "6px 8px",
+    fontSize: "12px",
+    color: "#e0ede4",
+    textAlign: "right",
+    outline: "none",
+  },
+  chkDone: {
+    width: "16px",
+    height: "16px",
+    borderRadius: "50%",
+    background: "#00c853",
+    color: "#000",
+    fontSize: "8.5px",
+    fontWeight: "900",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chkPending: {
+    width: "16px",
+    height: "16px",
+    borderRadius: "50%",
+    border: "1.5px solid rgba(255, 255, 255, 0.12)",
+    display: "inline-block",
+  },
+  btnLoadMore: {
+    width: "100%",
+    padding: "10px",
+    background: "transparent",
+    border: "none",
+    borderTop: "1px solid rgba(255, 255, 255, 0.07)",
+    color: "#00c853",
+    fontSize: "11.5px",
+    fontWeight: "700",
+    cursor: "pointer",
+    textAlign: "center",
+  },
+
+  // Footer Actions
+  footerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  btnG: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    background: "#00c853",
+    color: "#000",
+    border: "none",
+    borderRadius: "8px",
+    padding: "11px 24px",
+    fontSize: "13px",
+    fontWeight: "700",
+    transition: "all .18s",
+    cursor: "pointer",
+  },
+  btnSkip: {
+    background: "transparent",
+    border: "none",
+    color: "#7a9880",
+    fontSize: "12px",
+    cursor: "pointer",
+    textDecoration: "underline",
+    padding: 0,
+  },
 };
 
 export default Products;
