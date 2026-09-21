@@ -256,7 +256,7 @@ class OnboardingController {
       res.redirect(errorUrl);
     }
   }
-  
+
   async connectShipping(req, res) {
     try {
       const merchantId = req.user.userId;
@@ -459,7 +459,11 @@ class OnboardingController {
         (s, d) => s + Number(d.totalOrders || 0),
         0,
       );
-      const gap = Math.round(totalRevenue - actualEarned);
+
+      const shopifyDeliveredRevenue = Number(
+        integration.orderSummary?.shopifyDeliveredRevenue || 0,
+      );
+      const gap = Math.round(totalRevenue - shopifyDeliveredRevenue);
 
       return res.status(200).json({
         success: true,
@@ -472,6 +476,7 @@ class OnboardingController {
         actualEarned,
         gap,
         totalOrders,
+        shopifyDeliveredRevenue,
       });
     } catch (error) {
       console.error("❌ getShopifyInsight error:", error.message);

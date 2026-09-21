@@ -148,7 +148,7 @@ const ShopifyOnboarding = () => {
 
           <div style={styles.ds}>
             <div style={styles.dsL}>Real revenue (delivered)</div>
-            <div style={styles.dsVG}>{data ? fmt(data.actualEarned) : "—"}</div>
+            <div style={styles.dsVG}>{data ? fmt(data.shopifyDeliveredRevenue) : "—"}</div>
             <div style={styles.dsS}>
               Gap: {data ? fmt(data.gap) : "—"} in RTOs
             </div>
@@ -158,7 +158,7 @@ const ShopifyOnboarding = () => {
             <div style={styles.dsL}>Total orders</div>
             <div style={styles.dsV}>{data ? data.totalOrders : "—"}</div>
             <div style={styles.dsS}>
-              {data?.deliveredOrders || 109} delivered · {data?.rtoOrders || 18}{" "}
+              {data?.deliveredOrders || 0} delivered · {data?.rtoOrders || 0}{" "}
               RTOs
             </div>
           </div>
