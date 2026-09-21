@@ -1,6 +1,8 @@
 const onboardingService = require("../services/onboarding.service");
 const { newDynamoDB, newTableName } = require("../config/aws.config");
 const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const dynamodbService = require("../services/dynamodb.service");
+
 
 class OnboardingController {
   async getCurrentStep(req, res) {
@@ -691,7 +693,7 @@ class OnboardingController {
         updates.onboardingCompleted = true;
       }
 
-      await dynamoDBService.updateUserProfileOnboarding(merchantId, updates);
+      await dynamodbService.updateUserProfileOnboarding(merchantId, updates);
 
       console.log(`✅ Step set to ${step} for merchant: ${merchantId}`);
       return res.status(200).json({ success: true, step });
