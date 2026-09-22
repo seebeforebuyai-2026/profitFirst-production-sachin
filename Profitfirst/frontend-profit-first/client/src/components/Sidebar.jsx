@@ -146,9 +146,9 @@ const Sidebar = ({ isLocked = false }) => {
                 </div>
               </div>
 
-              {/* Business Expenses */}
+              {/* Business Expenses !cogsDone ? "#" :  */}
               <NavLink
-                to={!cogsDone ? "#" : "/dashboard/business-expenses"}
+                to={"/dashboard/business-expenses"}
                 onClick={(e) => {
                   if (!cogsDone) {
                     e.preventDefault();
