@@ -150,10 +150,6 @@ const Sidebar = ({ isLocked = false }) => {
               <NavLink
                 to={"/dashboard/business-expenses"}
                 onClick={(e) => {
-                  if (!cogsDone) {
-                    e.preventDefault();
-                    toast.info("Please complete product costs first!");
-                  }
                   setIsOpen(false);
                 }}
                 className={({ isActive }) =>
