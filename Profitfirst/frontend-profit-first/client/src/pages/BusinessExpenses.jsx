@@ -361,7 +361,6 @@ const styles = {
     minHeight: "100vh",
     background: "#0a1a12", // var(--bg)
     color: "#e0ede4",      // var(--t1)
-    fontFamily: "'Inter', -apple-system, sans-serif",
   },
   prog: {
     position: "fixed",
@@ -578,7 +577,6 @@ const styles = {
     animation: "pls 2s infinite",
   },
   right: {
-    marginLeft: "210px",
     flex: 1,
     minHeight: "100vh",
     background: "#0a1a12",
