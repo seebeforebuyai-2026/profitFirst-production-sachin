@@ -400,9 +400,10 @@ const Dashboard = () => {
           <div>
             {isProfitNegative ? (
               <>
+
                 <b>
-                  Fixed costs and advertising losses are eating into your
-                  margins.
+                  Fixed costs {fmt(summary.fixedCosts)} are eating into an already
+                  negative operating profit.
                 </b>{" "}
                 Even before salaries, your contribution profit is{" "}
                 {fmt(summary.contributionProfit)}. Reducing dead ad spend and
