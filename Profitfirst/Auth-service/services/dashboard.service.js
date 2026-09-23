@@ -14,6 +14,16 @@ class DashboardService {
         }),
       );
 
+      // YE ADD KARO — Meta integration fetch karo
+      const metaIntegrationResult = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#META" },
+        }),
+      );
+
+      const metaIntegration = metaIntegrationResult.Item || {};
+
       const profile = profileResult.Item || {};
       const staffSalary = Number(profile.staffSalary || 0);
       const officeRent = Number(profile.officeRent || 0);
@@ -180,6 +190,31 @@ class DashboardService {
           poasDecision: this.getPoasDecision(poas),
           totalCost: Number(totalCost.toFixed(2)),
           rtoRate: Number(rtoRate.toFixed(2)),
+
+          adAccounts: (() => {
+            const accounts =
+              metaIntegration.selectedAdAccounts ||
+              metaIntegration.credentials?.adAccounts ||
+              [];
+            const selectedIds =
+              metaIntegration.selectedAdAccountIds ||
+              (metaIntegration.selectedAdAccountId
+                ? [metaIntegration.selectedAdAccountId]
+                : []);
+
+            // Sirf selected accounts return karo
+            if (selectedIds.length > 0) {
+              return accounts
+                .filter((acc) => selectedIds.includes(acc.id))
+                .map((acc) => ({
+                  id: acc.id,
+                  name: acc.name || acc.accountId || acc.id,
+                  spend: 0, // abhi 0 — baad mein ADS# records se calculate karenge
+                  roas: 0,
+                }));
+            }
+            return [];
+          })(),
         },
         moneyFlowData: [
           // { name: "Prepaid", value: totals.prepaidRevenue, type: "positive" },
