@@ -163,6 +163,29 @@ class DashboardService {
         totals.gatewayFees +
         totals.rtoHandlingFees +
         totals.adsSpend;
+
+      // ADS# records se per-account spend calculate karo
+      const adsQuery = await newDynamoDB.send(
+        new QueryCommand({
+          TableName: newTableName,
+          KeyConditionExpression: "PK = :pk AND SK BETWEEN :start AND :end",
+          ExpressionAttributeValues: {
+            ":pk": `MERCHANT#${merchantId}`,
+            ":start": `ADS#${startDate}`,
+            ":end": `ADS#${endDate}~`, // ~ after endDate to capture all adAccountIds
+          },
+        }),
+      );
+
+      // Per account spend map banao
+      const perAccountSpend = {};
+      (adsQuery.Items || []).forEach((record) => {
+        const accountId = record.adAccountId;
+        if (!accountId) return;
+        if (!perAccountSpend[accountId]) perAccountSpend[accountId] = 0;
+        perAccountSpend[accountId] += Number(record.spend || 0);
+      });
+
       return {
         success: true,
         summary: {
@@ -190,7 +213,6 @@ class DashboardService {
           poasDecision: this.getPoasDecision(poas),
           totalCost: Number(totalCost.toFixed(2)),
           rtoRate: Number(rtoRate.toFixed(2)),
-
           adAccounts: (() => {
             const accounts =
               metaIntegration.selectedAdAccounts ||
@@ -202,16 +224,39 @@ class DashboardService {
                 ? [metaIntegration.selectedAdAccountId]
                 : []);
 
-            // Sirf selected accounts return karo
             if (selectedIds.length > 0) {
               return accounts
                 .filter((acc) => selectedIds.includes(acc.id))
-                .map((acc) => ({
-                  id: acc.id,
-                  name: acc.name || acc.accountId || acc.id,
-                  spend: 0, // abhi 0 — baad mein ADS# records se calculate karenge
-                  roas: 0,
-                }));
+                .map((acc) => {
+                  const accountSpend = perAccountSpend[acc.id] || 0;
+                  const accountRoas =
+                    accountSpend > 0
+                      ? Number(
+                          (
+                            ((totals.revenueGenerated / totals.adsSpend) *
+                              accountSpend) /
+                            accountSpend
+                          ).toFixed(2),
+                        )
+                      : 0;
+                  // Better ROAS per account: proportional
+                  const proportionalRoas =
+                    totals.adsSpend > 0 && accountSpend > 0
+                      ? Number(
+                          (
+                            totals.roas * (accountSpend / totals.adsSpend) ||
+                            roas
+                          ).toFixed(2),
+                        )
+                      : Number(roas.toFixed(2));
+
+                  return {
+                    id: acc.id,
+                    name: acc.name || acc.accountId || acc.id,
+                    spend: Math.round(accountSpend),
+                    roas: Number(roas.toFixed(2)), // overall roas use karo abhi
+                  };
+                });
             }
             return [];
           })(),
