@@ -1437,6 +1437,12 @@ const Dashboard = () => {
                   color: "#dceee2",
                   fontSize: "12px",
                 }}
+                itemStyle={{
+                  color: "#ffffff",
+                }}
+                labelStyle={{
+                  color: "#ffffff",
+                }}
               />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
               <Bar dataKey="netProfit" radius={[3, 3, 0, 0]}>
