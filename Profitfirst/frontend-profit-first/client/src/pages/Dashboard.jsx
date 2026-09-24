@@ -1700,6 +1700,7 @@ const styles = {
     borderRadius: "3px",
     minWidth: "3px",
     transition: "width .25s ease",
+    width: "200px",
   },
   adSpendAmount: {
     minWidth: "90px",
