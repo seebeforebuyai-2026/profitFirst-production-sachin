@@ -1227,7 +1227,7 @@ const Dashboard = () => {
                 GROSS PROFIT
               </th>
                <th style={{ ...styles.prodTh, textAlign: "right" }}>
-                GROSS PROFIT percentage
+                Profit %
               </th>
             </tr>
           </thead>
@@ -1275,7 +1275,10 @@ const Dashboard = () => {
                       fontWeight: 700,
                     }}
                   >
-                    {fmt(p.profitPercentage)}
+                    {/* need to calculate profit percentage here */}
+                    {p.revenue > 0
+                      ? ((p.profit / p.revenue) * 100).toFixed(1) + "%"
+                      : "0%"}
                   </td>
                 </tr>
               ))
