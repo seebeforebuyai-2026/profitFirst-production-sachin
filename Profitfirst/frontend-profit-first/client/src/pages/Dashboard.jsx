@@ -949,12 +949,13 @@ const Dashboard = () => {
                           style={{
                             ...styles.adSpendFill,
                             width: `${accountProgress}%`,
-                            background:
-                              idx % 2 === 0 ? "#5b8cff" : "#a855f7",
+                            background: idx % 2 === 0 ? "#5b8cff" : "#a855f7",
                           }}
                         ></div>
                       </div>
-                      <span style={styles.adSpendAmount}>{fmt(accountSpend)}</span>
+                      <span style={styles.adSpendAmount}>
+                        {fmt(accountSpend)}
+                      </span>
                       <span style={styles.roasTag}>
                         ROAS {acc.roas || summary.roas || 0}
                       </span>
@@ -1225,6 +1226,9 @@ const Dashboard = () => {
               <th style={{ ...styles.prodTh, textAlign: "right" }}>
                 GROSS PROFIT
               </th>
+               <th style={{ ...styles.prodTh, textAlign: "right" }}>
+                GROSS PROFIT percentage
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1263,12 +1267,22 @@ const Dashboard = () => {
                   >
                     {fmt(p.profit)}
                   </td>
+                  <td
+                    style={{
+                      ...styles.prodTd,
+                      textAlign: "right",
+                      color: "var(--g)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {fmt(p.profitPercentage)}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td
-                  colSpan="5"
+                  colSpan="6"
                   style={{
                     padding: "28px",
                     textAlign: "center",
