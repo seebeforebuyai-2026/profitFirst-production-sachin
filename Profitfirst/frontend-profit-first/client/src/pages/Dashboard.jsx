@@ -625,7 +625,7 @@ const Dashboard = () => {
                     totalCosts > 0 ? (cogs / totalCosts) * 100 : 0,
                     100,
                   )}%`,
-                  background: "var(--r)",
+                  background: "var(--y)",
                 }}
               />
             </div>
@@ -662,7 +662,7 @@ const Dashboard = () => {
                       : 0,
                     100,
                   )}%`,
-                  background: "var(--r)",
+                  background: "#a855f7",
                 }}
               />
             </div>
@@ -690,7 +690,7 @@ const Dashboard = () => {
                     totalCosts > 0 ? (shippingSpend / totalCosts) * 100 : 0,
                     100,
                   )}%`,
-                  background: "var(--r)",
+                  background: "var(--b)",
                 }}
               />
             </div>
@@ -715,7 +715,7 @@ const Dashboard = () => {
                     totalCosts > 0 ? (gateway / totalCosts) * 100 : 0,
                     100,
                   )}%`,
-                  background: "var(--r)",
+                  background: "#14b8a6",
                 }}
               />
             </div>
@@ -741,7 +741,7 @@ const Dashboard = () => {
                     totalCosts > 0 ? (rtoHandling / totalCosts) * 100 : 0,
                     100,
                   )}%`,
-                  background: "var(--r)",
+                  background: "#f43f5e",
                 }}
               />
             </div>
@@ -761,6 +761,7 @@ const Dashboard = () => {
                 color: "var(--r)",
                 fontSize: "15px",
                 fontWeight: 800,
+                gridColumn: "4",
               }}
             >
               {fmt(totalCosts)}
@@ -1936,7 +1937,8 @@ const styles = {
     letterSpacing: ".06em",
   },
   wfRow: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "26px minmax(0, 1fr) 160px 90px",
     alignItems: "center",
     gap: "10px",
     padding: "10px 18px",
@@ -1966,7 +1968,7 @@ const styles = {
     color: "var(--t3)",
   },
   wfBar: {
-    flex: "0 0 72px",
+    width: "100%",
     height: "4px",
     background: "var(--s4)",
     borderRadius: "2px",
@@ -1977,6 +1979,7 @@ const styles = {
     borderRadius: "2px",
   },
   wfAmt: {
+    width: "90px",
     fontSize: "13px",
     fontWeight: "700",
     color: "var(--t1)",
