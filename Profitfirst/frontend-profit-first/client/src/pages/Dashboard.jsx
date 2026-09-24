@@ -1694,13 +1694,13 @@ const styles = {
     background: "var(--s4)",
     borderRadius: "3px",
     overflow: "hidden",
+    width: "200px",
   },
   adSpendFill: {
     height: "100%",
     borderRadius: "3px",
     minWidth: "3px",
     transition: "width .25s ease",
-    width: "200px",
   },
   adSpendAmount: {
     minWidth: "90px",
