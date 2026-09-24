@@ -409,9 +409,8 @@ const Dashboard = () => {
                   )}{" "}
                   are eating into an already negative operating profit.
                 </b>{" "}
-                Even before salaries, your contribution profit is{" "}
-                {fmt(summary.contributionProfit)}. Reducing dead ad spend and
-                increasing prepaid orders are your fastest levers.
+                Even before salaries, you are losing{" "}
+                {fmt(summary.contributionProfit)}. on every rupee you spend on ads and products. Reducing ad spend or increasing prepaid orders are the fastest levers.
               </>
             ) : (
               <>
@@ -754,6 +753,83 @@ const Dashboard = () => {
               <div style={styles.miniStatDesc}>
                 Across all connected ad accounts
               </div>
+
+
+               <div style={styles.adAccountBar}>
+        <div style={styles.aabLabel}>
+          Ad Spend Per Account
+        </div>
+        <div style={styles.aabPills}>
+          <div
+            onClick={() => setSelectedAccFilter("all")}
+            style={{
+              ...styles.accPill,
+              ...(selectedAccFilter === "all" ? styles.accPillOn : {}),
+            }}
+          >
+            <div style={{ ...styles.accPillDot, background: "var(--g)" }}></div>
+            <span style={{ fontWeight: 600 }}>All Accounts</span>
+            <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
+            {selectedAccFilter === "all" && (
+              <span style={styles.accPillCheck}>✓</span>
+            )}
+          </div>
+
+          {summary.adAccounts && summary.adAccounts.length > 0 ? (
+            summary.adAccounts.map((acc, idx) => (
+              <div
+                key={acc.id || idx}
+                onClick={() => setSelectedAccFilter(acc.id)}
+                style={{
+                  ...styles.accPill,
+                  ...(selectedAccFilter === acc.id ? styles.accPillOn : {}),
+                }}
+              >
+                <div
+                  style={{ ...styles.accPillDot, background: "#5b8cff" }}
+                ></div>
+                <span style={{ fontWeight: 500 }}>
+                  {acc.name || `Account ${idx + 1}`}
+                </span>
+                <span style={styles.accPillSpend}>{fmt(acc.spend || 0)}</span>
+                <span style={styles.roasTag}>
+                  ROAS {acc.roas || summary.roas || 0}
+                </span>
+                {selectedAccFilter === acc.id && (
+                  <span style={styles.accPillCheck}>✓</span>
+                )}
+              </div>
+            ))
+          ) : (
+            <div
+              onClick={() => setSelectedAccFilter("main")}
+              style={{
+                ...styles.accPill,
+                ...(selectedAccFilter === "main" ? styles.accPillOn : {}),
+              }}
+            >
+              <div
+                style={{ ...styles.accPillDot, background: "#5b8cff" }}
+              ></div>
+              <span style={{ fontWeight: 500 }}>Primary Meta Account</span>
+              <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
+              <span style={styles.roasTag}>ROAS {summary.roas || 0}</span>
+              {selectedAccFilter === "main" && (
+                <span style={styles.accPillCheck}>✓</span>
+              )}
+            </div>
+          )}
+
+          <div style={styles.aabCombined}>
+            Total: <b>{fmt(adsSpend)}</b> spent · Current ROAS{" "}
+            <b style={{ color: "var(--y)" }}>{summary.roas || 0}</b>
+          </div>
+        </div>
+      </div>
+
+
+                
+
             </div>
           </div>
         </div>
