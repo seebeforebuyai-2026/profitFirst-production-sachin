@@ -189,6 +189,10 @@ const Dashboard = () => {
   const agency = summary.agencyFees || 0;
   const gateway = summary.gatewayFees || 0;
   const rtoHandling = summary.rtoHandlingFees || 0;
+  const accountSpendMax = Math.max(
+    ...(summary.adAccounts || []).map((account) => Number(account.spend || 0)),
+    1,
+  );
 
   const isProfitNegative = (summary.moneyKept || 0) < 0;
 
@@ -891,85 +895,103 @@ const Dashboard = () => {
             </div>
 
             <div style={styles.miniStatCard}>
-              <div style={styles.miniStatLabel}>Total Ad Spend</div>
-              <div style={styles.miniStatVal}>{fmt(adsSpend)}</div>
-              <div style={styles.miniStatDesc}>
-                Across all connected ad accounts
+              <div style={styles.miniStatLabel}>
+                Profit % After Ads &amp; Products
               </div>
+              <div
+                style={{
+                  ...styles.miniStatVal,
+                  color:
+                    (summary.contributionMargin || 0) >= 0
+                      ? "var(--g)"
+                      : "var(--r)",
+                }}
+              >
+                {summary.contributionMargin || 0}%
+              </div>
+              <div style={styles.miniStatDesc}>Of money earned</div>
             </div>
           </div>
 
           <div style={styles.adAccountBar}>
             <div style={styles.aabLabel}>Ad Spend Per Account</div>
-            <div style={styles.aabPills}>
-              <div
-                onClick={() => setSelectedAccFilter("all")}
-                style={{
-                  ...styles.accPill,
-                  ...(selectedAccFilter === "all" ? styles.accPillOn : {}),
-                }}
-              >
-                <div
-                  style={{ ...styles.accPillDot, background: "var(--g)" }}
-                ></div>
-                <span style={{ fontWeight: 600 }}>All Accounts</span>
-                <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
-                {selectedAccFilter === "all" && (
-                  <span style={styles.accPillCheck}>✓</span>
-                )}
-              </div>
-
+            <div style={styles.adSpendRows}>
               {summary.adAccounts && summary.adAccounts.length > 0 ? (
-                summary.adAccounts.map((acc, idx) => (
-                  <div
-                    key={acc.id || idx}
-                    onClick={() => setSelectedAccFilter(acc.id)}
-                    style={{
-                      ...styles.accPill,
-                      ...(selectedAccFilter === acc.id ? styles.accPillOn : {}),
-                    }}
-                  >
+                summary.adAccounts.map((acc, idx) => {
+                  const accountSpend = Number(acc.spend || 0);
+                  const accountProgress = Math.min(
+                    (accountSpend / accountSpendMax) * 100,
+                    100,
+                  );
+
+                  return (
                     <div
+                      key={acc.id || idx}
+                      onClick={() => setSelectedAccFilter(acc.id)}
                       style={{
-                        ...styles.accPillDot,
-                        background: "#5b8cff",
+                        ...styles.adSpendRow,
+                        ...(selectedAccFilter === acc.id
+                          ? styles.adSpendRowOn
+                          : {}),
                       }}
-                    ></div>
-                    <span style={{ fontWeight: 500 }}>
-                      {acc.name || `Account ${idx + 1}`}
-                    </span>
-                    <span style={styles.accPillSpend}>
-                      {fmt(acc.spend || 0)}
-                    </span>
-                    <span style={styles.roasTag}>
-                      ROAS {acc.roas || summary.roas || 0}
-                    </span>
-                    {selectedAccFilter === acc.id && (
-                      <span style={styles.accPillCheck}>✓</span>
-                    )}
-                  </div>
-                ))
+                    >
+                      <div style={styles.adSpendAccount}>
+                        <div
+                          style={{
+                            ...styles.accPillDot,
+                            background: idx % 2 === 0 ? "#5b8cff" : "#a855f7",
+                          }}
+                        ></div>
+                        <span>{acc.name || `Account ${idx + 1}`}</span>
+                      </div>
+                      <div style={styles.adSpendTrack}>
+                        <div
+                          style={{
+                            ...styles.adSpendFill,
+                            width: `${accountProgress}%`,
+                            background:
+                              idx % 2 === 0 ? "#5b8cff" : "#a855f7",
+                          }}
+                        ></div>
+                      </div>
+                      <span style={styles.adSpendAmount}>{fmt(accountSpend)}</span>
+                      <span style={styles.roasTag}>
+                        ROAS {acc.roas || summary.roas || 0}
+                      </span>
+                    </div>
+                  );
+                })
               ) : (
                 <div
                   onClick={() => setSelectedAccFilter("main")}
                   style={{
-                    ...styles.accPill,
-                    ...(selectedAccFilter === "main" ? styles.accPillOn : {}),
+                    ...styles.adSpendRow,
+                    ...(selectedAccFilter === "main"
+                      ? styles.adSpendRowOn
+                      : {}),
                   }}
                 >
-                  <div
-                    style={{ ...styles.accPillDot, background: "#5b8cff" }}
-                  ></div>
-                  <span style={{ fontWeight: 500 }}>Primary Meta Account</span>
-                  <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
+                  <div style={styles.adSpendAccount}>
+                    <div
+                      style={{ ...styles.accPillDot, background: "#5b8cff" }}
+                    ></div>
+                    <span>Primary Meta Account</span>
+                  </div>
+                  <div style={styles.adSpendTrack}>
+                    <div
+                      style={{
+                        ...styles.adSpendFill,
+                        width: "100%",
+                        background: "#5b8cff",
+                      }}
+                    ></div>
+                  </div>
+                  <span style={styles.adSpendAmount}>{fmt(adsSpend)}</span>
                   <span style={styles.roasTag}>ROAS {summary.roas || 0}</span>
-                  {selectedAccFilter === "main" && (
-                    <span style={styles.accPillCheck}>✓</span>
-                  )}
                 </div>
               )}
 
-              <div style={styles.aabCombined}>
+              <div style={styles.adSpendTotal}>
                 Total: <b>{fmt(adsSpend)}</b> spent · Current ROAS{" "}
                 <b style={{ color: "var(--y)" }}>{summary.roas || 0}</b>
               </div>
@@ -1616,6 +1638,63 @@ const styles = {
     alignItems: "center",
     gap: "8px",
     flexWrap: "wrap",
+  },
+  adSpendRows: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  adSpendRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(180px, 1fr) minmax(100px, 1fr) 90px auto",
+    alignItems: "center",
+    gap: "12px",
+    minWidth: 0,
+    padding: "11px 0",
+    borderBottom: "1px solid var(--bd)",
+    color: "var(--t1)",
+    cursor: "pointer",
+    transition: "background .16s",
+  },
+  adSpendRowOn: {
+    background: "rgba(0, 212, 106, 0.04)",
+  },
+  adSpendAccount: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minWidth: 0,
+    fontSize: "12px",
+    fontWeight: "600",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  adSpendTrack: {
+    height: "5px",
+    background: "var(--s4)",
+    borderRadius: "3px",
+    overflow: "hidden",
+  },
+  adSpendFill: {
+    height: "100%",
+    borderRadius: "3px",
+    minWidth: "3px",
+    transition: "width .25s ease",
+  },
+  adSpendAmount: {
+    minWidth: "90px",
+    fontSize: "12px",
+    fontWeight: "700",
+    color: "var(--t1)",
+    textAlign: "right",
+  },
+  adSpendTotal: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "12px",
+    color: "var(--t2)",
+    padding: "11px 0 0",
   },
   accPill: {
     display: "flex",
