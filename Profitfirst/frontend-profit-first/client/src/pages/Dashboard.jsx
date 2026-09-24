@@ -410,7 +410,9 @@ const Dashboard = () => {
                   are eating into an already negative operating profit.
                 </b>{" "}
                 Even before salaries, you are losing{" "}
-                {fmt(summary.contributionProfit)}. on every rupee you spend on ads and products. Reducing ad spend or increasing prepaid orders are the fastest levers.
+                {fmt(summary.contributionProfit)}. on every rupee you spend on
+                ads and products. Reducing ad spend or increasing prepaid orders
+                are the fastest levers.
               </>
             ) : (
               <>
@@ -589,6 +591,20 @@ const Dashboard = () => {
                 %
               </div>
             </div>
+
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0 ? (adsSpend / totalCosts) * 100 : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
+            </div>
+
             <div style={styles.wfAmt}>{fmt(adsSpend)}</div>
           </div>
 
@@ -600,6 +616,20 @@ const Dashboard = () => {
                 {totalCosts > 0 ? ((cogs / totalCosts) * 100).toFixed(1) : 0}%
               </div>
             </div>
+
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0 ? (cogs / totalCosts) * 100 : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
+            </div>
+
             <div style={styles.wfAmt}>{fmt(cogs)}</div>
           </div>
 
@@ -614,8 +644,29 @@ const Dashboard = () => {
             </div>
             <div style={styles.wfInfo}>
               <div style={styles.wfName}>Team Salaries & Overheads</div>
-              <div style={styles.wfTag}>Fixed expenses</div>
+              <div style={styles.wfTag}>
+                {totalCosts > 0
+                  ? (((salaries + rent + agency) / totalCosts) * 100).toFixed(1)
+                  : 0}
+                %
+              </div>
             </div>
+
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0
+                      ? ((salaries + rent + agency) / totalCosts) * 100
+                      : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
+            </div>
+
             <div style={styles.wfAmt}>{fmt(salaries + rent + agency)}</div>
           </div>
 
@@ -623,7 +674,25 @@ const Dashboard = () => {
             <div style={{ ...styles.wfIco, background: "var(--ba)" }}>🚚</div>
             <div style={styles.wfInfo}>
               <div style={styles.wfName}>Shipping Spend</div>
-              <div style={styles.wfTag}>Shiprocket / Courier</div>
+              <div style={styles.wfTag}>
+                {totalCosts > 0
+                  ? ((shippingSpend / totalCosts) * 100).toFixed(1)
+                  : 0}
+                %
+              </div>
+            </div>
+
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0 ? (shippingSpend / totalCosts) * 100 : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
             </div>
             <div style={styles.wfAmt}>{fmt(shippingSpend)}</div>
           </div>
@@ -632,7 +701,23 @@ const Dashboard = () => {
             <div style={{ ...styles.wfIco, background: "var(--s4)" }}>💳</div>
             <div style={styles.wfInfo}>
               <div style={styles.wfName}>Gateway & Payment Fees</div>
-              <div style={styles.wfTag}>PG Fees</div>
+              <div style={styles.wfTag}>
+                {totalCosts > 0 ? ((gateway / totalCosts) * 100).toFixed(1) : 0}
+                %
+              </div>
+            </div>
+
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0 ? (gateway / totalCosts) * 100 : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
             </div>
             <div style={styles.wfAmt}>{fmt(gateway)}</div>
           </div>
@@ -641,7 +726,24 @@ const Dashboard = () => {
             <div style={{ ...styles.wfIco, background: "var(--ra)" }}>↩️</div>
             <div style={styles.wfInfo}>
               <div style={styles.wfName}>Return Handling Cost</div>
-              <div style={styles.wfTag}>{rtoOrders} returns</div>
+              <div style={styles.wfTag}>
+                {totalCosts > 0
+                  ? ((rtoHandling / totalCosts) * 100).toFixed(1)
+                  : 0}
+                %
+              </div>
+            </div>
+            <div style={styles.wfBar}>
+              <div
+                style={{
+                  ...styles.wfBarFill,
+                  width: `${Math.min(
+                    totalCosts > 0 ? (rtoHandling / totalCosts) * 100 : 0,
+                    100,
+                  )}%`,
+                  background: "var(--r)",
+                }}
+              />
             </div>
             <div style={styles.wfAmt}>{fmt(rtoHandling)}</div>
           </div>
@@ -682,10 +784,31 @@ const Dashboard = () => {
               <div style={{ ...styles.rpVal, color: "var(--y)" }}>
                 {summary.roas || 0}
               </div>
+
+              <div
+                style={{ ...styles.wfBar, width: "100%", marginBottom: "8px" }}
+              >
+                <div
+                  style={{
+                    ...styles.wfBarFill,
+                    width: `${Math.min(
+                      summary.breakEvenROAS > 0
+                        ? ((summary.roas || 0) / summary.breakEvenROAS) * 100
+                        : 0,
+                      100,
+                    )}%`,
+                    background: "var(--y)",
+                  }}
+                />
+              </div>
+
               <div style={styles.rpContext}>
-                You generate <b>₹{summary.roas || 0} revenue</b> for every ₹1
-                spent on ads. But revenue is not profit — it includes product,
-                shipping and returns.
+                You generate{" "}
+                <b style={{ color: "var(--y)" }}>
+                  ₹{summary.roas || 0} revenue
+                </b>{" "}
+                for every ₹1 spent on ads. But revenue is not profit — it
+                includes product, shipping and returns.
               </div>
             </div>
 
@@ -701,10 +824,29 @@ const Dashboard = () => {
               >
                 {summary.poas || 0}
               </div>
+
+              <div
+                style={{ ...styles.wfBar, width: "100%", marginBottom: "8px" }}
+              >
+                <div
+                  style={{
+                    ...styles.wfBarFill,
+                    width: `${Math.min(
+                      summary.breakEvenROAS > 0
+                        ? ((summary.poas || 0) / summary.breakEvenROAS) * 100
+                        : 0,
+                      100,
+                    )}%`,
+                    background: "var(--y)",
+                  }}
+                />
+              </div>
+
               <div style={styles.rpContext}>
-                After subtracting variable costs, your POAS is{" "}
-                <b>{summary.poas || 0}</b>. A healthy target is {">"} 1.0 to
-                ensure true net business growth.
+                After all costs,you lose{" "}
+                <b style={{ color: "var(--r)" }}>{summary.poas || 0}</b>. for
+                every ₹1 you spend on ads. POAS needs to be above 1.0 to make
+                profit.
               </div>
             </div>
           </div>
@@ -753,83 +895,83 @@ const Dashboard = () => {
               <div style={styles.miniStatDesc}>
                 Across all connected ad accounts
               </div>
-
-
-               <div style={styles.adAccountBar}>
-        <div style={styles.aabLabel}>
-          Ad Spend Per Account
-        </div>
-        <div style={styles.aabPills}>
-          <div
-            onClick={() => setSelectedAccFilter("all")}
-            style={{
-              ...styles.accPill,
-              ...(selectedAccFilter === "all" ? styles.accPillOn : {}),
-            }}
-          >
-            <div style={{ ...styles.accPillDot, background: "var(--g)" }}></div>
-            <span style={{ fontWeight: 600 }}>All Accounts</span>
-            <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
-            {selectedAccFilter === "all" && (
-              <span style={styles.accPillCheck}>✓</span>
-            )}
+            </div>
           </div>
 
-          {summary.adAccounts && summary.adAccounts.length > 0 ? (
-            summary.adAccounts.map((acc, idx) => (
+          <div style={styles.adAccountBar}>
+            <div style={styles.aabLabel}>Ad Spend Per Account</div>
+            <div style={styles.aabPills}>
               <div
-                key={acc.id || idx}
-                onClick={() => setSelectedAccFilter(acc.id)}
+                onClick={() => setSelectedAccFilter("all")}
                 style={{
                   ...styles.accPill,
-                  ...(selectedAccFilter === acc.id ? styles.accPillOn : {}),
+                  ...(selectedAccFilter === "all" ? styles.accPillOn : {}),
                 }}
               >
                 <div
-                  style={{ ...styles.accPillDot, background: "#5b8cff" }}
+                  style={{ ...styles.accPillDot, background: "var(--g)" }}
                 ></div>
-                <span style={{ fontWeight: 500 }}>
-                  {acc.name || `Account ${idx + 1}`}
-                </span>
-                <span style={styles.accPillSpend}>{fmt(acc.spend || 0)}</span>
-                <span style={styles.roasTag}>
-                  ROAS {acc.roas || summary.roas || 0}
-                </span>
-                {selectedAccFilter === acc.id && (
+                <span style={{ fontWeight: 600 }}>All Accounts</span>
+                <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
+                {selectedAccFilter === "all" && (
                   <span style={styles.accPillCheck}>✓</span>
                 )}
               </div>
-            ))
-          ) : (
-            <div
-              onClick={() => setSelectedAccFilter("main")}
-              style={{
-                ...styles.accPill,
-                ...(selectedAccFilter === "main" ? styles.accPillOn : {}),
-              }}
-            >
-              <div
-                style={{ ...styles.accPillDot, background: "#5b8cff" }}
-              ></div>
-              <span style={{ fontWeight: 500 }}>Primary Meta Account</span>
-              <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
-              <span style={styles.roasTag}>ROAS {summary.roas || 0}</span>
-              {selectedAccFilter === "main" && (
-                <span style={styles.accPillCheck}>✓</span>
+
+              {summary.adAccounts && summary.adAccounts.length > 0 ? (
+                summary.adAccounts.map((acc, idx) => (
+                  <div
+                    key={acc.id || idx}
+                    onClick={() => setSelectedAccFilter(acc.id)}
+                    style={{
+                      ...styles.accPill,
+                      ...(selectedAccFilter === acc.id ? styles.accPillOn : {}),
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.accPillDot,
+                        background: "#5b8cff",
+                      }}
+                    ></div>
+                    <span style={{ fontWeight: 500 }}>
+                      {acc.name || `Account ${idx + 1}`}
+                    </span>
+                    <span style={styles.accPillSpend}>
+                      {fmt(acc.spend || 0)}
+                    </span>
+                    <span style={styles.roasTag}>
+                      ROAS {acc.roas || summary.roas || 0}
+                    </span>
+                    {selectedAccFilter === acc.id && (
+                      <span style={styles.accPillCheck}>✓</span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div
+                  onClick={() => setSelectedAccFilter("main")}
+                  style={{
+                    ...styles.accPill,
+                    ...(selectedAccFilter === "main" ? styles.accPillOn : {}),
+                  }}
+                >
+                  <div
+                    style={{ ...styles.accPillDot, background: "#5b8cff" }}
+                  ></div>
+                  <span style={{ fontWeight: 500 }}>Primary Meta Account</span>
+                  <span style={styles.accPillSpend}>{fmt(adsSpend)}</span>
+                  <span style={styles.roasTag}>ROAS {summary.roas || 0}</span>
+                  {selectedAccFilter === "main" && (
+                    <span style={styles.accPillCheck}>✓</span>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          <div style={styles.aabCombined}>
-            Total: <b>{fmt(adsSpend)}</b> spent · Current ROAS{" "}
-            <b style={{ color: "var(--y)" }}>{summary.roas || 0}</b>
-          </div>
-        </div>
-      </div>
-
-
-                
-
+              <div style={styles.aabCombined}>
+                Total: <b>{fmt(adsSpend)}</b> spent · Current ROAS{" "}
+                <b style={{ color: "var(--y)" }}>{summary.roas || 0}</b>
+              </div>
             </div>
           </div>
         </div>
@@ -1822,6 +1964,17 @@ const styles = {
   wfTag: {
     fontSize: "10px",
     color: "var(--t3)",
+  },
+  wfBar: {
+    flex: "0 0 72px",
+    height: "4px",
+    background: "var(--s4)",
+    borderRadius: "2px",
+    overflow: "hidden",
+  },
+  wfBarFill: {
+    height: "100%",
+    borderRadius: "2px",
   },
   wfAmt: {
     fontSize: "13px",
