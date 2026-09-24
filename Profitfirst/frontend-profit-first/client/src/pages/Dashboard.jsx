@@ -1665,7 +1665,7 @@ const styles = {
   },
   adSpendRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(180px, 1fr) minmax(100px, 1fr) 90px auto",
+    gridTemplateColumns: "minmax(180px, 1fr) 160px 90px auto",
     alignItems: "center",
     gap: "12px",
     minWidth: 0,
@@ -1690,6 +1690,8 @@ const styles = {
     textOverflow: "ellipsis",
   },
   adSpendTrack: {
+      width: "160px",
+
     height: "5px",
     background: "var(--s4)",
     borderRadius: "3px",
