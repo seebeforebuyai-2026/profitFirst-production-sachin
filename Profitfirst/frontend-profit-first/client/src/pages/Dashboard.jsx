@@ -164,16 +164,7 @@ const Dashboard = () => {
 
   const { summary, forecast = {}, topProducts = [] } = data;
 
-  // ── Banner Conditions ──────────────────────────────────────
-  // ── Banner Conditions ──────────────────────────────────────
-  const showMetaBanner = !adsSpend || adsSpend === 0;
-  const showShiprocketBanner =
-    !summary.shippingSpend || summary.shippingSpend === 0;
-  const showCogsBanner =
-    (!summary.cogs || summary.cogs === 0) && profile?.cogsCompleted !== true;
-  const showExpensesBanner =
-    !salaries && !rent && !agency && profile?.expensesCompleted !== true;
-
+ 
   // Derived Calculations
   const grossRev = summary.revenueGenerated || 0;
   const realRev = summary.revenueEarned || 0;
@@ -211,6 +202,17 @@ const Dashboard = () => {
   );
 
   const isProfitNegative = (summary.moneyKept || 0) < 0;
+
+
+  // ── Banner Conditions ──────────────────────────────────────
+  const showMetaBanner = !adsSpend || adsSpend === 0;
+  const showShiprocketBanner =
+    !summary.shippingSpend || summary.shippingSpend === 0;
+  const showCogsBanner =
+    (!summary.cogs || summary.cogs === 0) && profile?.cogsCompleted !== true;
+  const showExpensesBanner =
+    !salaries && !rent && !agency && profile?.expensesCompleted !== true;
+
 
   return (
     <div style={styles.dashboardContainer}>
