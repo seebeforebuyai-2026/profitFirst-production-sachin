@@ -238,9 +238,34 @@ class ProductsService {
       const totalRevenue = sorted.reduce((s, p) => s + p.revenue, 0);
 
       // 5. Top 20 + remaining split karo
-      const TOP_N = 20;
-      const topSorted = sorted.slice(0, TOP_N);
-      const restSorted = sorted.slice(TOP_N);
+      // const TOP_N = 20;
+      // const topSorted = sorted.slice(0, TOP_N);
+      // const restSorted = sorted.slice(TOP_N);
+
+      // const topRevenue = topSorted.reduce((s, p) => s + p.revenue, 0);
+      // const topPercent =
+      //   totalRevenue > 0 ? Math.round((topRevenue / totalRevenue) * 100) : 0;
+
+      // 5. 🟢 80% Revenue Cutoff + Remaining Split (Pareto Rule)
+      const target80Percent = totalRevenue * 0.8; // 80% target
+      let runningSum = 0;
+      const topSorted = [];
+      const restSorted = [];
+
+      sorted.forEach((p) => {
+        // Jab tak 80% revenue na ho, Top me daalo (Max 20 products, Min 3 products)
+        const shouldAddToTop =
+          (runningSum < target80Percent && topSorted.length < 20) ||
+          topSorted.length < Math.min(3, sorted.length);
+
+        if (shouldAddToTop) {
+          topSorted.push(p);
+          runningSum += Number(p.revenue || 0);
+        } else {
+          // 80% ke baad bache hue products Remaining me jayenge
+          restSorted.push(p);
+        }
+      });
 
       const topRevenue = topSorted.reduce((s, p) => s + p.revenue, 0);
       const topPercent =
