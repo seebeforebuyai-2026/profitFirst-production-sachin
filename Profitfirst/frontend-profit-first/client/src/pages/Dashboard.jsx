@@ -1226,9 +1226,7 @@ const Dashboard = () => {
               <th style={{ ...styles.prodTh, textAlign: "right" }}>
                 GROSS PROFIT
               </th>
-               <th style={{ ...styles.prodTh, textAlign: "right" }}>
-                Profit %
-              </th>
+              <th style={{ ...styles.prodTh, textAlign: "right" }}>Profit %</th>
             </tr>
           </thead>
           <tbody>
@@ -1693,7 +1691,7 @@ const styles = {
     textOverflow: "ellipsis",
   },
   adSpendTrack: {
-      width: "160px",
+    width: "160px",
 
     height: "5px",
     background: "var(--s4)",

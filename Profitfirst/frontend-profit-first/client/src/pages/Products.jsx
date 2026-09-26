@@ -1,195 +1,168 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "react-toastify";
-import {
-  FiSearch,
-  FiPercent,
-  FiBox,
-  FiRefreshCw,
-  FiCheck,
-} from "react-icons/fi";
 import axiosInstance from "../../axios";
 import { useProfile } from "../ProfileContext";
 import { useNavigate } from "react-router-dom";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "https://api.profitfirstanalytics.co.in";
 
 const Products = () => {
   const { updateProfile } = useProfile();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState([]);
-  const [allVariantsList, setAllVariantsList] = useState([]);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
-  const [divisor, setDivisor] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  // ── States ──────────────────────────────────────────────────
+  const [topProducts, setTopProducts] = useState([]);
+  const [remainingProducts, setRemainingProducts] = useState([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [topRevenuePercent, setTopRevenuePercent] = useState(84);
+
+  const [showAll20, setShowAll20] = useState(false);
+  const [bulkPercent, setBulkPercent] = useState(40);
+  const [customPercent, setCustomPercent] = useState(40);
+  const [bulkApplied, setBulkApplied] = useState(false);
+
+  const [exactCogs, setExactCogs] = useState({}); // { [variantId]: number }
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [cogs, setCogs] = useState({});
 
+  // ── Load on mount ───────────────────────────────────────────
   useEffect(() => {
-    let pollInterval;
-    const init = async () => {
-      await triggerProductFetch(); // Fire the SQS job
-      const found = await fetchProducts(); // Try to get data immediately
-
-      if (!found) {
-        pollInterval = setInterval(async () => {
-          const nowFound = await fetchProducts();
-          if (nowFound) {
-            clearInterval(pollInterval);
-          }
-        }, 5000);
-      }
-    };
-
-    init();
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
+    loadTopSelling();
   }, []);
 
-  const triggerProductFetch = async () => {
+  const loadTopSelling = async () => {
+    setLoading(true);
     try {
-      await axiosInstance.post("/products/trigger-fetch");
-    } catch (error) {
-      console.error("Trigger fetch error:", error);
-    }
-  };
+      await axiosInstance.post("/products/trigger-fetch").catch(() => {});
+      const res = await axiosInstance.get("/products/top-selling");
 
-  const fetchProducts = async (isLoadMore = false) => {
-    if (!isLoadMore && !allVariantsList.length) setLoading(true);
-    try {
-      const response = await axiosInstance.get("/products/list", {
-        params: { limit: 50, lastKey: isLoadMore ? lastEvaluatedKey : null },
-      });
+      if (res.data.success) {
+        const top = res.data.topProducts || [];
+        const rem = res.data.remainingProducts || [];
+        setTopProducts(top);
+        setRemainingProducts(rem);
+        setTotalRevenue(res.data.totalRevenue || 0);
+        setTopRevenuePercent(res.data.topRevenuePercent || 84);
 
-      if (response.data.success && response.data.variants?.length > 0) {
-        const newVariants = (response.data.variants || []).filter(
-          (v) => Number(v.salePrice) > 0,
-        );
-
-        const updatedVariants = isLoadMore
-          ? [...allVariantsList, ...newVariants]
-          : newVariants;
-        setAllVariantsList(updatedVariants);
-
-        const productsMap = {};
-        updatedVariants.forEach((v) => {
-          if (!productsMap[v.productId]) {
-            productsMap[v.productId] = {
-              productId: v.productId,
-              productName: v.productName || "Unnamed Product",
-              productImage: v.productImage || "",
-              variants: [],
-            };
-          }
-          productsMap[v.productId].variants.push(v);
-        });
-
-        setProducts(Object.values(productsMap));
-        setLoading(false);
-        setLastEvaluatedKey(response.data.lastKey);
-
-        setCogs((prev) => {
-          const newCogs = { ...prev };
-          newVariants.forEach((v) => {
-            if (newCogs[v.variantId] === undefined) {
-              newCogs[v.variantId] = v.costPrice || "";
-            }
+        // Pre-fill existing costs
+        const cogsMap = {};
+        top.forEach((p) => {
+          p.variants?.forEach((v) => {
+            if (v.costPrice > 0) cogsMap[v.variantId] = v.costPrice;
           });
-          return newCogs;
         });
-        return true;
+        setExactCogs(cogsMap);
       }
-      return false;
-    } catch (error) {
-      toast.error("Failed to load products");
-      return false;
+    } catch (err) {
+      console.error("Failed to load products:", err);
+      toast.error("Failed to load top selling products");
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm) return products;
-    return products.filter((p) =>
-      p.productName.toLowerCase().includes(searchTerm.toLowerCase()),
-    );
-  }, [products, searchTerm]);
+  const fmt = (num) =>
+    "₹" + Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
-  // Quick formula: 1 / divisor
-  const applyGlobalFormula = () => {
-    if (!divisor || Number(divisor) <= 0) {
-      toast.error("Please enter a valid number (e.g., 2 or 2.5)");
-      return;
-    }
-    const newCogs = { ...cogs };
-    allVariantsList.forEach((v) => {
-      newCogs[v.variantId] = Number(
-        (Number(v.salePrice) / Number(divisor)).toFixed(2),
-      );
-    });
-    setCogs(newCogs);
-    toast.success(
-      `Calculated costs using 1/${divisor} of sale price for all variants`,
-    );
-  };
-
-  const handleCogsChange = (variantId, value) => {
-    setCogs((prev) => ({
-      ...prev,
-      [variantId]: value === "" ? "" : Number(value),
-    }));
-  };
-
-  const filledCount = useMemo(() => {
-    const total = allVariantsList.length;
-    const filled = Object.values(cogs).filter(
-      (v) => v !== "" && Number(v) > 0,
+  // ── Top Products & Accuracy Calculation ─────────────────────
+  // Count filled products (out of top 20 products)
+  const filledProductsCount = useMemo(() => {
+    return topProducts.filter((p) =>
+      p.variants?.some((v) => exactCogs[v.variantId] > 0)
     ).length;
-    return { filled, total };
-  }, [allVariantsList, cogs]);
+  }, [topProducts, exactCogs]);
 
-  const accuracyPercent =
-    filledCount.total > 0
-      ? Math.round((filledCount.filled / filledCount.total) * 100)
-      : 0;
+  // Total revenue covered by filled products
+  const coveredRevenue = useMemo(() => {
+    return topProducts.reduce((sum, p) => {
+      const isFilled = p.variants?.some((v) => exactCogs[v.variantId] > 0);
+      return isFilled ? sum + Number(p.revenue || 0) : sum;
+    }, 0);
+  }, [topProducts, exactCogs]);
 
-  const handleSaveCogs = async () => {
-    const hasAnyCosts = Object.values(cogs).some(
-      (v) => v !== "" && Number(v) > 0,
-    );
-    if (!hasAnyCosts) {
-      toast.error("Please enter at least one product cost before saving");
+  const coveredRevenuePercent = totalRevenue > 0
+    ? Math.round((coveredRevenue / totalRevenue) * 100)
+    : 0;
+
+  // Accuracy calculation matching screenshot
+  const accuracyPercent = useMemo(() => {
+    let acc = coveredRevenuePercent;
+    if (bulkApplied) acc += (100 - topRevenuePercent);
+    return Math.min(acc, 100);
+  }, [coveredRevenuePercent, bulkApplied, topRevenuePercent]);
+
+  // Handle single product/variant cost input
+  const handleProductCostChange = (product, val) => {
+    const costNum = val === "" ? "" : Number(val);
+    setExactCogs((prev) => {
+      const next = { ...prev };
+      // Apply to all variants of this product so none are left at cost 0
+      product.variants?.forEach((v) => {
+        next[v.variantId] = costNum;
+      });
+      return next;
+    });
+  };
+
+  // ── Save Handlers ───────────────────────────────────────────
+  const handleSaveTop = async () => {
+    if (filledProductsCount === 0) {
+      toast.error("Please enter cost for at least one product");
       return;
     }
 
     setIsSaving(true);
-    const variants = Object.entries(cogs)
-      .filter(([, costPrice]) => costPrice !== "" && Number(costPrice) > 0)
+    const exactVariants = Object.entries(exactCogs)
+      .filter(([, v]) => v !== "" && Number(v) > 0)
       .map(([variantId, costPrice]) => ({
         variantId,
         costPrice: Number(costPrice),
       }));
 
     try {
-      const response = await axiosInstance.post("/products/save-cogs", {
-        variants,
+      const res = await axiosInstance.post("/products/save-cogs-bulk", {
+        exactVariants,
+        bulkPercent: null,
+        bulkVariantIds: [],
       });
-      if (response.data.success) {
-        toast.success("✅ Product costs saved!");
-        updateProfile({ cogsCompleted: true });
-
-        // Step 6 (Business Expenses) update karo
-        await axiosInstance
-          .post("/onboard/set-step", { step: 6 })
-          .catch(() => {});
-
-        navigate("/dashboard/business-expenses");
+      if (res.data?.success) {
+        toast.success(`✅ Saved ${filledProductsCount} product costs!`);
       }
-    } catch (error) {
-      toast.error("Failed to save costs. Please try again.");
+    } catch (err) {
+      toast.error("Failed to save product costs");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleApplyBulk = async () => {
+    setIsSaving(true);
+    const exactVariants = Object.entries(exactCogs)
+      .filter(([, v]) => v !== "" && Number(v) > 0)
+      .map(([variantId, costPrice]) => ({
+        variantId,
+        costPrice: Number(costPrice),
+      }));
+
+    const remainingVariantIds = remainingProducts.flatMap(
+      (p) => p.variants?.map((v) => v.variantId) || []
+    );
+
+    try {
+      await axiosInstance.post("/products/save-cogs-bulk", {
+        exactVariants,
+        bulkPercent: customPercent,
+        bulkVariantIds: remainingVariantIds,
+      });
+
+      setBulkApplied(true);
+      toast.success("✅ All product costs saved!");
+
+      // Update onboarding stepper state to Step 6
+      await axiosInstance.post("/onboard/set-step", { step: 6 }).catch(() => {});
+      updateProfile({ cogsCompleted: true });
+
+      navigate("/dashboard/business-expenses");
+    } catch (err) {
+      toast.error("Failed to apply bulk estimate");
     } finally {
       setIsSaving(false);
     }
@@ -197,34 +170,24 @@ const Products = () => {
 
   const handleSkip = async () => {
     try {
-      // Step 6 set karo — COGS skip kiya
-      await axiosInstance
-        .post("/onboard/set-step", { step: 6 })
-        .catch(() => {});
+      await axiosInstance.post("/onboard/set-step", { step: 6 }).catch(() => {});
     } catch (e) {}
     navigate("/dashboard/business-expenses");
   };
 
-  const storeEmail = localStorage.getItem("userData")
-    ? JSON.parse(localStorage.getItem("userData"))?.email
-    : "atlance-clothing";
-
-  const storeInitial = (storeEmail || "A")[0].toUpperCase();
-
-  const fmt = (num) =>
-    "₹" +
-    Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  const displayedTopProducts = showAll20 ? topProducts : topProducts.slice(0, 10);
+  const sampleRefVariant = remainingProducts[0]?.variants?.[0] || topProducts[0]?.variants?.[0];
+  const samplePrice = Number(sampleRefVariant?.salePrice || 599);
 
   return (
     <div style={styles.shell}>
-      {/* ── TOP FIXED PROGRESS BAR (75%) ── */}
+      {/* ── TOP PROGRESS BAR (75%) ── */}
       <div style={styles.prog}>
         <div style={styles.progFill}></div>
       </div>
 
       {/* ── LEFT SIDEBAR (.pf-sb) ── */}
       <aside style={styles.sb}>
-        {/* Brand */}
         <div style={styles.brand}>
           <div style={styles.mark}>P₹</div>
           <div style={styles.bname}>
@@ -232,7 +195,6 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Connections Section - All 3 Live! */}
         <div style={styles.conns}>
           <div style={styles.pfcLabel}>Connections ✓</div>
           <div style={styles.connRow}>
@@ -252,38 +214,27 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Data Unlocked Section */}
         <div style={styles.pfd}>
           <div style={styles.pfdLabel}>Data unlocked</div>
-
           <div style={styles.ds}>
-            <div style={styles.dsL}>COGS Accuracy</div>
+            <div style={styles.dsL}>Profit Data Accuracy</div>
             <div style={styles.dsVG}>{accuracyPercent}%</div>
             <div style={styles.dsS}>
-              {filledCount.filled} of {filledCount.total} variants filled
+              {filledProductsCount} of {topProducts.length || 20} top products filled
             </div>
           </div>
-
           <div style={styles.ds}>
             <div style={styles.dsL}>Next Step</div>
             <div style={{ ...styles.dsV, color: "#f5a623" }}>Step 6 of 7</div>
-            <div style={styles.dsS}>Fixed Business Overheads</div>
-          </div>
-
-          <div style={{ ...styles.ds, borderBottom: "none", marginBottom: 0 }}>
-            <div style={styles.dsL}>Net Profit Truth</div>
-            <div style={styles.dsVDim}>Unlocks on completion</div>
+            <div style={styles.dsS}>Fixed Business Expenses</div>
           </div>
         </div>
 
-        {/* Store Pill Footer */}
         <div style={styles.foot}>
           <div style={styles.storePill}>
-            <div style={styles.spAv}>{storeInitial}</div>
+            <div style={styles.spAv}>A</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={styles.spNm}>
-                {storeEmail.replace(".myshopify.com", "")}
-              </div>
+              <div style={styles.spNm}>atlance-clothing</div>
             </div>
             <div style={styles.spDot}></div>
           </div>
@@ -293,8 +244,9 @@ const Products = () => {
       {/* ── RIGHT MAIN CONTENT (.pf-right) ── */}
       <div style={styles.right}>
         <div style={styles.mainContent}>
-          {/* ── HEADER ── */}
-          <div style={{ marginBottom: "20px" }}>
+
+          {/* ── STEP HEADER ── */}
+          <div style={{ marginBottom: "16px" }}>
             <div style={styles.eyebrow}>
               <span style={styles.eyebrowLine}></span>
               Step 5 of 7
@@ -306,25 +258,18 @@ const Products = () => {
               </em>
             </h1>
             <p style={styles.sub}>
-              Set unit cost for each variant to calculate your real Gross Margin
-              and Net Profit. You can also use the quick formula tool or skip
-              and set costs anytime later.
+              Two steps — exact costs for your top {topProducts.length || 20} products ({topRevenuePercent}% of your revenue), then a quick bulk estimate for the rest.
             </p>
           </div>
 
-          {/* ── ACCURACY PROGRESS CARD (.acc-card-ob) ── */}
+          {/* ── PROFIT DATA ACCURACY METER ── */}
           <div style={styles.accCard}>
             <div style={styles.acTop}>
-              <div style={styles.acLabel}>Profit Data Accuracy</div>
+              <div style={styles.acLabel}>Profit data accuracy</div>
               <div
                 style={{
                   ...styles.acPct,
-                  color:
-                    accuracyPercent >= 80
-                      ? "#00c853"
-                      : accuracyPercent >= 40
-                        ? "#f5a623"
-                        : "#ff3d5a",
+                  color: accuracyPercent >= 80 ? "#00c853" : accuracyPercent >= 30 ? "#f5a623" : "#ff3d5a",
                 }}
               >
                 {accuracyPercent}%
@@ -334,257 +279,272 @@ const Products = () => {
               <div
                 style={{
                   ...styles.acBar,
-                  width: `${Math.min(accuracyPercent, 100)}%`,
-                  background:
-                    accuracyPercent >= 80
-                      ? "#00c853"
-                      : accuracyPercent >= 40
-                        ? "#f5a623"
-                        : "#ff3d5a",
+                  width: `${Math.max(accuracyPercent, 5)}%`,
+                  background: accuracyPercent >= 80 ? "#00c853" : accuracyPercent >= 30 ? "#f5a623" : "#ff3d5a",
                 }}
               ></div>
             </div>
             <div style={styles.acSub}>
-              {filledCount.filled} of {filledCount.total} variants filled ·{" "}
-              {accuracyPercent === 100
-                ? "100% SKU accurate"
-                : "Remaining show ₹0 until set"}
+              {filledProductsCount} of {topProducts.length || 20} top products filled · {bulkApplied ? "bulk estimate set" : "bulk estimate pending"}
             </div>
           </div>
 
-          {/* ── SEARCH & QUICK ESTIMATOR TOOL ── */}
-          <div style={styles.toolCard}>
-            {/* Search */}
-            <div style={styles.searchBox}>
-              <FiSearch size={15} color="#7a9880" />
-              <input
-                type="text"
-                placeholder="Search products by title..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={styles.searchInput}
-              />
+          {/* ── SECTION 1: TOP PRODUCTS (EXACT COST) ── */}
+          <div style={styles.sectionCard}>
+            {/* Header */}
+            <div style={styles.secHeader}>
+              <div style={filledProductsCount > 0 ? styles.secBadgeDone : styles.secBadge}>
+                {filledProductsCount > 0 ? "✓" : "1"}
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={styles.secTitle}>
+                  Enter exact cost — top {topProducts.length || 20} products by revenue
+                </p>
+                <p style={styles.secSub}>
+                  These {topProducts.length || 20} products generated {topRevenuePercent}% of your revenue last month
+                </p>
+              </div>
+              {filledProductsCount > 0 && (
+                <span style={styles.savedBadge}>✓ {filledProductsCount} saved</span>
+              )}
             </div>
 
-            {/* Quick Estimator Formula */}
-            <div style={styles.estimatorBox}>
-              <span style={styles.estimatorTitle}>
-                <FiPercent size={12} /> Quick Formula:
-              </span>
-              <span style={{ fontSize: "11px", color: "#7a9880" }}>
-                Sale Price ÷
-              </span>
-              <input
-                type="number"
-                placeholder="e.g. 2"
-                value={divisor}
-                onChange={(e) => setDivisor(e.target.value)}
-                style={styles.estimatorInput}
-              />
-              <button
-                type="button"
-                onClick={applyGlobalFormula}
-                style={styles.estimatorBtn}
-              >
-                Apply All
-              </button>
-            </div>
-          </div>
+            {/* Product Rows List */}
+            <div>
+              {loading && topProducts.length === 0 ? (
+                <div style={{ padding: "36px", textAlign: "center", color: "#7a9880", fontSize: "12px" }}>
+                  Analyzing top revenue products...
+                </div>
+              ) : (
+                displayedTopProducts.map((product, idx) => {
+                  const mainVariant = product.variants?.[0] || {};
+                  const isSet = Number(exactCogs[mainVariant.variantId] || 0) > 0;
+                  const revShare = totalRevenue > 0
+                    ? Math.round((Number(product.revenue || 0) / totalRevenue) * 100)
+                    : 0;
 
-          {/* ── PRODUCTS TABLE CARD ── */}
-          <div style={styles.tableCard}>
-            <div style={{ maxHeight: "540px", overflowY: "auto" }}>
-              <table style={styles.table}>
-                <thead style={styles.thead}>
-                  <tr>
-                    <th style={{ ...styles.th, width: "54px" }}>PHOTO</th>
-                    <th style={{ ...styles.th, textAlign: "left" }}>PRODUCT</th>
-                    <th style={{ ...styles.th, textAlign: "left" }}>
-                      VARIANT TITLE
-                    </th>
-                    <th style={{ ...styles.th, textAlign: "right" }}>
-                      SELLING PRICE
-                    </th>
-                    <th
-                      style={{
-                        ...styles.th,
-                        textAlign: "right",
-                        width: "130px",
-                      }}
-                    >
-                      YOUR COST (COGS)
-                    </th>
-                    <th
-                      style={{
-                        ...styles.th,
-                        width: "40px",
-                        textAlign: "center",
-                      }}
-                    >
-                      STATUS
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.map((product) =>
-                      product.variants?.map((variant, idx) => {
-                        const hasCost =
-                          cogs[variant.variantId] !== "" &&
-                          Number(cogs[variant.variantId]) > 0;
-                        return (
-                          <tr key={variant.variantId} style={styles.tr}>
-                            {/* Photo (first row only per product) */}
-                            <td style={styles.td}>
-                              {idx === 0 && (
-                                <img
-                                  src={
-                                    product.productImage ||
-                                    variant.productImage ||
-                                    "https://via.placeholder.com/38?text=📦"
-                                  }
-                                  alt={product.productName}
-                                  style={styles.prodThumb}
-                                />
-                              )}
-                            </td>
+                  return (
+                    <div key={product.productId || idx} style={styles.productRow}>
+                      {/* Rank */}
+                      <span style={styles.rank}>{idx + 1}</span>
 
-                            {/* Product Name */}
-                            <td style={styles.td}>
-                              {idx === 0 && (
-                                <div>
-                                  <div style={styles.prodTitle}>
-                                    {product.productName}
-                                  </div>
-                                  <span style={styles.prodMeta}>
-                                    {product.variants.length} variant
-                                    {product.variants.length > 1 ? "s" : ""}
-                                  </span>
-                                </div>
-                              )}
-                            </td>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={styles.prodName}>{product.productName}</p>
+                        <div style={styles.prodMeta}>
+                          <span style={styles.revenueTag}>{fmt(product.revenue)}</span>
+                          <span style={{ color: "#3a5040" }}>·</span>
+                          <span style={{ fontSize: "11px", color: "#7a9880" }}>
+                            {product.orders || 0} units
+                          </span>
 
-                            {/* Variant Name */}
-                            <td style={styles.td}>
-                              <span style={styles.variantBadge}>
-                                {variant.variantName || "Default"}
-                              </span>
-                            </td>
-
-                            {/* Selling Price */}
-                            <td
+                          {/* Mini revenue bar */}
+                          <div style={styles.miniBarWrap}>
+                            <div
                               style={{
-                                ...styles.td,
-                                textAlign: "right",
-                                fontWeight: "600",
+                                ...styles.miniBar,
+                                width: `${Math.min(revShare * 4, 100)}%`,
                               }}
-                            >
-                              {fmt(variant.salePrice)}
-                            </td>
+                            ></div>
+                          </div>
+                          <span style={{ fontSize: "10px", color: "#7a9880" }}>
+                            {revShare}%
+                          </span>
+                        </div>
+                      </div>
 
-                            {/* COGS Input */}
-                            <td style={{ ...styles.td, textAlign: "right" }}>
-                              <div style={styles.inputWrap}>
-                                <span
-                                  style={{ fontSize: "11px", color: "#7a9880" }}
-                                >
-                                  ₹
-                                </span>
-                                <input
-                                  type="number"
-                                  placeholder="0.00"
-                                  min="0"
-                                  step="0.01"
-                                  value={cogs[variant.variantId] ?? ""}
-                                  onChange={(e) =>
-                                    handleCogsChange(
-                                      variant.variantId,
-                                      e.target.value,
-                                    )
-                                  }
-                                  style={styles.cogsInput}
-                                />
-                              </div>
-                            </td>
+                      {/* Selling Price */}
+                      <span style={styles.sellingPrice}>
+                        {fmt(mainVariant.salePrice)}
+                      </span>
 
-                            {/* Status */}
-                            <td style={{ ...styles.td, textAlign: "center" }}>
-                              {hasCost ? (
-                                <div style={styles.chkDone}>✓</div>
-                              ) : (
-                                <div style={styles.chkPending}></div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      }),
-                    )
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan="6"
-                        style={{ padding: "48px 16px", textAlign: "center" }}
-                      >
-                        <FiBox
-                          size={32}
-                          color="#3a5040"
-                          style={{ margin: "0 auto 8px" }}
+                      {/* COGS Input */}
+                      <div style={styles.cogsInputWrap}>
+                        <span style={{ fontSize: "11px", color: "#7a9880" }}>₹</span>
+                        <input
+                          type="number"
+                          placeholder="cost"
+                          value={exactCogs[mainVariant.variantId] ?? ""}
+                          onChange={(e) => handleProductCostChange(product, e.target.value)}
+                          style={{
+                            ...styles.cogsInput,
+                            borderColor: isSet ? "#00c853" : "rgba(255,255,255,0.12)",
+                          }}
                         />
-                        <p style={{ fontSize: "12.5px", color: "#7a9880" }}>
-                          No active products found. Click refresh above to sync
-                          catalog.
-                        </p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </div>
+
+                      {/* Done indicator */}
+                      {isSet ? (
+                        <div style={styles.chkDone}>✓</div>
+                      ) : (
+                        <div style={styles.chkPending}></div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
-            {/* Load More Pagination */}
-            {lastEvaluatedKey && (
+            {/* Show All 20 Toggle */}
+            <div style={styles.toggleRow}>
+              <span style={styles.toggleLabel}>
+                Showing {Math.min(displayedTopProducts.length, topProducts.length)} of {topProducts.length || 20} top products
+              </span>
+              {topProducts.length > 10 && (
+                <button
+                  type="button"
+                  style={styles.toggleBtn}
+                  onClick={() => setShowAll20(!showAll20)}
+                >
+                  {showAll20 ? "Show less ↑" : `Show all ${topProducts.length} →`}
+                </button>
+              )}
+            </div>
+
+            {/* Summary + Save Button */}
+            <div style={styles.secFooter}>
+              <span style={styles.secFooterLabel}>
+                <strong>{filledProductsCount}</strong> of {topProducts.length || 20} filled ·{" "}
+                <strong>{coveredRevenuePercent}%</strong> of revenue covered
+              </span>
               <button
                 type="button"
-                onClick={() => fetchProducts(true)}
-                style={styles.btnLoadMore}
+                style={{
+                  ...styles.btnG,
+                  opacity: filledProductsCount === 0 || isSaving ? 0.5 : 1,
+                  cursor: filledProductsCount === 0 || isSaving ? "not-allowed" : "pointer",
+                }}
+                disabled={filledProductsCount === 0 || isSaving}
+                onClick={handleSaveTop}
               >
-                Load More Products ↓
+                {isSaving ? "Saving..." : `Save ${filledProductsCount} costs & continue →`}
               </button>
-            )}
+            </div>
           </div>
 
-          {/* ── FOOTER ACTIONS ── */}
-          <div style={styles.footerRow}>
-            <button type="button" onClick={handleSkip} style={styles.btnSkip}>
-              Skip — add costs later in Products tab →
-            </button>
+          {/* ── SECTION 2: BULK ESTIMATE FOR REMAINING ── */}
+          {remainingProducts.length > 0 && (
+            <div style={styles.sectionCard}>
+              {/* Header */}
+              <div style={styles.secHeader}>
+                <div style={styles.secBadge}>2</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <p style={styles.secTitle}>Bulk estimate for remaining products</p>
+                    <span style={styles.quickTag}>Quick estimate</span>
+                  </div>
+                  <p style={styles.secSub}>Pick approximate cost % for remaining products</p>
+                </div>
+              </div>
 
+              <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                <p style={{ fontSize: "12px", color: "#7a9880", lineHeight: 1.6 }}>
+                  Remaining products drive only {100 - topRevenuePercent}% of your revenue. Pick your approximate cost % — one click applies to all of them.
+                </p>
+
+                {/* % Preset Cards Grid */}
+                <div style={styles.pillsGrid}>
+                  {[30, 40, 50, 60].map((pct) => {
+                    const isSelected = customPercent === pct;
+                    const previewCost = Math.round((samplePrice * pct) / 100);
+                    return (
+                      <div
+                        key={pct}
+                        onClick={() => {
+                          setBulkPercent(pct);
+                          setCustomPercent(pct);
+                        }}
+                        style={{
+                          ...styles.pctPill,
+                          ...(isSelected ? styles.pctPillOn : {}),
+                        }}
+                      >
+                        <div style={{ fontSize: "18px", fontWeight: "900", color: isSelected ? "#00c853" : "#e0ede4" }}>
+                          {pct}%
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#7a9880", marginTop: "2px" }}>
+                          of selling price
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#3a5040", marginTop: "2px" }}>
+                          ₹{samplePrice} → ₹{previewCost}
+                        </div>
+                        {isSelected && <div style={styles.pillCheck}>✓</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Custom % Input */}
+                <div style={styles.customPctRow}>
+                  <span style={{ fontSize: "12px", color: "#7a9880", fontWeight: "600" }}>Custom %</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={customPercent}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setCustomPercent(v);
+                      setBulkPercent(v);
+                    }}
+                    style={styles.customPctInput}
+                  />
+                  <span style={{ fontSize: "12px", color: "#7a9880" }}>
+                    % ₹{samplePrice} → cost{" "}
+                    <strong style={{ color: "#00c853" }}>
+                      ₹{Math.round((samplePrice * customPercent) / 100)}
+                    </strong>
+                  </span>
+                </div>
+
+                {/* Info Note */}
+                <div style={styles.infoNote}>
+                  <span>💡</span>
+                  <span>
+                    These show as <strong style={{ color: "#f5a623" }}>"Estimated"</strong> on your dashboard. Set exact costs anytime in Products tab.
+                  </span>
+                </div>
+
+                {/* Apply Button */}
+                <button
+                  type="button"
+                  style={{ ...styles.btnG, width: "100%", justifyContent: "center" }}
+                  onClick={handleApplyBulk}
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Saving Costs..." : "Apply estimate & continue →"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── FOOTER: SKIP LINK ── */}
+          <div style={styles.footerRow}>
             <button
               type="button"
-              onClick={handleSaveCogs}
-              disabled={isSaving}
-              style={{
-                ...styles.btnG,
-                opacity: isSaving ? 0.6 : 1,
-                cursor: isSaving ? "not-allowed" : "pointer",
-              }}
+              style={styles.btnSkip}
+              onClick={handleSkip}
             >
-              {isSaving ? "Saving Costs..." : "Save & Continue →"}
+              Skip — add COGS later
             </button>
+            <span style={{ fontSize: "11px", color: "#3a5040" }}>
+              Dashboard shows ₹0 for COGS
+            </span>
           </div>
+
         </div>
       </div>
     </div>
   );
 };
 
-// ── EXACT CSS DESIGN SYSTEM FROM PROTOTYPE ─────────────────────────
+// ── EXACT CSS DESIGN SYSTEM FROM PROTOTYPE SCREEN G ─────────────────
 const styles = {
   shell: {
     display: "flex",
     minHeight: "100vh",
     background: "#0a1a12", // var(--bg)
-    color: "#e0ede4", // var(--t1)
+    color: "#e0ede4",      // var(--t1)
     fontFamily: "'Inter', -apple-system, sans-serif",
   },
   prog: {
@@ -599,7 +559,7 @@ const styles = {
   progFill: {
     height: "100%",
     background: "#00c853",
-    width: "75%", // Step 5 of 7
+    width: "75%",
     transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
   },
   sb: {
@@ -806,9 +766,9 @@ const styles = {
     background: "#0a1a12",
   },
   mainContent: {
-    maxWidth: "860px",
+    maxWidth: "580px",
     margin: "0 auto",
-    padding: "40px 32px 80px",
+    padding: "36px 24px 60px",
   },
   eyebrow: {
     fontSize: "11px",
@@ -830,34 +790,32 @@ const styles = {
     fontWeight: "800",
     color: "#e0ede4",
     letterSpacing: "-.5px",
-    lineHeight: "1.2",
+    lineHeight: "1.15",
     marginBottom: "6px",
   },
   sub: {
     fontSize: "13px",
     color: "#7a9880",
-    lineHeight: "1.6",
-    maxWidth: "580px",
+    lineHeight: "1.65",
   },
 
-  // Accuracy card
+  // Accuracy Card
   accCard: {
     background: "#112418", // var(--s2)
     border: "1px solid rgba(255, 255, 255, 0.12)",
-    borderRadius: "12px",
-    padding: "14px 18px",
-    marginBottom: "16px",
+    borderRadius: "10px",
+    padding: "12px 16px",
+    marginBottom: "14px",
   },
   acTop: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: "8px",
+    marginBottom: "7px",
   },
   acLabel: {
     fontSize: "11.5px",
     color: "#7a9880",
-    fontWeight: "600",
   },
   acPct: {
     fontSize: "15px",
@@ -865,7 +823,7 @@ const styles = {
     letterSpacing: "-.03em",
   },
   acBarWrap: {
-    height: "6px",
+    height: "5px",
     background: "#162e1c",
     borderRadius: "3px",
     overflow: "hidden",
@@ -877,153 +835,137 @@ const styles = {
     transition: "width .6s cubic-bezier(.4, 0, .2, 1)",
   },
   acSub: {
-    fontSize: "11px",
+    fontSize: "10.5px",
     color: "#3a5040",
   },
 
-  // Tool card (Search + Estimator)
-  toolCard: {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "12px",
-    background: "#112418",
+  // Section Cards
+  sectionCard: {
+    background: "#112418", // var(--s2)
     border: "1px solid rgba(255, 255, 255, 0.08)",
-    borderRadius: "12px",
-    padding: "10px 14px",
-    marginBottom: "16px",
+    borderRadius: "14px",
+    overflow: "hidden",
+    marginBottom: "14px",
   },
-  searchBox: {
+  secHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
+    padding: "16px 20px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  secBadge: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "50%",
+    background: "#213626",
+    border: "1px solid rgba(255, 255, 255, 0.15)",
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    background: "#0a1a12",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "8px",
-    padding: "6px 12px",
-    flex: "1 1 260px",
-  },
-  searchInput: {
-    background: "transparent",
-    border: "none",
-    color: "#e0ede4",
-    fontSize: "12.5px",
-    outline: "none",
-    width: "100%",
-  },
-  estimatorBox: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    background: "rgba(0, 200, 83, 0.06)",
-    border: "1px solid rgba(0, 200, 83, 0.18)",
-    borderRadius: "8px",
-    padding: "4px 10px",
-  },
-  estimatorTitle: {
+    justifyContent: "center",
     fontSize: "11px",
+    fontWeight: "800",
+    color: "#7a9880",
+    flexShrink: 0,
+  },
+  secBadgeDone: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "50%",
+    background: "#00c853",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "10px",
+    fontWeight: "900",
+    color: "#000",
+    flexShrink: 0,
+  },
+  secTitle: {
+    fontSize: "13px",
+    fontWeight: "700",
+    color: "#e0ede4",
+    marginBottom: "2px",
+  },
+  secSub: {
+    fontSize: "11.5px",
+    color: "#7a9880",
+  },
+  savedBadge: {
+    fontSize: "10.5px",
     fontWeight: "700",
     color: "#00c853",
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-  },
-  estimatorInput: {
-    width: "50px",
-    background: "#0a1a12",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
-    borderRadius: "5px",
-    color: "#e0ede4",
-    fontSize: "11.5px",
-    padding: "3px 6px",
-    textAlign: "center",
-    outline: "none",
-  },
-  estimatorBtn: {
-    background: "#00c853",
-    color: "#000",
-    border: "none",
+    background: "rgba(0, 200, 83, 0.12)",
+    padding: "3px 8px",
     borderRadius: "6px",
-    padding: "5px 10px",
-    fontSize: "11px",
-    fontWeight: "700",
-    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
 
-  // Table Card
-  tableCard: {
-    background: "#112418",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
-    borderRadius: "12px",
-    overflow: "hidden",
-    marginBottom: "16px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  thead: {
-    background: "#0d1f15",
-    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-  },
-  th: {
-    fontSize: "10px",
-    fontWeight: "700",
-    color: "#3a5040",
-    letterSpacing: ".06em",
-    padding: "10px 14px",
-  },
-  tr: {
+  // Product Rows
+  productRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "11px 20px",
     borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-    transition: "background .15s",
   },
-  td: {
-    padding: "9px 14px",
-    fontSize: "12px",
-    verticalAlign: "middle",
+  rank: {
+    fontSize: "11px",
+    color: "#3a5040",
+    width: "16px",
+    flexShrink: 0,
+    fontWeight: "700",
   },
-  prodThumb: {
-    width: "36px",
-    height: "36px",
-    borderRadius: "6px",
-    objectCover: "cover",
-    background: "#0a1a12",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
-  },
-  prodTitle: {
-    fontSize: "12px",
+  prodName: {
+    fontSize: "12.5px",
     fontWeight: "600",
     color: "#e0ede4",
-    maxWidth: "240px",
+    maxWidth: "280px",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   prodMeta: {
-    fontSize: "10.5px",
-    color: "#7a9880",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    marginTop: "2px",
   },
-  variantBadge: {
+  revenueTag: {
     fontSize: "11px",
     color: "#7a9880",
-    background: "rgba(255, 255, 255, 0.04)",
-    padding: "3px 8px",
-    borderRadius: "5px",
-    border: "1px solid rgba(255, 255, 255, 0.06)",
+    fontWeight: "600",
   },
-  inputWrap: {
-    display: "inline-flex",
+  miniBarWrap: {
+    width: "48px",
+    height: "3px",
+    background: "rgba(255, 255, 255, 0.07)",
+    borderRadius: "2px",
+    overflow: "hidden",
+  },
+  miniBar: {
+    height: "100%",
+    background: "#00c853",
+    borderRadius: "2px",
+  },
+  sellingPrice: {
+    fontSize: "11.5px",
+    color: "#7a9880",
+    flexShrink: 0,
+  },
+  cogsInputWrap: {
+    display: "flex",
     alignItems: "center",
     gap: "4px",
+    flexShrink: 0,
   },
   cogsInput: {
-    width: "84px",
-    background: "#162e1c",
+    width: "74px",
+    background: "#162e1c", // var(--s3)
     border: "1.5px solid rgba(255, 255, 255, 0.12)",
     borderRadius: "6px",
-    padding: "6px 8px",
-    fontSize: "12px",
+    padding: "5px 7px",
+    fontSize: "11.5px",
     color: "#e0ede4",
     textAlign: "right",
     outline: "none",
@@ -1039,6 +981,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   chkPending: {
     width: "16px",
@@ -1046,28 +989,121 @@ const styles = {
     borderRadius: "50%",
     border: "1.5px solid rgba(255, 255, 255, 0.12)",
     display: "inline-block",
-  },
-  btnLoadMore: {
-    width: "100%",
-    padding: "10px",
-    background: "transparent",
-    border: "none",
-    borderTop: "1px solid rgba(255, 255, 255, 0.07)",
-    color: "#00c853",
-    fontSize: "11.5px",
-    fontWeight: "700",
-    cursor: "pointer",
-    textAlign: "center",
+    flexShrink: 0,
   },
 
-  // Footer Actions
-  footerRow: {
+  // Toggle & Section Footer
+  toggleRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    padding: "10px 20px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+  },
+  toggleLabel: {
+    fontSize: "11px",
+    color: "#3a5040",
+  },
+  toggleBtn: {
+    fontSize: "11.5px",
+    fontWeight: "700",
+    color: "#00c853",
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+  },
+  secFooter: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 20px",
     gap: "12px",
     flexWrap: "wrap",
   },
+  secFooterLabel: {
+    fontSize: "11px",
+    color: "#7a9880",
+  },
+
+  // Section 2 Pills Grid
+  pillsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: "8px",
+  },
+  quickTag: {
+    fontSize: "9.5px",
+    fontWeight: "800",
+    padding: "2px 7px",
+    borderRadius: "5px",
+    background: "rgba(245, 166, 35, 0.13)",
+    color: "#f5a623",
+  },
+  pctPill: {
+    background: "#0a1a12",
+    border: "1.5px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "10px",
+    padding: "12px 8px",
+    cursor: "pointer",
+    color: "#e0ede4",
+    position: "relative",
+    textAlign: "center",
+    transition: "all .16s",
+  },
+  pctPillOn: {
+    borderColor: "#00c853",
+    background: "rgba(0, 200, 83, 0.08)",
+  },
+  pillCheck: {
+    position: "absolute",
+    top: "6px",
+    right: "6px",
+    width: "14px",
+    height: "14px",
+    borderRadius: "50%",
+    background: "#00c853",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "8px",
+    color: "#000",
+    fontWeight: "900",
+  },
+  customPctRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "#0a1a12",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "10px",
+    padding: "10px 14px",
+  },
+  customPctInput: {
+    width: "60px",
+    background: "#162e1c",
+    border: "1.5px solid rgba(255, 255, 255, 0.12)",
+    borderRadius: "6px",
+    padding: "5px 8px",
+    fontSize: "13px",
+    fontWeight: "700",
+    color: "#e0ede4",
+    textAlign: "center",
+    outline: "none",
+  },
+  infoNote: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "8px",
+    background: "rgba(245, 166, 35, 0.07)",
+    border: "1px solid rgba(245, 166, 35, 0.15)",
+    borderRadius: "8px",
+    padding: "10px 12px",
+    fontSize: "12px",
+    color: "#7a9880",
+    lineHeight: 1.5,
+  },
+
+  // Buttons
   btnG: {
     display: "flex",
     alignItems: "center",
@@ -1077,11 +1113,18 @@ const styles = {
     color: "#000",
     border: "none",
     borderRadius: "8px",
-    padding: "11px 24px",
+    padding: "11px 20px",
     fontSize: "13px",
     fontWeight: "700",
     transition: "all .18s",
+    whiteSpace: "nowrap",
     cursor: "pointer",
+  },
+  footerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: "6px",
   },
   btnSkip: {
     background: "transparent",
@@ -1093,5 +1136,13 @@ const styles = {
     padding: 0,
   },
 };
+
+// ── KEYFRAME ANIMATIONS ───────────────────────────────────────────
+const styleSheet = document.createElement("style");
+styleSheet.textContent = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pls { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+`;
+document.head.appendChild(styleSheet);
 
 export default Products;
