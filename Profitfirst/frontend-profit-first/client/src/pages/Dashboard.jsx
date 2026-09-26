@@ -17,6 +17,9 @@ import DateRangeSelector from "../components/DateRangeSelector";
 import { PulseLoader } from "react-spinners";
 import { toast } from "react-toastify";
 
+import { useProfile } from "../ProfileContext";
+import { useNavigate } from "react-router-dom";
+
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +27,9 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [showDateSelector, setShowDateSelector] = useState(false);
   const [selectedAccFilter, setSelectedAccFilter] = useState("all");
+
+  const { profile } = useProfile();
+  const navigate = useNavigate();
 
   // Default range: Last 30 Days
   const [dateRange, setDateRange] = useState({
@@ -158,6 +164,16 @@ const Dashboard = () => {
 
   const { summary, forecast = {}, topProducts = [] } = data;
 
+  // ── Banner Conditions ──────────────────────────────────────
+  // ── Banner Conditions ──────────────────────────────────────
+  const showMetaBanner = !adsSpend || adsSpend === 0;
+  const showShiprocketBanner =
+    !summary.shippingSpend || summary.shippingSpend === 0;
+  const showCogsBanner =
+    (!summary.cogs || summary.cogs === 0) && profile?.cogsCompleted !== true;
+  const showExpensesBanner =
+    !salaries && !rent && !agency && profile?.expensesCompleted !== true;
+
   // Derived Calculations
   const grossRev = summary.revenueGenerated || 0;
   const realRev = summary.revenueEarned || 0;
@@ -275,6 +291,109 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ── DYNAMIC NUDGE BANNERS ── */}
+      {(showMetaBanner ||
+        showShiprocketBanner ||
+        showCogsBanner ||
+        showExpensesBanner) && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            marginBottom: "4px",
+          }}
+        >
+          {/* Banner 1 — Meta Ads */}
+          {showMetaBanner && (
+            <div style={styles.nudgeBannerAmber}>
+              <span style={styles.nudgeIcon}>⚠️</span>
+              <div style={styles.nudgeText}>
+                <strong style={styles.nudgeBold}>
+                  Meta Ads not connected.
+                </strong>{" "}
+                Ad Spend, ROAS and Contribution Profit are showing ₹0. Connect
+                Meta Ads to see the full picture.
+              </div>
+              <button
+                style={styles.nudgeBtn}
+                onClick={async () => {
+                  await axiosInstance
+                    .post("/onboard/set-step", { step: 3 })
+                    .catch(() => {});
+                  navigate("/onboarding");
+                }}
+              >
+                Connect Meta Ads →
+              </button>
+            </div>
+          )}
+
+          {/* Banner 2 — Shiprocket */}
+          {showShiprocketBanner && (
+            <div style={styles.nudgeBannerAmber}>
+              <span style={styles.nudgeIcon}>🚚</span>
+              <span style={styles.nudgeText}>
+                <strong style={styles.nudgeBold}>
+                  Shiprocket not connected.
+                </strong>{" "}
+                Shipping Spend, RTO and Net Business Profit are showing ₹0.
+                Connect Shiprocket to see the full picture.
+              </span>
+              <button
+                style={styles.nudgeBtn}
+                onClick={async () => {
+                  await axiosInstance
+                    .post("/onboard/set-step", { step: 4 })
+                    .catch(() => {});
+                  navigate("/onboarding");
+                }}
+              >
+                Connect Shiprocket →
+              </button>
+            </div>
+          )}
+
+          {/* Banner 3 — COGS */}
+          {showCogsBanner && (
+            <div style={styles.nudgeBannerBlue}>
+              <span style={styles.nudgeIcon}>📦</span>
+              <div style={styles.nudgeText}>
+                <strong style={styles.nudgeBold}>
+                  Product costs (COGS) not added.
+                </strong>{" "}
+                COGS and Gross Profit are showing ₹0. Add your product costs to
+                see the full picture.
+              </div>
+              <button
+                style={styles.nudgeBtn}
+                onClick={() => navigate("/dashboard/products")}
+              >
+                Add COGS →
+              </button>
+            </div>
+          )}
+
+          {/* Banner 4 — Fixed Costs */}
+          {showExpensesBanner && (
+            <div style={styles.nudgeBannerBlue}>
+              <span style={styles.nudgeIcon}>💰</span>
+              <div style={styles.nudgeText}>
+                <strong style={styles.nudgeBold}>Fixed costs not added.</strong>{" "}
+                Team Salaries, Office Rent and Agency Fees are showing ₹0. Add
+                your fixed costs to see the full picture.
+              </div>
+              <button
+                style={styles.nudgeBtn}
+                onClick={() => navigate("/dashboard/business-expenses")}
+              >
+                Add Fixed Costs →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 1. MULTI AD ACCOUNT FILTER BAR ── */}
       <div style={styles.adAccountBar}>
@@ -2447,6 +2566,52 @@ const styles = {
     width: "8px",
     height: "8px",
     borderRadius: "2px",
+  },
+
+  nudgeBannerAmber: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px 16px",
+    background: "rgba(245, 166, 35, 0.12)",
+    border: "1px solid rgba(245, 166, 35, 0.25)",
+    borderRadius: "10px",
+  },
+  nudgeBannerBlue: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px 16px",
+    background: "rgba(91, 140, 255, 0.12)",
+    border: "1px solid rgba(91, 140, 255, 0.20)",
+    borderRadius: "10px",
+  },
+  nudgeIcon: {
+    fontSize: "16px",
+    flexShrink: 0,
+  },
+  nudgeText: {
+    flex: 1,
+    fontSize: "12.5px",
+    color: "var(--t2)",
+    lineHeight: "1.5",
+  },
+  nudgeBold: {
+    color: "var(--t1)",
+    fontWeight: "700",
+  },
+  nudgeBtn: {
+    background: "#00d46a",
+    color: "#000",
+    border: "none",
+    borderRadius: "7px",
+    padding: "8px 14px",
+    fontSize: "12px",
+    fontWeight: "700",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+    transition: "all .18s",
   },
 };
 
