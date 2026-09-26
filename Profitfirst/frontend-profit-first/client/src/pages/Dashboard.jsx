@@ -1692,12 +1692,10 @@ const styles = {
   },
   adSpendTrack: {
     width: "160px",
-
     height: "5px",
     background: "var(--s4)",
     borderRadius: "3px",
     overflow: "hidden",
-    width: "200px",
   },
   adSpendFill: {
     height: "100%",
