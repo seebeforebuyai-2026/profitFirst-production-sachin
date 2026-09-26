@@ -19,6 +19,9 @@ const Products = () => {
   const [customPercent, setCustomPercent] = useState(40);
   const [bulkApplied, setBulkApplied] = useState(false);
 
+  // Accordion state: Kaunse products ke variants open hain
+  const [expandedProductIds, setExpandedProductIds] = useState(new Set());
+
   const [exactCogs, setExactCogs] = useState({}); // { [variantId]: number }
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,15 +65,23 @@ const Products = () => {
   const fmt = (num) =>
     "₹" + Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
+  // ── Toggle accordion for a product ──────────────────────────
+  const toggleProductExpand = (productId) => {
+    setExpandedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  };
+
   // ── Top Products & Accuracy Calculation ─────────────────────
-  // Count filled products (out of top 20 products)
   const filledProductsCount = useMemo(() => {
     return topProducts.filter((p) =>
       p.variants?.some((v) => exactCogs[v.variantId] > 0)
     ).length;
   }, [topProducts, exactCogs]);
 
-  // Total revenue covered by filled products
   const coveredRevenue = useMemo(() => {
     return topProducts.reduce((sum, p) => {
       const isFilled = p.variants?.some((v) => exactCogs[v.variantId] > 0);
@@ -78,28 +89,36 @@ const Products = () => {
     }, 0);
   }, [topProducts, exactCogs]);
 
-  const coveredRevenuePercent = totalRevenue > 0
-    ? Math.round((coveredRevenue / totalRevenue) * 100)
-    : 0;
+  const coveredRevenuePercent =
+    totalRevenue > 0
+      ? Math.round((coveredRevenue / totalRevenue) * 100)
+      : 0;
 
-  // Accuracy calculation matching screenshot
   const accuracyPercent = useMemo(() => {
     let acc = coveredRevenuePercent;
-    if (bulkApplied) acc += (100 - topRevenuePercent);
+    if (bulkApplied) acc += 100 - topRevenuePercent;
     return Math.min(acc, 100);
   }, [coveredRevenuePercent, bulkApplied, topRevenuePercent]);
 
-  // Handle single product/variant cost input
+  // Main product cost change (applies to all its variants)
   const handleProductCostChange = (product, val) => {
     const costNum = val === "" ? "" : Number(val);
     setExactCogs((prev) => {
       const next = { ...prev };
-      // Apply to all variants of this product so none are left at cost 0
       product.variants?.forEach((v) => {
         next[v.variantId] = costNum;
       });
       return next;
     });
+  };
+
+  // Specific single variant cost change
+  const handleVariantCostChange = (variantId, val) => {
+    const costNum = val === "" ? "" : Number(val);
+    setExactCogs((prev) => ({
+      ...prev,
+      [variantId]: costNum,
+    }));
   };
 
   // ── Save Handlers ───────────────────────────────────────────
@@ -156,7 +175,6 @@ const Products = () => {
       setBulkApplied(true);
       toast.success("✅ All product costs saved!");
 
-      // Update onboarding stepper state to Step 6
       await axiosInstance.post("/onboard/set-step", { step: 6 }).catch(() => {});
       updateProfile({ cogsCompleted: true });
 
@@ -176,7 +194,8 @@ const Products = () => {
   };
 
   const displayedTopProducts = showAll20 ? topProducts : topProducts.slice(0, 10);
-  const sampleRefVariant = remainingProducts[0]?.variants?.[0] || topProducts[0]?.variants?.[0];
+  const sampleRefVariant =
+    remainingProducts[0]?.variants?.[0] || topProducts[0]?.variants?.[0];
   const samplePrice = Number(sampleRefVariant?.salePrice || 599);
 
   return (
@@ -244,7 +263,6 @@ const Products = () => {
       {/* ── RIGHT MAIN CONTENT (.pf-right) ── */}
       <div style={styles.right}>
         <div style={styles.mainContent}>
-
           {/* ── STEP HEADER ── */}
           <div style={{ marginBottom: "16px" }}>
             <div style={styles.eyebrow}>
@@ -258,7 +276,9 @@ const Products = () => {
               </em>
             </h1>
             <p style={styles.sub}>
-              Two steps — exact costs for your top {topProducts.length || 20} products ({topRevenuePercent}% of your revenue), then a quick bulk estimate for the rest.
+              Two steps — exact costs for your top {topProducts.length || 20}{" "}
+              products ({topRevenuePercent}% of your revenue), then a quick bulk
+              estimate for the rest.
             </p>
           </div>
 
@@ -269,7 +289,12 @@ const Products = () => {
               <div
                 style={{
                   ...styles.acPct,
-                  color: accuracyPercent >= 80 ? "#00c853" : accuracyPercent >= 30 ? "#f5a623" : "#ff3d5a",
+                  color:
+                    accuracyPercent >= 80
+                      ? "#00c853"
+                      : accuracyPercent >= 30
+                      ? "#f5a623"
+                      : "#ff3d5a",
                 }}
               >
                 {accuracyPercent}%
@@ -280,12 +305,19 @@ const Products = () => {
                 style={{
                   ...styles.acBar,
                   width: `${Math.max(accuracyPercent, 5)}%`,
-                  background: accuracyPercent >= 80 ? "#00c853" : accuracyPercent >= 30 ? "#f5a623" : "#ff3d5a",
+                  background:
+                    accuracyPercent >= 80
+                      ? "#00c853"
+                      : accuracyPercent >= 30
+                      ? "#f5a623"
+                      : "#ff3d5a",
                 }}
               ></div>
             </div>
             <div style={styles.acSub}>
-              {filledProductsCount} of {topProducts.length || 20} top products filled · {bulkApplied ? "bulk estimate set" : "bulk estimate pending"}
+              {filledProductsCount} of {topProducts.length || 20} top products
+              filled ·{" "}
+              {bulkApplied ? "bulk estimate set" : "bulk estimate pending"}
             </div>
           </div>
 
@@ -293,93 +325,227 @@ const Products = () => {
           <div style={styles.sectionCard}>
             {/* Header */}
             <div style={styles.secHeader}>
-              <div style={filledProductsCount > 0 ? styles.secBadgeDone : styles.secBadge}>
+              <div
+                style={
+                  filledProductsCount > 0
+                    ? styles.secBadgeDone
+                    : styles.secBadge
+                }
+              >
                 {filledProductsCount > 0 ? "✓" : "1"}
               </div>
               <div style={{ flex: 1 }}>
                 <p style={styles.secTitle}>
-                  Enter exact cost — top {topProducts.length || 20} products by revenue
+                  Enter exact cost — top {topProducts.length || 20} products by
+                  revenue
                 </p>
                 <p style={styles.secSub}>
-                  These {topProducts.length || 20} products generated {topRevenuePercent}% of your revenue last month
+                  These {topProducts.length || 20} products generated{" "}
+                  {topRevenuePercent}% of your revenue last month
                 </p>
               </div>
               {filledProductsCount > 0 && (
-                <span style={styles.savedBadge}>✓ {filledProductsCount} saved</span>
+                <span style={styles.savedBadge}>
+                  ✓ {filledProductsCount} saved
+                </span>
               )}
             </div>
 
             {/* Product Rows List */}
             <div>
               {loading && topProducts.length === 0 ? (
-                <div style={{ padding: "36px", textAlign: "center", color: "#7a9880", fontSize: "12px" }}>
+                <div
+                  style={{
+                    padding: "36px",
+                    textAlign: "center",
+                    color: "#7a9880",
+                    fontSize: "12px",
+                  }}
+                >
                   Analyzing top revenue products...
                 </div>
               ) : (
                 displayedTopProducts.map((product, idx) => {
                   const mainVariant = product.variants?.[0] || {};
-                  const isSet = Number(exactCogs[mainVariant.variantId] || 0) > 0;
-                  const revShare = totalRevenue > 0
-                    ? Math.round((Number(product.revenue || 0) / totalRevenue) * 100)
-                    : 0;
+                  const isSet =
+                    Number(exactCogs[mainVariant.variantId] || 0) > 0;
+                  const revShare =
+                    totalRevenue > 0
+                      ? Math.round(
+                          (Number(product.revenue || 0) / totalRevenue) * 100
+                        )
+                      : 0;
+
+                  const hasMultipleVariants =
+                    product.variants && product.variants.length > 1;
+                  const isExpanded = expandedProductIds.has(product.productId);
 
                   return (
-                    <div key={product.productId || idx} style={styles.productRow}>
-                      {/* Rank */}
-                      <span style={styles.rank}>{idx + 1}</span>
+                    <React.Fragment key={product.productId || idx}>
+                      {/* Main Product Row */}
+                      <div style={styles.productRow}>
+                        {/* Rank */}
+                        <span style={styles.rank}>{idx + 1}</span>
 
-                      {/* Info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={styles.prodName}>{product.productName}</p>
-                        <div style={styles.prodMeta}>
-                          <span style={styles.revenueTag}>{fmt(product.revenue)}</span>
-                          <span style={{ color: "#3a5040" }}>·</span>
-                          <span style={{ fontSize: "11px", color: "#7a9880" }}>
-                            {product.orders || 0} units
-                          </span>
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={styles.prodName}>{product.productName}</p>
+                          <div style={styles.prodMeta}>
+                            <span style={styles.revenueTag}>
+                              {fmt(product.revenue)}
+                            </span>
+                            <span style={{ color: "#3a5040" }}>·</span>
+                            <span
+                              style={{ fontSize: "11px", color: "#7a9880" }}
+                            >
+                              {product.orders || 0} units
+                            </span>
 
-                          {/* Mini revenue bar */}
-                          <div style={styles.miniBarWrap}>
-                            <div
-                              style={{
-                                ...styles.miniBar,
-                                width: `${Math.min(revShare * 4, 100)}%`,
-                              }}
-                            ></div>
+                            {/* Mini revenue bar */}
+                            <div style={styles.miniBarWrap}>
+                              <div
+                                style={{
+                                  ...styles.miniBar,
+                                  width: `${Math.min(revShare * 4, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <span
+                              style={{ fontSize: "10px", color: "#7a9880" }}
+                            >
+                              {revShare}%
+                            </span>
+
+                            {/* Variant count badge */}
+                            {hasMultipleVariants && (
+                              <span style={styles.variantCountTag}>
+                                {product.variants.length} variants
+                              </span>
+                            )}
                           </div>
-                          <span style={{ fontSize: "10px", color: "#7a9880" }}>
-                            {revShare}%
-                          </span>
                         </div>
+
+                        {/* Selling Price */}
+                        <span style={styles.sellingPrice}>
+                          {fmt(mainVariant.salePrice)}
+                        </span>
+
+                        {/* Main COGS Input */}
+                        <div style={styles.cogsInputWrap}>
+                          <span style={{ fontSize: "11px", color: "#7a9880" }}>
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            placeholder="cost"
+                            value={exactCogs[mainVariant.variantId] ?? ""}
+                            onChange={(e) =>
+                              handleProductCostChange(product, e.target.value)
+                            }
+                            style={{
+                              ...styles.cogsInput,
+                              borderColor: isSet
+                                ? "#00c853"
+                                : "rgba(255,255,255,0.12)",
+                            }}
+                          />
+                        </div>
+
+                        {/* Done indicator */}
+                        {isSet ? (
+                          <div style={styles.chkDone}>✓</div>
+                        ) : (
+                          <div style={styles.chkPending}></div>
+                        )}
+
+                        {/* 🟢 Right side Arrow Button for Variants Accordion */}
+                        {hasMultipleVariants ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleProductExpand(product.productId)}
+                            style={styles.arrowBtn}
+                            title={
+                              isExpanded
+                                ? "Hide variants"
+                                : "View & edit individual variants"
+                            }
+                          >
+                            {isExpanded ? "▲" : "▼"}
+                          </button>
+                        ) : (
+                          <div style={{ width: "24px" }}></div>
+                        )}
                       </div>
 
-                      {/* Selling Price */}
-                      <span style={styles.sellingPrice}>
-                        {fmt(mainVariant.salePrice)}
-                      </span>
+                      {/* 🟢 EXPANDED SUB-ROWS: Specific Variants List */}
+                      {isExpanded && hasMultipleVariants && (
+                        <div style={styles.variantsContainer}>
+                          <div style={styles.variantHeaderNote}>
+                            ↳ Customize specific variant unit costs (optional):
+                          </div>
+                          {product.variants.map((variant, vIdx) => {
+                            const vIsSet =
+                              Number(exactCogs[variant.variantId] || 0) > 0;
+                            return (
+                              <div
+                                key={variant.variantId}
+                                style={styles.variantRow}
+                              >
+                                <span style={styles.variantIndex}>
+                                  {idx + 1}.{vIdx + 1}
+                                </span>
 
-                      {/* COGS Input */}
-                      <div style={styles.cogsInputWrap}>
-                        <span style={{ fontSize: "11px", color: "#7a9880" }}>₹</span>
-                        <input
-                          type="number"
-                          placeholder="cost"
-                          value={exactCogs[mainVariant.variantId] ?? ""}
-                          onChange={(e) => handleProductCostChange(product, e.target.value)}
-                          style={{
-                            ...styles.cogsInput,
-                            borderColor: isSet ? "#00c853" : "rgba(255,255,255,0.12)",
-                          }}
-                        />
-                      </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <span style={styles.variantTitle}>
+                                    {variant.variantName || `Variant ${vIdx + 1}`}
+                                  </span>
+                                </div>
 
-                      {/* Done indicator */}
-                      {isSet ? (
-                        <div style={styles.chkDone}>✓</div>
-                      ) : (
-                        <div style={styles.chkPending}></div>
+                                <span style={styles.variantPrice}>
+                                  {fmt(variant.salePrice)}
+                                </span>
+
+                                <div style={styles.cogsInputWrap}>
+                                  <span
+                                    style={{
+                                      fontSize: "10.5px",
+                                      color: "#7a9880",
+                                    }}
+                                  >
+                                    ₹
+                                  </span>
+                                  <input
+                                    type="number"
+                                    placeholder="cost"
+                                    value={exactCogs[variant.variantId] ?? ""}
+                                    onChange={(e) =>
+                                      handleVariantCostChange(
+                                        variant.variantId,
+                                        e.target.value
+                                      )
+                                    }
+                                    style={{
+                                      ...styles.cogsInputSmall,
+                                      borderColor: vIsSet
+                                        ? "#00c853"
+                                        : "rgba(255,255,255,0.1)",
+                                    }}
+                                  />
+                                </div>
+
+                                {vIsSet ? (
+                                  <div style={styles.chkDoneSmall}>✓</div>
+                                ) : (
+                                  <div style={styles.chkPendingSmall}></div>
+                                )}
+
+                                <div style={{ width: "24px" }}></div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                    </div>
+                    </React.Fragment>
                   );
                 })
               )}
@@ -388,7 +554,9 @@ const Products = () => {
             {/* Show All 20 Toggle */}
             <div style={styles.toggleRow}>
               <span style={styles.toggleLabel}>
-                Showing {Math.min(displayedTopProducts.length, topProducts.length)} of {topProducts.length || 20} top products
+                Showing{" "}
+                {Math.min(displayedTopProducts.length, topProducts.length)} of{" "}
+                {topProducts.length || 20} top products
               </span>
               {topProducts.length > 10 && (
                 <button
@@ -396,7 +564,9 @@ const Products = () => {
                   style={styles.toggleBtn}
                   onClick={() => setShowAll20(!showAll20)}
                 >
-                  {showAll20 ? "Show less ↑" : `Show all ${topProducts.length} →`}
+                  {showAll20
+                    ? "Show less ↑"
+                    : `Show all ${topProducts.length} →`}
                 </button>
               )}
             </div>
@@ -404,20 +574,27 @@ const Products = () => {
             {/* Summary + Save Button */}
             <div style={styles.secFooter}>
               <span style={styles.secFooterLabel}>
-                <strong>{filledProductsCount}</strong> of {topProducts.length || 20} filled ·{" "}
+                <strong>{filledProductsCount}</strong> of{" "}
+                {topProducts.length || 20} filled ·{" "}
                 <strong>{coveredRevenuePercent}%</strong> of revenue covered
               </span>
               <button
                 type="button"
                 style={{
                   ...styles.btnG,
-                  opacity: filledProductsCount === 0 || isSaving ? 0.5 : 1,
-                  cursor: filledProductsCount === 0 || isSaving ? "not-allowed" : "pointer",
+                  opacity:
+                    filledProductsCount === 0 || isSaving ? 0.5 : 1,
+                  cursor:
+                    filledProductsCount === 0 || isSaving
+                      ? "not-allowed"
+                      : "pointer",
                 }}
                 disabled={filledProductsCount === 0 || isSaving}
                 onClick={handleSaveTop}
               >
-                {isSaving ? "Saving..." : `Save ${filledProductsCount} costs & continue →`}
+                {isSaving
+                  ? "Saving..."
+                  : `Save ${filledProductsCount} costs & continue →`}
               </button>
             </div>
           </div>
@@ -429,17 +606,42 @@ const Products = () => {
               <div style={styles.secHeader}>
                 <div style={styles.secBadge}>2</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <p style={styles.secTitle}>Bulk estimate for remaining products</p>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <p style={styles.secTitle}>
+                      Bulk estimate for remaining products
+                    </p>
                     <span style={styles.quickTag}>Quick estimate</span>
                   </div>
-                  <p style={styles.secSub}>Pick approximate cost % for remaining products</p>
+                  <p style={styles.secSub}>
+                    Pick approximate cost % for remaining products
+                  </p>
                 </div>
               </div>
 
-              <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                <p style={{ fontSize: "12px", color: "#7a9880", lineHeight: 1.6 }}>
-                  Remaining products drive only {100 - topRevenuePercent}% of your revenue. Pick your approximate cost % — one click applies to all of them.
+              <div
+                style={{
+                  padding: "16px 20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "14px",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "#7a9880",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Remaining products drive only {100 - topRevenuePercent}% of your
+                  revenue. Pick your approximate cost % — one click applies to
+                  all of them.
                 </p>
 
                 {/* % Preset Cards Grid */}
@@ -459,13 +661,31 @@ const Products = () => {
                           ...(isSelected ? styles.pctPillOn : {}),
                         }}
                       >
-                        <div style={{ fontSize: "18px", fontWeight: "900", color: isSelected ? "#00c853" : "#e0ede4" }}>
+                        <div
+                          style={{
+                            fontSize: "18px",
+                            fontWeight: "900",
+                            color: isSelected ? "#00c853" : "#e0ede4",
+                          }}
+                        >
                           {pct}%
                         </div>
-                        <div style={{ fontSize: "10px", color: "#7a9880", marginTop: "2px" }}>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#7a9880",
+                            marginTop: "2px",
+                          }}
+                        >
                           of selling price
                         </div>
-                        <div style={{ fontSize: "10px", color: "#3a5040", marginTop: "2px" }}>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#3a5040",
+                            marginTop: "2px",
+                          }}
+                        >
                           ₹{samplePrice} → ₹{previewCost}
                         </div>
                         {isSelected && <div style={styles.pillCheck}>✓</div>}
@@ -476,7 +696,15 @@ const Products = () => {
 
                 {/* Custom % Input */}
                 <div style={styles.customPctRow}>
-                  <span style={{ fontSize: "12px", color: "#7a9880", fontWeight: "600" }}>Custom %</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#7a9880",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Custom %
+                  </span>
                   <input
                     type="number"
                     min="1"
@@ -501,14 +729,20 @@ const Products = () => {
                 <div style={styles.infoNote}>
                   <span>💡</span>
                   <span>
-                    These show as <strong style={{ color: "#f5a623" }}>"Estimated"</strong> on your dashboard. Set exact costs anytime in Products tab.
+                    These show as{" "}
+                    <strong style={{ color: "#f5a623" }}>"Estimated"</strong> on
+                    your dashboard. Set exact costs anytime in Products tab.
                   </span>
                 </div>
 
                 {/* Apply Button */}
                 <button
                   type="button"
-                  style={{ ...styles.btnG, width: "100%", justifyContent: "center" }}
+                  style={{
+                    ...styles.btnG,
+                    width: "100%",
+                    justifyContent: "center",
+                  }}
                   onClick={handleApplyBulk}
                   disabled={isSaving}
                 >
@@ -531,20 +765,19 @@ const Products = () => {
               Dashboard shows ₹0 for COGS
             </span>
           </div>
-
         </div>
       </div>
     </div>
   );
 };
 
-// ── EXACT CSS DESIGN SYSTEM FROM PROTOTYPE SCREEN G ─────────────────
+// ── EXACT CSS DESIGN SYSTEM ────────────────────────────────────────
 const styles = {
   shell: {
     display: "flex",
     minHeight: "100vh",
     background: "#0a1a12", // var(--bg)
-    color: "#e0ede4",      // var(--t1)
+    color: "#e0ede4", // var(--t1)
     fontFamily: "'Inter', -apple-system, sans-serif",
   },
   prog: {
@@ -712,11 +945,6 @@ const styles = {
     color: "#3a5040",
     marginTop: "1px",
   },
-  dsVDim: {
-    color: "#3a5040",
-    fontSize: "11px",
-    fontWeight: "400",
-  },
   foot: {
     padding: "10px 13px",
     borderTop: "1px solid rgba(255, 255, 255, 0.07)",
@@ -760,13 +988,12 @@ const styles = {
     animation: "pls 2s infinite",
   },
   right: {
-    marginLeft: "210px",
     flex: 1,
     minHeight: "100vh",
     background: "#0a1a12",
   },
   mainContent: {
-    maxWidth: "580px",
+    maxWidth: "640px",
     margin: "0 auto",
     padding: "36px 24px 60px",
   },
@@ -801,7 +1028,7 @@ const styles = {
 
   // Accuracy Card
   accCard: {
-    background: "#112418", // var(--s2)
+    background: "#112418",
     border: "1px solid rgba(255, 255, 255, 0.12)",
     borderRadius: "10px",
     padding: "12px 16px",
@@ -841,7 +1068,7 @@ const styles = {
 
   // Section Cards
   sectionCard: {
-    background: "#112418", // var(--s2)
+    background: "#112418",
     border: "1px solid rgba(255, 255, 255, 0.08)",
     borderRadius: "14px",
     overflow: "hidden",
@@ -920,7 +1147,7 @@ const styles = {
     fontSize: "12.5px",
     fontWeight: "600",
     color: "#e0ede4",
-    maxWidth: "280px",
+    maxWidth: "260px",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -930,6 +1157,7 @@ const styles = {
     alignItems: "center",
     gap: "6px",
     marginTop: "2px",
+    flexWrap: "wrap",
   },
   revenueTag: {
     fontSize: "11px",
@@ -937,7 +1165,7 @@ const styles = {
     fontWeight: "600",
   },
   miniBarWrap: {
-    width: "48px",
+    width: "44px",
     height: "3px",
     background: "rgba(255, 255, 255, 0.07)",
     borderRadius: "2px",
@@ -947,6 +1175,13 @@ const styles = {
     height: "100%",
     background: "#00c853",
     borderRadius: "2px",
+  },
+  variantCountTag: {
+    fontSize: "9.5px",
+    color: "#00c853",
+    background: "rgba(0, 200, 83, 0.1)",
+    padding: "1px 5px",
+    borderRadius: "4px",
   },
   sellingPrice: {
     fontSize: "11.5px",
@@ -961,7 +1196,7 @@ const styles = {
   },
   cogsInput: {
     width: "74px",
-    background: "#162e1c", // var(--s3)
+    background: "#162e1c",
     border: "1.5px solid rgba(255, 255, 255, 0.12)",
     borderRadius: "6px",
     padding: "5px 7px",
@@ -988,6 +1223,89 @@ const styles = {
     height: "16px",
     borderRadius: "50%",
     border: "1.5px solid rgba(255, 255, 255, 0.12)",
+    display: "inline-block",
+    flexShrink: 0,
+  },
+  arrowBtn: {
+    background: "transparent",
+    border: "none",
+    color: "#7a9880",
+    fontSize: "11px",
+    cursor: "pointer",
+    padding: "3px 6px",
+    borderRadius: "4px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "color .15s",
+  },
+
+  // 🟢 Sub-Rows Variants Container & Items
+  variantsContainer: {
+    background: "rgba(0, 0, 0, 0.25)",
+    borderLeft: "2px solid #00c853",
+    padding: "4px 0",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+  },
+  variantHeaderNote: {
+    fontSize: "10px",
+    color: "#7a9880",
+    padding: "4px 20px 6px 36px",
+    fontStyle: "italic",
+  },
+  variantRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "7px 20px 7px 36px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
+  },
+  variantIndex: {
+    fontSize: "10px",
+    color: "#3a5040",
+    fontFamily: "monospace",
+    width: "22px",
+    flexShrink: 0,
+  },
+  variantTitle: {
+    fontSize: "11.5px",
+    color: "#dceee2",
+    fontWeight: "500",
+  },
+  variantPrice: {
+    fontSize: "11px",
+    color: "#7a9880",
+    flexShrink: 0,
+  },
+  cogsInputSmall: {
+    width: "68px",
+    background: "#162e1c",
+    border: "1.5px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "5px",
+    padding: "4px 6px",
+    fontSize: "11px",
+    color: "#e0ede4",
+    textAlign: "right",
+    outline: "none",
+  },
+  chkDoneSmall: {
+    width: "14px",
+    height: "14px",
+    borderRadius: "50%",
+    background: "#00c853",
+    color: "#000",
+    fontSize: "7.5px",
+    fontWeight: "900",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  chkPendingSmall: {
+    width: "14px",
+    height: "14px",
+    borderRadius: "50%",
+    border: "1px solid rgba(255, 255, 255, 0.12)",
     display: "inline-block",
     flexShrink: 0,
   },
@@ -1137,7 +1455,7 @@ const styles = {
   },
 };
 
-// ── KEYFRAME ANIMATIONS ───────────────────────────────────────────
+// Keyframe Animations
 const styleSheet = document.createElement("style");
 styleSheet.textContent = `
   @keyframes spin { to { transform: rotate(360deg); } }
