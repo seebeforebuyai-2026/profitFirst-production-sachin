@@ -78,17 +78,49 @@ class ProductsController {
 
   async saveCogsBulk(req, res) {
     try {
-      const merchantId = req.user.userId;
+      const merchantId = req.user.userId; // 🟢 1. merchantId extract karein
       const { exactVariants, bulkPercent, bulkVariantIds } = req.body;
+
+      // 🟢 2. Pehle COGS ko DynamoDB VARIANT# me save hone dein
       await productsService.saveCogsBulk(
         merchantId,
         exactVariants,
         bulkPercent,
         bulkVariantIds,
       );
-      res.json({ success: true });
+
+      // 🟢 3. Ab last 30 days ke orders ko naye COGS ke sath re-stamp karne ke liye trigger karein
+      try {
+        const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
+        const { SendMessageCommand } = require("@aws-sdk/client-sqs");
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        await sqsClient.send(
+          new SendMessageCommand({
+            QueueUrl: shopifyQueueUrl,
+            MessageBody: JSON.stringify({
+              type: "SHOPIFY_SYNC",
+              merchantId: merchantId,
+              sinceDate: thirtyDaysAgo.toISOString(),
+              mode: "shopify_onboarding", // Direct to summary taaki turant P&L recalculate ho
+              affectedDates: [],
+            }),
+          }),
+        );
+        console.log(`📡 Orders re-stamped with new COGS for ${merchantId}`);
+      } catch (sqsErr) {
+        console.warn("COGS sync trigger warning:", sqsErr.message);
+      }
+
+      return res.json({
+        success: true,
+        message: "COGS saved and recalculation started",
+      });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error("saveCogsBulk error:", error);
+      return res.status(500).json({ error: error.message });
     }
   }
 }

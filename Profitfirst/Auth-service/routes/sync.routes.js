@@ -7,5 +7,5 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 router.post('/start-initial', authenticateToken, syncController.triggerSync);
 router.get('/status', authenticateToken, syncController.getStatus);
 router.post('/manual', authenticateToken, syncController.triggerManualSync);
-
+router.post('/historical', authenticateToken, syncController.startHistoricalSync);
 module.exports = router;

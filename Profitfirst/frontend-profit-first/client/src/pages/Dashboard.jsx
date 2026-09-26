@@ -93,6 +93,22 @@ const Dashboard = () => {
     }
   };
 
+  const handleFetchHistorical = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await axiosInstance.post("/sync/historical");
+      if (res.data.success) {
+        toast.info(
+          "📡 1 Year data fetch started. Dashboard will update automatically in 10-15 mins.",
+        );
+      }
+    } catch (err) {
+      toast.error("Failed to start historical sync.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchDashboardData(data === null);
   }, [fetchDashboardData]);
@@ -267,6 +283,19 @@ const Dashboard = () => {
               className={isRefreshing ? "animate-spin" : ""}
             />
             {isRefreshing ? "Syncing..." : "Sync Now"}
+          </button>
+
+          <button
+            onClick={handleFetchHistorical}
+            disabled={isRefreshing}
+            style={{
+              ...styles.btnSync,
+              background: "transparent",
+              border: "1px solid var(--bd2)",
+              color: "var(--t1)",
+            }}
+          >
+            Process 1 Year Data
           </button>
 
           <div style={{ position: "relative" }}>
@@ -1216,6 +1245,21 @@ const Dashboard = () => {
               </span>
             </div>
           </div>
+
+          <div
+            style="
+                    margin-top: 10px;
+                    background: var(--ra);
+                    border: 1px solid rgba(255, 51, 85, 0.18);
+                    border-radius: 7px;
+                    padding: 9px 11px;
+                    font-size: 11.5px;
+                    color: var(--t2);
+                  "
+          >
+            ⚠️ <b style="color: var(--t1)">RTO rate is more.</b>Each return
+            costs you high handling + forward shipping.
+          </div>
         </div>
 
         {/* Payment Split */}
@@ -1284,6 +1328,24 @@ const Dashboard = () => {
                 %
               </span>
             </div>
+          </div>
+
+          <div
+            style="
+                    margin-top: 10px;
+                    background: var(--ga);
+                    border: 1px solid rgba(0, 212, 106, 0.18);
+                    border-radius: 7px;
+                    padding: 9px 11px;
+                    font-size: 11.5px;
+                    color: var(--t2);
+                  "
+          >
+            ✓
+            <b style="color: var(--t1)">
+              High prepaid = fewer RTOs & faster cash.
+            </b>
+            Try prepaid-only discount offers to push this above 70%.
           </div>
         </div>
 
@@ -1422,6 +1484,19 @@ const Dashboard = () => {
             )}
           </tbody>
         </table>
+        <div
+          style="
+                  padding: 10px 14px;
+                  background: var(--ga);
+                  border-top: 1px solid rgba(0, 212, 106, 0.15);
+                  font-size: 12px;
+                  color: var(--t2);
+                "
+        >
+          💡
+          <b style="color: var(--t1)">Push this product harder in your ads.</b>—
+          it converts similarly but keeps more money per sale.
+        </div>
       </div>
 
       {/* ── 8. COST LEAKAGE ── */}
