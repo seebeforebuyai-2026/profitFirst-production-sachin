@@ -164,7 +164,6 @@ const Dashboard = () => {
 
   const { summary, forecast = {}, topProducts = [] } = data;
 
- 
   // Derived Calculations
   const grossRev = summary.revenueGenerated || 0;
   const realRev = summary.revenueEarned || 0;
@@ -203,7 +202,6 @@ const Dashboard = () => {
 
   const isProfitNegative = (summary.moneyKept || 0) < 0;
 
-
   // ── Banner Conditions ──────────────────────────────────────
   const showMetaBanner = !adsSpend || adsSpend === 0;
   const showShiprocketBanner =
@@ -212,7 +210,6 @@ const Dashboard = () => {
     (!summary.cogs || summary.cogs === 0) && profile?.cogsCompleted !== true;
   const showExpensesBanner =
     !salaries && !rent && !agency && profile?.expensesCompleted !== true;
-
 
   return (
     <div style={styles.dashboardContainer}>
@@ -322,7 +319,10 @@ const Dashboard = () => {
                 style={styles.nudgeBtn}
                 onClick={async () => {
                   await axiosInstance
-                    .post("/onboard/set-step", { step: 3 })
+                    .post("/onboard/set-step", {
+                      step: 3,
+                      onboardingCompleted: false,
+                    })
                     .catch(() => {});
                   navigate("/onboarding");
                 }}
@@ -347,7 +347,10 @@ const Dashboard = () => {
                 style={styles.nudgeBtn}
                 onClick={async () => {
                   await axiosInstance
-                    .post("/onboard/set-step", { step: 4 })
+                    .post("/onboard/set-step", {
+                      step: 4,
+                      onboardingCompleted: false,
+                    })
                     .catch(() => {});
                   navigate("/onboarding");
                 }}

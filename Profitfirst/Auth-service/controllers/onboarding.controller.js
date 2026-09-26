@@ -3,7 +3,6 @@ const { newDynamoDB, newTableName } = require("../config/aws.config");
 const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const dynamodbService = require("../services/dynamodb.service");
 
-
 class OnboardingController {
   async getCurrentStep(req, res) {
     try {
@@ -689,9 +688,8 @@ class OnboardingController {
       }
 
       const updates = { onboardingStep: step };
-      if (onboardingCompleted === true) {
-        updates.onboardingCompleted = true;
-      }
+      if (onboardingCompleted === true) updates.onboardingCompleted = true;
+      if (onboardingCompleted === false) updates.onboardingCompleted = false;
 
       await dynamodbService.updateUserProfileOnboarding(merchantId, updates);
 
