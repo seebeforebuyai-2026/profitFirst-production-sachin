@@ -367,72 +367,84 @@ class ProductsService {
         }
       }
 
-      // 2. Bulk % COGS save karo (remaining products)
+      // ── 2. BULK % COGS CALCULATION & SAVE (Remaining Products) ──
       if (bulkPercent && bulkVariantIds && bulkVariantIds.length > 0) {
-        // Pehle sale prices fetch karo
-        const variantsToUpdate = [];
+        console.log(
+          `📦 Processing bulk COGS (${bulkPercent}%) for ${bulkVariantIds.length} variants...`,
+        );
+
+        const { GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+        const chunkSize = 25; // DynamoDB concurrent batch size
+
         for (let i = 0; i < bulkVariantIds.length; i += chunkSize) {
           const chunk = bulkVariantIds.slice(i, i + chunkSize);
-          const fetched = await Promise.all(
-            chunk.map((vId) =>
-              newDynamoDB
-                .send(
-                  new QueryCommand({
+
+          // A. Variants ko fetch karo unka salePrice lene ke liye
+          const fetchedVariants = await Promise.all(
+            chunk.map(async (vId) => {
+              // 🟢 Clean ID: Chahe 'gid://shopify/...' aaye ya 'VARIANT#...', sirf numeric ID nikalo
+              const cleanId = String(vId)
+                .replace("VARIANT#", "")
+                .split("/")
+                .pop()
+                .trim();
+
+              try {
+                const res = await newDynamoDB.send(
+                  new GetCommand({
                     TableName: newTableName,
-                    KeyConditionExpression: "PK = :pk AND SK = :sk",
-                    ExpressionAttributeValues: {
-                      ":pk": `MERCHANT#${merchantId}`,
-                      ":sk": `VARIANT#${vId}`,
+                    Key: {
+                      PK: `MERCHANT#${merchantId}`,
+                      SK: `VARIANT#${cleanId}`,
                     },
-                    Limit: 1,
                   }),
-                )
-                .then((r) => r.Items?.[0]),
-            ),
+                );
+                return res.Item; // GetCommand me .Item hota hai
+              } catch (err) {
+                console.warn(`Failed to get variant ${cleanId}:`, err.message);
+                return null;
+              }
+            }),
           );
-          fetched.filter(Boolean).forEach((v) => {
-            const salePrice = Number(v.salePrice || 0);
-            const estimatedCost = Number(
-              ((salePrice * bulkPercent) / 100).toFixed(2),
-            );
-            variantsToUpdate.push({
-              variantId: v.variantId || v.SK.replace("VARIANT#", ""),
-              estimatedCost,
-            });
-          });
-        }
 
-        // Save estimated costs
-        for (let i = 0; i < variantsToUpdate.length; i += chunkSize) {
-          const chunk = variantsToUpdate.slice(i, i + chunkSize);
+          // B. Har variant ka cost calculate karke DynamoDB me update karo
           await Promise.all(
-            chunk.map((v) =>
-              newDynamoDB.send(
-                new UpdateCommand({
-                  TableName: newTableName,
-                  Key: {
-                    PK: `MERCHANT#${merchantId}`,
-                    SK: `VARIANT#${v.variantId}`,
-                  },
-                  UpdateExpression:
-                    "SET #cp = :c, isEstimated = :est, bulkPercent = :bp, #ua = :t",
-                  ExpressionAttributeNames: {
-                    "#cp": "costPrice",
-                    "#ua": "updatedAt",
-                  },
-                  ExpressionAttributeValues: {
-                    ":c": v.estimatedCost,
-                    ":est": true,
-                    ":bp": bulkPercent,
-                    ":t": timestamp,
-                  },
-                }),
-              ),
-            ),
+            fetchedVariants
+              .filter((v) => v && v.salePrice > 0)
+              .map(async (v) => {
+                const calculatedCost = Number(
+                  ((Number(v.salePrice) * Number(bulkPercent)) / 100).toFixed(
+                    2,
+                  ),
+                );
+
+                const cleanId = String(v.variantId || v.SK)
+                  .replace("VARIANT#", "")
+                  .split("/")
+                  .pop()
+                  .trim();
+
+                return newDynamoDB.send(
+                  new UpdateCommand({
+                    TableName: newTableName,
+                    Key: {
+                      PK: `MERCHANT#${merchantId}`,
+                      SK: `VARIANT#${cleanId}`,
+                    },
+                    UpdateExpression: "SET costPrice = :cp, updatedAt = :now",
+                    ExpressionAttributeValues: {
+                      ":cp": calculatedCost,
+                      ":now": new Date().toISOString(),
+                    },
+                  }),
+                );
+              }),
           );
         }
+        console.log(
+          `✅ Bulk COGS applied successfully for ${bulkVariantIds.length} variants!`,
+        );
       }
-
       // 3. Profile update karo
       await newDynamoDB.send(
         new UpdateCommand({
