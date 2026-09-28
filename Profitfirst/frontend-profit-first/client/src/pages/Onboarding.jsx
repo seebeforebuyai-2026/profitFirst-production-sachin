@@ -77,7 +77,7 @@ const Onboarding = () => {
             autoClose: 3000,
           });
           localStorage.clear();
-          setTimeout(() => navigate("/login", { replace: true }), 1500);
+          setTimeout(() => navigate("/", { replace: true }), 1500);
         } else if (error.response?.status === 404) {
           console.log("📝 User not found in onboarding, starting from step 1");
           setCurrentStep(1);

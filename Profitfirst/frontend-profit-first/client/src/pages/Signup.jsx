@@ -302,7 +302,7 @@ const SignUp = () => {
       }, 100);
 
       setTimeout(() => {
-        navigate("/login", {
+        navigate("/", {
           state: {
             verified: true,
             email: formData.email,

@@ -55,7 +55,7 @@ const VerifyEmail = () => {
           await axiosInstance.get(`/auth/verify-email/${token}`);
           setStatus("success");
           redirectTimeout = setTimeout(() => {
-            navigate("/login");
+            navigate("/");
           }, 3000);
         } catch (err) {
           setStatus("error");
@@ -138,7 +138,7 @@ const VerifyEmail = () => {
       toast.success(response.message || "Email verified successfully!");
       
       setTimeout(() => {
-        navigate("/login", {
+        navigate("/", {
           state: { message: "Email verified! You can now login." }
         });
       }, 2000);

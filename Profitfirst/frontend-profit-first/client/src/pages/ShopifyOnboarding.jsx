@@ -14,7 +14,7 @@ const ShopifyOnboarding = () => {
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (!token) {
-      window.location.href = "/login";
+      window.location.href = "/";
       return;
     }
     fetchInsight();

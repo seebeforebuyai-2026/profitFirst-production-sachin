@@ -26,7 +26,7 @@ export const logout = () => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("userData");
   
-  window.location.href = "/login";
+  window.location.href = "/";
 };
 
 
