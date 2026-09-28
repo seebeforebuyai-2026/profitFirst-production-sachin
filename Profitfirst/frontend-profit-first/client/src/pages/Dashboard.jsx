@@ -1247,17 +1247,17 @@ const Dashboard = () => {
           </div>
 
           <div
-            style="
-                    margin-top: 10px;
-                    background: var(--ra);
-                    border: 1px solid rgba(255, 51, 85, 0.18);
-                    border-radius: 7px;
-                    padding: 9px 11px;
-                    font-size: 11.5px;
-                    color: var(--t2);
-                  "
+            style={{
+              marginTop: "10px",
+              background: "var(--ra)",
+              border: "1px solid rgba(255, 51, 85, 0.18)",
+              borderRadius: "7px",
+              padding: "9px 11px",
+              fontSize: "11.5px",
+              color: "var(--t2)",
+            }}
           >
-            ⚠️ <b style="color: var(--t1)">RTO rate is more.</b>Each return
+            ⚠️ <b style={{ color: "var(--t1)" }}>RTO rate is more.</b>Each return
             costs you high handling + forward shipping.
           </div>
         </div>
@@ -1331,18 +1331,18 @@ const Dashboard = () => {
           </div>
 
           <div
-            style="
-                    margin-top: 10px;
-                    background: var(--ga);
-                    border: 1px solid rgba(0, 212, 106, 0.18);
-                    border-radius: 7px;
-                    padding: 9px 11px;
-                    font-size: 11.5px;
-                    color: var(--t2);
-                  "
+            style={{
+              marginTop: "10px",
+              background: "var(--ga)",
+              border: "1px solid rgba(0, 212, 106, 0.18)",
+              borderRadius: "7px",
+              padding: "9px 11px",
+              fontSize: "11.5px",
+              color: "var(--t2)",
+            }}
           >
             ✓
-            <b style="color: var(--t1)">
+            <b style={{ color: "var(--t1)" }}>
               High prepaid = fewer RTOs & faster cash.
             </b>
             Try prepaid-only discount offers to push more customers to pay
