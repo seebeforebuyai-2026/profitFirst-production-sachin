@@ -332,20 +332,134 @@ class ProductsService {
     }
   }
 
-  async saveCogsBulk(req, res) {
+  async saveCogsBulk(merchantId, exactVariants, bulkPercent, bulkVariantIds) {
     try {
-      const merchantId = req.user.userId; // 🟢 1. Yeh line zaroori hai!
-      const { exactVariants, bulkPercent, bulkVariantIds } = req.body;
+      const timestamp = new Date().toISOString();
+      const chunkSize = 25;
 
-      // COGS save karo
-      await productsService.saveCogsBulk(
-        merchantId,
-        exactVariants,
-        bulkPercent,
-        bulkVariantIds,
+      // 1. Exact COGS save karo (top products)
+      if (exactVariants && exactVariants.length > 0) {
+        for (let i = 0; i < exactVariants.length; i += chunkSize) {
+          const chunk = exactVariants.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map((v) =>
+              newDynamoDB.send(
+                new UpdateCommand({
+                  TableName: newTableName,
+                  Key: {
+                    PK: `MERCHANT#${merchantId}`,
+                    SK: `VARIANT#${v.variantId}`,
+                  },
+                  UpdateExpression: "SET #cp = :c, #set = :t, #ua = :t",
+                  ExpressionAttributeNames: {
+                    "#cp": "costPrice",
+                    "#set": "cogsSetAt",
+                    "#ua": "updatedAt",
+                  },
+                  ExpressionAttributeValues: {
+                    ":c": Number(v.costPrice),
+                    ":t": timestamp,
+                  },
+                }),
+              ),
+            ),
+          );
+        }
+      }
+
+      // ── 2. BULK % COGS CALCULATION & SAVE (Remaining Products) ──
+      if (bulkPercent && bulkVariantIds && bulkVariantIds.length > 0) {
+        console.log(
+          `📦 Processing bulk COGS (${bulkPercent}%) for ${bulkVariantIds.length} variants...`,
+        );
+
+        const { GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+        const chunkSize = 25; // DynamoDB concurrent batch size
+
+        for (let i = 0; i < bulkVariantIds.length; i += chunkSize) {
+          const chunk = bulkVariantIds.slice(i, i + chunkSize);
+
+          // A. Variants ko fetch karo unka salePrice lene ke liye
+          const fetchedVariants = await Promise.all(
+            chunk.map(async (vId) => {
+              // 🟢 Clean ID: Chahe 'gid://shopify/...' aaye ya 'VARIANT#...', sirf numeric ID nikalo
+              const cleanId = String(vId)
+                .replace("VARIANT#", "")
+                .split("/")
+                .pop()
+                .trim();
+
+              try {
+                const res = await newDynamoDB.send(
+                  new GetCommand({
+                    TableName: newTableName,
+                    Key: {
+                      PK: `MERCHANT#${merchantId}`,
+                      SK: `VARIANT#${cleanId}`,
+                    },
+                  }),
+                );
+                return res.Item; // GetCommand me .Item hota hai
+              } catch (err) {
+                console.warn(`Failed to get variant ${cleanId}:`, err.message);
+                return null;
+              }
+            }),
+          );
+
+          // B. Har variant ka cost calculate karke DynamoDB me update karo
+          await Promise.all(
+            fetchedVariants
+              .filter((v) => v && v.salePrice > 0)
+              .map(async (v) => {
+                const calculatedCost = Number(
+                  ((Number(v.salePrice) * Number(bulkPercent)) / 100).toFixed(
+                    2,
+                  ),
+                );
+
+                const cleanId = String(v.variantId || v.SK)
+                  .replace("VARIANT#", "")
+                  .split("/")
+                  .pop()
+                  .trim();
+
+                return newDynamoDB.send(
+                  new UpdateCommand({
+                    TableName: newTableName,
+                    Key: {
+                      PK: `MERCHANT#${merchantId}`,
+                      SK: `VARIANT#${cleanId}`,
+                    },
+                    UpdateExpression: "SET costPrice = :cp, updatedAt = :now",
+                    ExpressionAttributeValues: {
+                      ":cp": calculatedCost,
+                      ":now": new Date().toISOString(),
+                    },
+                  }),
+                );
+              }),
+          );
+        }
+        console.log(
+          `✅ Bulk COGS applied successfully for ${bulkVariantIds.length} variants!`,
+        );
+      }
+      // 3. Profile update karo
+      await newDynamoDB.send(
+        new UpdateCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "PROFILE" },
+          UpdateExpression: "SET #cc = :true, #ua = :t",
+          ExpressionAttributeNames: {
+            "#cc": "cogsCompleted",
+            "#ua": "updatedAt",
+          },
+          ExpressionAttributeValues: { ":true": true, ":t": timestamp },
+        }),
       );
 
-      // 🟢 2. Ab orders re-stamp karne ke liye 30-day sync bhejo
+      // 🟢 4. RECALCULATION TRIGGER: Naye COGS ke sath orders aur summary recalculate karo
       try {
         const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
         const { SendMessageCommand } = require("@aws-sdk/client-sqs");
@@ -358,25 +472,24 @@ class ProductsService {
             QueueUrl: shopifyQueueUrl,
             MessageBody: JSON.stringify({
               type: "SHOPIFY_SYNC",
-              merchantId: merchantId, // 👈 Ab yeh valid ID bhejega
+              merchantId: merchantId,
               sinceDate: thirtyDaysAgo.toISOString(),
-              mode: "shopify_onboarding", // Direct to summary
+              mode: "shopify_onboarding", // 👈 Direct to summary bina extra loops ke
               affectedDates: [],
             }),
           }),
         );
-        console.log(`📡 Orders re-stamped with new COGS for ${merchantId}`);
+        console.log(
+          `📡 Orders & Summary recalculation triggered for ${merchantId}`,
+        );
       } catch (sqsErr) {
-        console.warn("SQS trigger error:", sqsErr.message);
+        console.warn("SQS recalculate warning:", sqsErr.message);
       }
 
-      return res.json({
-        success: true,
-        message: "COGS saved and recalculation started",
-      });
+      return { success: true };
     } catch (error) {
-      console.error("saveCogsBulk error:", error);
-      return res.status(500).json({ error: error.message });
+      console.error("saveCogsBulk error:", error.message);
+      throw error;
     }
   }
 }
