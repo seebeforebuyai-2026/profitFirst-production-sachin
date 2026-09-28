@@ -639,7 +639,7 @@ const Dashboard = () => {
 
       {/* ── 4. REVENUE BREAKDOWN + WATERFALL ── */}
       <div style={styles.sdiv}>
-        <span style={styles.sdivText}>Revenue & Cost Breakdown</span>
+        <span style={styles.sdivText}>Revenue Breakdown</span>
       </div>
 
       <div
@@ -1508,7 +1508,7 @@ const Dashboard = () => {
       {/* ── 8. COST LEAKAGE ── */}
       <div style={styles.sdiv}>
         <span style={styles.sdivText}>
-          Cost Leakage (Where Money Is Leaking)
+          Where Money Is Leaking
         </span>
       </div>
       <div style={styles.lkGrid}>
@@ -1552,7 +1552,7 @@ const Dashboard = () => {
       {/* ── 9. PENDING OUTCOME (ORDERS STILL MOVING) ── */}
       <div style={styles.sdiv}>
         <span style={styles.sdivText}>
-          Orders Still Moving (Pending Outcome)
+          Orders Still Moving
         </span>
       </div>
       <div style={styles.pendingGrid}>
