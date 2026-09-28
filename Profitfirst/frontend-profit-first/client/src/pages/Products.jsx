@@ -63,7 +63,8 @@ const Products = () => {
   };
 
   const fmt = (num) =>
-    "₹" + Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+    "₹" +
+    Number(num || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
   // ── Toggle accordion for a product ──────────────────────────
   const toggleProductExpand = (productId) => {
@@ -78,7 +79,7 @@ const Products = () => {
   // ── Top Products & Accuracy Calculation ─────────────────────
   const filledProductsCount = useMemo(() => {
     return topProducts.filter((p) =>
-      p.variants?.some((v) => exactCogs[v.variantId] > 0)
+      p.variants?.some((v) => exactCogs[v.variantId] > 0),
     ).length;
   }, [topProducts, exactCogs]);
 
@@ -90,9 +91,7 @@ const Products = () => {
   }, [topProducts, exactCogs]);
 
   const coveredRevenuePercent =
-    totalRevenue > 0
-      ? Math.round((coveredRevenue / totalRevenue) * 100)
-      : 0;
+    totalRevenue > 0 ? Math.round((coveredRevenue / totalRevenue) * 100) : 0;
 
   const accuracyPercent = useMemo(() => {
     let acc = coveredRevenuePercent;
@@ -162,7 +161,7 @@ const Products = () => {
       }));
 
     const remainingVariantIds = remainingProducts.flatMap(
-      (p) => p.variants?.map((v) => v.variantId) || []
+      (p) => p.variants?.map((v) => v.variantId) || [],
     );
 
     try {
@@ -175,7 +174,9 @@ const Products = () => {
       setBulkApplied(true);
       toast.success("✅ All product costs saved!");
 
-      await axiosInstance.post("/onboard/set-step", { step: 6 }).catch(() => {});
+      await axiosInstance
+        .post("/onboard/set-step", { step: 6 })
+        .catch(() => {});
       updateProfile({ cogsCompleted: true });
 
       navigate("/dashboard/business-expenses");
@@ -188,12 +189,16 @@ const Products = () => {
 
   const handleSkip = async () => {
     try {
-      await axiosInstance.post("/onboard/set-step", { step: 6 }).catch(() => {});
+      await axiosInstance
+        .post("/onboard/set-step", { step: 6 })
+        .catch(() => {});
     } catch (e) {}
     navigate("/dashboard/business-expenses");
   };
 
-  const displayedTopProducts = showAll20 ? topProducts : topProducts.slice(0, 10);
+  const displayedTopProducts = showAll20
+    ? topProducts
+    : topProducts.slice(0, 10);
   const sampleRefVariant =
     remainingProducts[0]?.variants?.[0] || topProducts[0]?.variants?.[0];
   const samplePrice = Number(sampleRefVariant?.salePrice || 599);
@@ -239,7 +244,8 @@ const Products = () => {
             <div style={styles.dsL}>Profit Data Accuracy</div>
             <div style={styles.dsVG}>{accuracyPercent}%</div>
             <div style={styles.dsS}>
-              {filledProductsCount} of {topProducts.length || 20} top products filled
+              {filledProductsCount} of {topProducts.length || 20} top products
+              filled
             </div>
           </div>
           <div style={styles.ds}>
@@ -253,7 +259,7 @@ const Products = () => {
           <div style={styles.storePill}>
             <div style={styles.spAv}>A</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={styles.spNm}>atlance-clothing</div>
+              <div style={styles.spNm}>my-shopify.com</div>
             </div>
             <div style={styles.spDot}></div>
           </div>
@@ -293,8 +299,8 @@ const Products = () => {
                     accuracyPercent >= 80
                       ? "#00c853"
                       : accuracyPercent >= 30
-                      ? "#f5a623"
-                      : "#ff3d5a",
+                        ? "#f5a623"
+                        : "#ff3d5a",
                 }}
               >
                 {accuracyPercent}%
@@ -309,8 +315,8 @@ const Products = () => {
                     accuracyPercent >= 80
                       ? "#00c853"
                       : accuracyPercent >= 30
-                      ? "#f5a623"
-                      : "#ff3d5a",
+                        ? "#f5a623"
+                        : "#ff3d5a",
                 }}
               ></div>
             </div>
@@ -372,7 +378,7 @@ const Products = () => {
                   const revShare =
                     totalRevenue > 0
                       ? Math.round(
-                          (Number(product.revenue || 0) / totalRevenue) * 100
+                          (Number(product.revenue || 0) / totalRevenue) * 100,
                         )
                       : 0;
 
@@ -462,7 +468,9 @@ const Products = () => {
                         {hasMultipleVariants ? (
                           <button
                             type="button"
-                            onClick={() => toggleProductExpand(product.productId)}
+                            onClick={() =>
+                              toggleProductExpand(product.productId)
+                            }
                             style={styles.arrowBtn}
                             title={
                               isExpanded
@@ -497,7 +505,8 @@ const Products = () => {
 
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <span style={styles.variantTitle}>
-                                    {variant.variantName || `Variant ${vIdx + 1}`}
+                                    {variant.variantName ||
+                                      `Variant ${vIdx + 1}`}
                                   </span>
                                 </div>
 
@@ -521,7 +530,7 @@ const Products = () => {
                                     onChange={(e) =>
                                       handleVariantCostChange(
                                         variant.variantId,
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     style={{
@@ -582,8 +591,7 @@ const Products = () => {
                 type="button"
                 style={{
                   ...styles.btnG,
-                  opacity:
-                    filledProductsCount === 0 || isSaving ? 0.5 : 1,
+                  opacity: filledProductsCount === 0 || isSaving ? 0.5 : 1,
                   cursor:
                     filledProductsCount === 0 || isSaving
                       ? "not-allowed"
@@ -639,9 +647,9 @@ const Products = () => {
                     lineHeight: 1.6,
                   }}
                 >
-                  Remaining products drive only {100 - topRevenuePercent}% of your
-                  revenue. Pick your approximate cost % — one click applies to
-                  all of them.
+                  Remaining products drive only {100 - topRevenuePercent}% of
+                  your revenue. Pick your approximate cost % — one click applies
+                  to all of them.
                 </p>
 
                 {/* % Preset Cards Grid */}
@@ -754,11 +762,7 @@ const Products = () => {
 
           {/* ── FOOTER: SKIP LINK ── */}
           <div style={styles.footerRow}>
-            <button
-              type="button"
-              style={styles.btnSkip}
-              onClick={handleSkip}
-            >
+            <button type="button" style={styles.btnSkip} onClick={handleSkip}>
               Skip — add COGS later
             </button>
             <span style={{ fontSize: "11px", color: "#3a5040" }}>
