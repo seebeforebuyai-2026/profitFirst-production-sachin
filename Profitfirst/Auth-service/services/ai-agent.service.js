@@ -50,7 +50,7 @@ class AIAgentService {
 
       // 🟢 STEP 1: INITIAL ANALYSIS (Non-Streaming)
       const initialResponse = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         messages,
         tools: this.getToolDefinitions(),
         tool_choice: "auto",
@@ -98,7 +98,7 @@ class AIAgentService {
 
         // 🟢 STEP 3: FINAL SYNTHESIS (Streaming)
         const stream = await groq.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           messages,
           stream: true,
           temperature: 0.2,
@@ -109,7 +109,7 @@ class AIAgentService {
 
       // 🟢 STEP 4: NO TOOL REQUIRED
       const stream = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         messages: [systemMessage, ...limitedHistory, { role: "user", content: userMessage }],
         stream: true,
         temperature: 0.5,
