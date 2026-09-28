@@ -85,7 +85,7 @@ axiosInstance.interceptors.response.use(
           const hasToken = !!(
             localStorage.getItem("accessToken") || localStorage.getItem("token")
           );
-          const isAlreadyOnLogin = window.location.pathname === "/login";
+          const isAlreadyOnLogin = window.location.pathname === "/";
 
           if (hasToken && !isAlreadyOnLogin) {
             logout();

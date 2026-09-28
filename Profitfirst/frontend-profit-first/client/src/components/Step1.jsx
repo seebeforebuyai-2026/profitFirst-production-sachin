@@ -70,7 +70,7 @@ const Step1 = ({ onComplete }) => {
           toast.error("Your session has expired. Please login again.");
           setTimeout(() => {
             localStorage.clear();
-            window.location.href = '/login';
+            window.location.href = '/';
           }, 2000);
           return;
         }
@@ -80,7 +80,7 @@ const Step1 = ({ onComplete }) => {
     } else {
       toast.error("No access token found. Please login again.");
       setTimeout(() => {
-        window.location.href = '/login';
+        window.location.href = '/';
       }, 2000);
       return;
     }
@@ -139,7 +139,7 @@ const Step1 = ({ onComplete }) => {
         toast.error(errorMessage);
         setTimeout(() => {
           localStorage.clear();
-          window.location.href = '/login';
+          window.location.href = '/';
         }, 2000);
         return;
       }
@@ -157,7 +157,7 @@ const Step1 = ({ onComplete }) => {
             toast.error(errorMessage);
             setTimeout(() => {
               localStorage.clear();
-              window.location.href = '/login';
+              window.location.href = '/';
             }, 2000);
             return;
           case 404:

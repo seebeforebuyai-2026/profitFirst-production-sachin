@@ -290,9 +290,7 @@ const Dashboard = () => {
             disabled={isRefreshing}
             style={{
               ...styles.btnSync,
-              background: "transparent",
               border: "1px solid var(--bd2)",
-              color: "var(--t1)",
             }}
           >
             Process 1 Year Data

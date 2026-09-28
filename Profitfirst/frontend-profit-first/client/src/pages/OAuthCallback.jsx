@@ -60,7 +60,7 @@ const OAuthCallback = () => {
           console.error('Failed to parse OAuth tokens from hash:', error);
           toast.error('Failed to process authentication data');
           setStatus("error");
-          setTimeout(() => navigate("/login"), 3000);
+          setTimeout(() => navigate("/"), 3000);
           return;
         }
       }
@@ -74,14 +74,14 @@ const OAuthCallback = () => {
         const errorMsg = errorDescription || error;
         toast.error(`OAuth error: ${errorMsg}`);
         setStatus("error");
-        setTimeout(() => navigate("/login"), 3000);
+        setTimeout(() => navigate("/"), 3000);
         return;
       }
 
       if (!code) {
         toast.error("No authorization code received");
         setStatus("error");
-        setTimeout(() => navigate("/login"), 3000);
+        setTimeout(() => navigate("/"), 3000);
         return;
       }
 
@@ -97,7 +97,7 @@ const OAuthCallback = () => {
         console.error("OAuth callback error:", error);
         toast.error("OAuth authentication failed. Please try again.");
         setStatus("error");
-        setTimeout(() => navigate("/login"), 3000);
+        setTimeout(() => navigate("/"), 3000);
       }
     };
 

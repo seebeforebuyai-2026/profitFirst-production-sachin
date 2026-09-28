@@ -221,7 +221,7 @@ function AppWrapper() {
               }
 
               // No authentication, redirect to login
-              return <Navigate to="/login" replace />;
+              return <Navigate to="/" replace />;
             })()}
           />
           <Route
@@ -245,7 +245,7 @@ function AppWrapper() {
               }
 
               // No authentication, redirect to login
-              return <Navigate to="/login" replace />;
+              return <Navigate to="/" replace />;
             })()}
           >
             <Route index element={<Dashboard />} />

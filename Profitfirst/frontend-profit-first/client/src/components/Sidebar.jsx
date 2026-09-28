@@ -29,7 +29,7 @@ const Sidebar = ({ isLocked = false }) => {
 
   const handleLogout = () => {
     localStorage.clear();
-    navigate("/login");
+    navigate("/");
   };
 
   return (

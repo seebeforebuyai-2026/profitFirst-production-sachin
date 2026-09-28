@@ -309,7 +309,7 @@ const ForgotPassword = () => {
       
       // Navigate to login after short delay
       setTimeout(() => {
-        navigate("/login", {
+        navigate("/", {
           state: {
             message: "Password reset successfully. Please login with your new password."
           }
@@ -445,7 +445,7 @@ const ForgotPassword = () => {
         <button
           onClick={() => {
             if (step === 1) {
-              navigate("/login");
+              navigate("/");
             } else {
               // Going back from step 3 to step 2 requires re-verification
               if (step === 3) {
