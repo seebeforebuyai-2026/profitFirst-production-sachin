@@ -459,32 +459,7 @@ class ProductsService {
         }),
       );
 
-      // 🟢 4. RECALCULATION TRIGGER: Naye COGS ke sath orders aur summary recalculate karo
-      try {
-        const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
-        const { SendMessageCommand } = require("@aws-sdk/client-sqs");
-
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        await sqsClient.send(
-          new SendMessageCommand({
-            QueueUrl: shopifyQueueUrl,
-            MessageBody: JSON.stringify({
-              type: "SHOPIFY_SYNC",
-              merchantId: merchantId,
-              sinceDate: thirtyDaysAgo.toISOString(),
-              mode: "shopify_onboarding", // 👈 Direct to summary bina extra loops ke
-              affectedDates: [],
-            }),
-          }),
-        );
-        console.log(
-          `📡 Orders & Summary recalculation triggered for ${merchantId}`,
-        );
-      } catch (sqsErr) {
-        console.warn("SQS recalculate warning:", sqsErr.message);
-      }
+      
 
       return { success: true };
     } catch (error) {
