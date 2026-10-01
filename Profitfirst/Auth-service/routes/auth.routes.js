@@ -1,14 +1,22 @@
 /**
  * Authentication Routes
- * 
+ *
  * Defines all authentication-related API endpoints
  * Includes both public routes (signup, login) and protected routes (profile, logout)
  */
 
-const express = require('express');
-const authController = require('../controllers/auth.controller');
-const { validateSignup, validateLogin, validateOTP, validateResetOTP, validateEmail, validateNewPassword, validatePassword } = require('../middleware/validation.middleware');
-const { authenticateToken } = require('../middleware/auth.middleware');
+const express = require("express");
+const authController = require("../controllers/auth.controller");
+const {
+  validateSignup,
+  validateLogin,
+  validateOTP,
+  validateResetOTP,
+  validateEmail,
+  validateNewPassword,
+  validatePassword,
+} = require("../middleware/validation.middleware");
+const { authenticateToken } = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
@@ -17,65 +25,80 @@ const router = express.Router();
 // ============================================
 
 // User registration with email verification
-router.post('/signup', validateSignup, authController.signup);
+router.post("/signup", validateSignup, authController.signup);
 
 // Verify email with OTP code sent to user's email
-router.post('/verify-otp', validateOTP, authController.verifyOTP);
+router.post("/verify-otp", validateOTP, authController.verifyOTP);
 
 // Resend OTP code if user didn't receive it
-router.post('/resend-otp', validateEmail, authController.resendOTP);
+router.post("/resend-otp", validateEmail, authController.resendOTP);
 
 // Check user status (exists, verified, etc.)
-router.post('/check-user', validateEmail, authController.checkUserStatus);
+router.post("/check-user", validateEmail, authController.checkUserStatus);
 
 // User login - returns JWT tokens
-router.post('/login', validateLogin, authController.login);
+router.post("/login", validateLogin, authController.login);
 
 // GET handler for login endpoint (for browser access)
-router.get('/login', (req, res) => {
+router.get("/login", (req, res) => {
   res.status(200).json({
-    message: 'Login endpoint',
-    method: 'POST',
-    endpoint: '/api/auth/login',
+    message: "Login endpoint",
+    method: "POST",
+    endpoint: "/api/auth/login",
     body: {
-      email: 'user@example.com',
-      password: 'password'
-    }
+      email: "user@example.com",
+      password: "password",
+    },
   });
 });
 
 // Refresh access token using refresh token
-router.post('/refresh-token', authController.refreshToken);
+router.post("/refresh-token", authController.refreshToken);
 
 // Initiate password reset - sends code to email
-router.post('/forgot-password', validateEmail, authController.forgotPassword);
+router.post("/forgot-password", validateEmail, authController.forgotPassword);
 
 // Verify password reset OTP code (returns access token)
-router.post('/verify-reset-otp', validateResetOTP, authController.verifyResetOTP);
+router.post(
+  "/verify-reset-otp",
+  validateResetOTP,
+  authController.verifyResetOTP,
+);
 
 // Resend password reset OTP
-router.post('/resend-reset-otp', validateEmail, authController.resendResetOTP);
+router.post("/resend-reset-otp", validateEmail, authController.resendResetOTP);
 
 // Reset password with access token from OTP verification
-router.post('/reset-password', validateNewPassword, authController.resetPassword);
+router.post(
+  "/reset-password",
+  validateNewPassword,
+  authController.resetPassword,
+);
 
 // Complete password reset with code from email (legacy - combines verify + reset)
-router.post('/confirm-forgot-password', validatePassword, authController.confirmForgotPassword);
+router.post(
+  "/confirm-forgot-password",
+  validatePassword,
+  authController.confirmForgotPassword,
+);
 
 // ============================================
 // PROTECTED ROUTES (Require authentication)
 // ============================================
 
 // Logout user and invalidate all tokens
-router.post('/logout', authenticateToken, authController.logout);
+router.post("/logout", authenticateToken, authController.logout);
 
 // Change password for authenticated user
-router.post('/change-password', authenticateToken, validateNewPassword, authController.changePassword);
+router.post(
+  "/change-password",
+  authenticateToken,
+  validateNewPassword,
+  authController.changePassword,
+);
 
 // Get current user profile information
-router.get('/profile', authenticateToken, authController.getProfile);
-
-
+router.get("/profile", authenticateToken, authController.getProfile);
 
 // ============================================
 // SHOPIFY SSO ROUTES (Zero Signup Auto Login)
@@ -83,11 +106,10 @@ router.get('/profile', authenticateToken, authController.getProfile);
 
 // Shopify App EC2 → Auth-Service: store check + SSO token generate karo
 // Security: x-service-secret header required (not public internet)
-router.post('/shopify-sso', authController.shopifySsoLogin);
+router.post("/shopify-sso", authController.shopifySsoLogin);
 
 // React Frontend → Auth-Service: SSO token verify karo + Cognito tokens lo
-router.post('/sso-verify', authController.verifySsoToken);
-
+router.post("/sso-verify", authController.verifySsoToken);
 
 // ============================================
 // OAUTH ROUTES (Social Login)
@@ -95,12 +117,16 @@ router.post('/sso-verify', authController.verifySsoToken);
 
 // Get OAuth login URL for social providers (Google, Facebook, etc.)
 // Supports both backend (code) and frontend (token) flows
-router.get('/oauth/url', authController.getOAuthUrl);
+router.get("/oauth/url", authController.getOAuthUrl);
 
 // OAuth callback - handles redirect from Cognito Hosted UI (backend flow)
-router.get('/oauth/callback', authController.handleOAuthCallback);
+router.get("/oauth/callback", authController.handleOAuthCallback);
 
 // Verify OAuth tokens - for frontend OIDC flow (validates and creates user)
-router.post('/oauth/verify', authController.verifyOAuthTokens);
+router.post("/oauth/verify", authController.verifyOAuthTokens);
+
+// Mobile App Passwordless Auth
+router.post("/send-otp", authController.sendLoginOTP);
+router.post("/verify-otp-login", authController.verifyLoginOTP);
 
 module.exports = router;

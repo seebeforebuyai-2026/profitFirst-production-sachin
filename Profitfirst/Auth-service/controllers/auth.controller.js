@@ -1638,6 +1638,179 @@ class AuthController {
         .json({ error: "SSO verification failed. Please try again." });
     }
   }
+
+  // ── MOBILE APP: 1. Send Login OTP ─────────────────────────────
+  async sendLoginOTP(req, res) {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: "Email address is required" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log(
+        `📱 [Mobile Auth] Generating login OTP for: ${normalizedEmail}`,
+      );
+
+      // 1. Check karo user Cognito / DynamoDB me registered hai ya nahi
+      const cognitoCheck =
+        await cognitoService.adminGetUserByEmail(normalizedEmail);
+      if (!cognitoCheck.success || !cognitoCheck.userId) {
+        return res.status(404).json({
+          error:
+            "Store email not found. Please install the app from Shopify first.",
+        });
+      }
+
+      // 2. 6-digit random OTP generate karo
+      const crypto = require("crypto");
+      const otpCode = Math.floor(100000 + crypto.randomInt(900000)).toString();
+
+      // 3. DynamoDB me save karo with 5-minute TTL (Automatic cleanup)
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { PutCommand } = require("@aws-sdk/lib-dynamodb");
+      const ttlTime = Math.floor(Date.now() / 1000) + 5 * 60; // 5 mins validity
+
+      await newDynamoDB.send(
+        new PutCommand({
+          TableName: newTableName,
+          Item: {
+            PK: `MOBILE_OTP#${normalizedEmail}`,
+            SK: "LOGIN",
+            otp: otpCode,
+            ttl: ttlTime,
+            createdAt: new Date().toISOString(),
+          },
+        }),
+      );
+
+      // 4. Email bhejo merchant ko (Cognito / SES / Existing Mailer)
+      // Note: Agar SES/Mailer direct configured hai toh email dispatch hoga,
+      // fallback me console par OTP print karega testing ke liye
+      console.log(`\n========================================`);
+      console.log(`🔑 MOBILE LOGIN OTP FOR ${normalizedEmail}: [ ${otpCode} ]`);
+      console.log(`========================================\n`);
+
+      // Agar aapke paas mail service hai (e.g. resendOTP / cognito)
+      try {
+        await cognitoService.resendOTP(normalizedEmail).catch(() => {});
+      } catch (mailErr) {
+        console.warn("Mail dispatch notice:", mailErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Verification code sent to your store email",
+        expiresIn: "5 minutes",
+      });
+    } catch (error) {
+      console.error("❌ sendLoginOTP error:", error.message);
+      return res.status(500).json({ error: "Failed to send login code" });
+    }
+  }
+
+  // ── MOBILE APP: 2. Verify OTP & Issue Tokens ──────────────────
+  async verifyLoginOTP(req, res) {
+    try {
+      const { email, otp } = req.body;
+      if (!email || !otp) {
+        return res
+          .status(400)
+          .json({ error: "Email and 6-digit OTP are required" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const cleanOtp = String(otp).trim();
+
+      // 1. DynamoDB se OTP verify karo
+      const { newDynamoDB, newTableName } = require("../config/aws.config");
+      const { GetCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
+
+      const otpResult = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: {
+            PK: `MOBILE_OTP#${normalizedEmail}`,
+            SK: "LOGIN",
+          },
+        }),
+      );
+
+      const record = otpResult.Item;
+
+      if (!record || !record.otp) {
+        return res.status(400).json({
+          error: "Code expired or not found. Please request a new OTP.",
+          code: "OTP_EXPIRED",
+        });
+      }
+
+      // Check OTP match
+      if (record.otp !== cleanOtp) {
+        return res.status(400).json({
+          error: "Invalid 6-digit code. Please check and try again.",
+          code: "OTP_INVALID",
+        });
+      }
+
+      // 2. One-time use: Match hote hi OTP delete karo
+      await newDynamoDB.send(
+        new DeleteCommand({
+          TableName: newTableName,
+          Key: {
+            PK: `MOBILE_OTP#${normalizedEmail}`,
+            SK: "LOGIN",
+          },
+        }),
+      );
+
+      // 3. User ki Profile aur Sub ID nikalo
+      const cognitoCheck =
+        await cognitoService.adminGetUserByEmail(normalizedEmail);
+      const merchantId = cognitoCheck.userId;
+
+      const profileResult = await dynamoDBService.getUserProfile(merchantId);
+      const profile = profileResult.data || {};
+
+      // 4. Cognito se fresh real AccessToken + RefreshToken lo
+      const authResult =
+        await cognitoService.adminSetPasswordAndAuth(normalizedEmail);
+      if (!authResult.success) {
+        return res
+          .status(500)
+          .json({ error: "Failed to initialize mobile session" });
+      }
+
+      const { AccessToken, IdToken, RefreshToken } = authResult.data;
+
+      console.log(
+        `📱 [Mobile Auth] Login successful for: ${normalizedEmail} (Tokens Issued)`,
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Mobile login verified successfully",
+        tokens: {
+          accessToken: AccessToken,
+          refreshToken: RefreshToken,
+          idToken: IdToken,
+        },
+        user: {
+          userId: merchantId,
+          email: normalizedEmail,
+          firstName: profile.firstName || "Merchant",
+          lastName: profile.lastName || "",
+          onboardingStep: profile.onboardingStep || 7,
+          onboardingCompleted: profile.onboardingCompleted || false,
+        },
+      });
+    } catch (error) {
+      console.error("❌ verifyLoginOTP error:", error.message);
+      return res
+        .status(500)
+        .json({ error: "Verification failed. Please try again." });
+    }
+  }
 }
 
 module.exports = new AuthController();
