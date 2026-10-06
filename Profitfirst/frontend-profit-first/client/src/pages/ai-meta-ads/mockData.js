@@ -1,0 +1,16 @@
+
+const MOCK_OBJECTIVES = {
+
+}
+
+const MOCK_RECOMMENDED_PRODUCTS ={
+
+}
+
+const MOCK_AI_COPIES={
+
+}
+
+const MOCK_CAMPAIGNS_TABLE={
+    
+}
