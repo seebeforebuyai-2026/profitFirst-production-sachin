@@ -1697,7 +1697,7 @@ class AuthController {
 
         const sesResponse = await sesClient.send(
           new SendEmailCommand({
-            Source: "profitfirstoffice@gmail.com", // ✅ Verified SES Email
+            Source: "shubham@profitfirst.co.in", // ✅ Verified SES Email
             Destination: { ToAddresses: [normalizedEmail] }, // ✅ Fixed variable name!
             Message: {
               Subject: { Data: `ProfitFirst Login Code: ${otpCode}` },
