@@ -1684,20 +1684,49 @@ class AuthController {
         }),
       );
 
-      // 4. Email bhejo merchant ko (Cognito / SES / Existing Mailer)
-      // Note: Agar SES/Mailer direct configured hai toh email dispatch hoga,
-      // fallback me console par OTP print karega testing ke liye
       console.log(`\n========================================`);
       console.log(`🔑 MOBILE LOGIN OTP FOR ${normalizedEmail}: [ ${otpCode} ]`);
       console.log(`========================================\n`);
 
-      // Agar aapke paas mail service hai (e.g. resendOTP / cognito)
+      // 4. Send Email via AWS SES (Uses your existing AWS credentials)
       try {
-        await cognitoService.resendOTP(normalizedEmail).catch(() => {});
+        const { SESClient, SendEmailCommand } = require("@aws-sdk/client-ses");
+        const sesClient = new SESClient({
+          region: process.env.AWS_REGION || "ap-south-1",
+        });
+
+        const sesResponse = await sesClient.send(
+          new SendEmailCommand({
+            Source: "profitfirstoffice@gmail.com", // ✅ Verified SES Email
+            Destination: { ToAddresses: [normalizedEmail] }, // ✅ Fixed variable name!
+            Message: {
+              Subject: { Data: `ProfitFirst Login Code: ${otpCode}` },
+              Body: {
+                Text: {
+                  Data: `Your 6-digit login OTP is: ${otpCode}. Valid for 5 minutes.\n\nIf you did not request this, please ignore this email.`,
+                },
+                Html: {
+                  Data: `
+                    <h2>ProfitFirst Analytics</h2>
+                    <p>Your login OTP code is:</p>
+                    <h1 style="color: #00d46a; letter-spacing: 4px;">${otpCode}</h1>
+                    <p>This code is valid for <strong>5 minutes</strong>.</p>
+                    <p style="color: gray; font-size: 12px;">
+                      If you did not request this, please ignore this email.
+                    </p>
+                  `,
+                },
+              },
+            },
+          }),
+        );
+        console.log("✅ SES Email sent! MessageId:", sesResponse.MessageId);
       } catch (mailErr) {
-        console.warn("Mail dispatch notice:", mailErr.message);
+        console.error("❌ SES Email failed to dispatch:", mailErr.message);
+        // Note: Agar SES fail bhi ho, testing ke liye upar console log me OTP print ho chuka hai!
       }
 
+      // 5. Client ko Clean Response bhejo
       return res.status(200).json({
         success: true,
         message: "Verification code sent to your store email",
