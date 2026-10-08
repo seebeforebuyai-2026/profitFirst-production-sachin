@@ -1422,7 +1422,7 @@ class AuthController {
         });
 
         // e. INTEGRATION#SHOPIFY record banao (with encrypted token)
-        const encryptionService = require("../services/encryption.service");
+        const encryptionService = require("../utils/encryption");
         const encryptedToken = req.body.accessToken
           ? encryptionService.encrypt(req.body.accessToken)
           : "";
@@ -1490,6 +1490,37 @@ class AuthController {
 
         // Single call — sab kuch ek saath
         await dynamoDBService.updateUserProfileOnboarding(merchantId, updates);
+
+        // Returning user ka INTEGRATION#SHOPIFY update/create karo
+        // Agar pehli install fail thi toh record nahi hoga — upsert karo
+        const encryptionService = require("../utils/encryption");
+        const encryptedToken = req.body.accessToken
+          ? encryptionService.encrypt(req.body.accessToken)
+          : "";
+
+        await newDynamoDB.send(
+          new PutCommand({
+            TableName: newTableName,
+            Item: {
+              PK: `MERCHANT#${merchantId}`,
+              SK: "INTEGRATION#SHOPIFY",
+              entityType: "INTEGRATION",
+              platform: "SHOPIFY",
+              shopDomain: shop,
+              shopifyStore: shop,
+              accessToken:
+                encryptedToken || existingProfile.shopifyAccessToken || "",
+              appInstalled: true,
+              shopName: shopInfo.name,
+              currency: shopInfo.currency,
+              timezone: shopInfo.timezone,
+              orderSummary: orderSummary || {},
+              connectedAt:
+                existingProfile.connectedAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+        );
       }
 
       // 3. SSO JWT token generate karo (60 seconds valid, one-time use)
