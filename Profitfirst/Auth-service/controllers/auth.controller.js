@@ -1480,11 +1480,16 @@ class AuthController {
         merchantId = existingProfile.userId;
         onboardingCompleted = existingProfile.onboardingCompleted || false;
 
-        // 🚨 CRITICAL: onboardingStep ko TOUCH BHI MAT KARO!
-        // User jis step par tha, wo step safe rahega!
-        await dynamoDBService.updateUserProfileOnboarding(merchantId, {
-          appInstalled: true,
-        });
+        const currentStep = existingProfile.onboardingStep || 1;
+        const updates = { appInstalled: true };
+
+        if (currentStep === 1) {
+          updates.onboardingStep = 2;
+          updates.shopifyConnected = true;
+        }
+
+        // Single call — sab kuch ek saath
+        await dynamoDBService.updateUserProfileOnboarding(merchantId, updates);
       }
 
       // 3. SSO JWT token generate karo (60 seconds valid, one-time use)

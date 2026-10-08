@@ -49,7 +49,7 @@ const Onboarding = () => {
         const step = response.data.step;
         const isCompleted = response.data.isCompleted;
 
-        if (step === 2) {
+        if (step === 1 || step === 2) {
           // Shopify connected — ShopifyOnboarding screen pe bhejo
           navigate("/onboarding/shopify", { replace: true });
         } else if (step === 5) {
