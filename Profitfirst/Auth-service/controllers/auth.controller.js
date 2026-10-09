@@ -1787,47 +1787,56 @@ class AuthController {
       const normalizedEmail = email.toLowerCase().trim();
       const cleanOtp = String(otp).trim();
 
-      // 1. DynamoDB se OTP verify karo
-      const { newDynamoDB, newTableName } = require("../config/aws.config");
-      const { GetCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
+      const reviewerEmail = "seebeforebuy.ai@gmail.com".trim().toLowerCase();
+      const reviewerOtp = "123456".trim();
+      const isReviewerOtp =
+        normalizedEmail === reviewerEmail && cleanOtp === reviewerOtp;
 
-      const otpResult = await newDynamoDB.send(
-        new GetCommand({
-          TableName: newTableName,
-          Key: {
-            PK: `MOBILE_OTP#${normalizedEmail}`,
-            SK: "LOGIN",
-          },
-        }),
-      );
+      if (isReviewerOtp) {
+        console.log("🔓 Configured Play reviewer OTP used");
+      } else {
+        // 1. DynamoDB se OTP verify karo
+        const { newDynamoDB, newTableName } = require("../config/aws.config");
+        const { GetCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 
-      const record = otpResult.Item;
+        const otpResult = await newDynamoDB.send(
+          new GetCommand({
+            TableName: newTableName,
+            Key: {
+              PK: `MOBILE_OTP#${normalizedEmail}`,
+              SK: "LOGIN",
+            },
+          }),
+        );
 
-      if (!record || !record.otp) {
-        return res.status(400).json({
-          error: "Code expired or not found. Please request a new OTP.",
-          code: "OTP_EXPIRED",
-        });
+        const record = otpResult.Item;
+
+        if (!record || !record.otp) {
+          return res.status(400).json({
+            error: "Code expired or not found. Please request a new OTP.",
+            code: "OTP_EXPIRED",
+          });
+        }
+
+        // Check OTP match
+        if (record.otp !== cleanOtp) {
+          return res.status(400).json({
+            error: "Invalid 6-digit code. Please check and try again.",
+            code: "OTP_INVALID",
+          });
+        }
+
+        // 2. One-time use: Match hote hi OTP delete karo
+        await newDynamoDB.send(
+          new DeleteCommand({
+            TableName: newTableName,
+            Key: {
+              PK: `MOBILE_OTP#${normalizedEmail}`,
+              SK: "LOGIN",
+            },
+          }),
+        );
       }
-
-      // Check OTP match
-      if (record.otp !== cleanOtp) {
-        return res.status(400).json({
-          error: "Invalid 6-digit code. Please check and try again.",
-          code: "OTP_INVALID",
-        });
-      }
-
-      // 2. One-time use: Match hote hi OTP delete karo
-      await newDynamoDB.send(
-        new DeleteCommand({
-          TableName: newTableName,
-          Key: {
-            PK: `MOBILE_OTP#${normalizedEmail}`,
-            SK: "LOGIN",
-          },
-        }),
-      );
 
       // 3. User ki Profile aur Sub ID nikalo
       const cognitoCheck =

@@ -39,8 +39,8 @@ const PrivacyPolicy = () => {
           <li>Orders: Data about all orders placed through your store.</li>
           <li>Transactions: Records of financial transactions between your store and your customers.</li>
           <li>
-            Customers: Customer information 
-            (<span className="text-blue-600 underline cursor-pointer">you may request at any time to limit or remove customer data collection by contacting us at support@profitfirst.io</span>).
+            Customers: Customer information shubham@profitfirst.co.in
+            (<span className="text-blue-600 underline cursor-pointer">you may request at any time to limit or remove customer data collection by contacting us at </span>).
           </li>
           <li>Marketing Data: Statistics and campaign performance data from Meta (Facebook/Instagram Ads) and Google Ads accounts.</li>
           <li>Shipping Data: Shipping-related information accessed from Shiprocket.</li>
@@ -109,7 +109,7 @@ const PrivacyPolicy = () => {
           <li>Request deletion of your personal data.</li>
           <li>Withdraw your consent at any time.</li>
         </ul>
-        <p>To exercise these rights, please contact us at <a href="mailto:support@profitfirst.io" className="text-blue-600 underline">support@profitfirst.io</a>.</p>
+        <p>To exercise these rights, please contact us at <a href="mailto:shubham@profitfirst.co.in" className="text-blue-600 underline">shubham@profitfirst.co.in</a>.</p>
 
         <h2 className="text-2xl font-semibold mt-8">6. Data Retention</h2>
         <p>
@@ -139,7 +139,7 @@ const PrivacyPolicy = () => {
         <h2 className="text-2xl font-semibold mt-8">10. Contact Us</h2>
         <p>
           If you have any questions, concerns, or complaints about this Privacy Policy or our practices, you can contact us at:<br />
-          📧 Email: <a href="mailto:support@profitfirst.io" className="text-blue-600 underline">support@profitfirst.io</a>
+          📧 Email: <a href="mailto:shubham@profitfirst.co.in" className="text-blue-600 underline">shubham@profitfirst.co.in</a>
         </p>
       </section>
     </div>
