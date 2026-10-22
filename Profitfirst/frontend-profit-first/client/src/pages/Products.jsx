@@ -627,7 +627,7 @@ const Products = () => {
                     <span style={styles.quickTag}>Quick estimate</span>
                   </div>
                   <p style={styles.secSub}>
-                    Pick approximate cost % for remaining products
+                    Choose an approximate cost percentage for the remaining products.
                   </p>
                 </div>
               </div>

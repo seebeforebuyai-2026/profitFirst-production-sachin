@@ -325,7 +325,7 @@ const Step4 = ({ onComplete }) => {
               style={styles.btnSkip}
               onClick={handleSkip}
             >
-              I don't use Shiprocket — skip this →
+              I Will Do this Later — skip this →
             </button>
 
             {/* Coming soon chips */}
