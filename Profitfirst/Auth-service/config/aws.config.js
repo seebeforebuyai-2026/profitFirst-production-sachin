@@ -32,6 +32,7 @@ module.exports = {
   shopifyQueueUrl: process.env.SHOPIFY_QUEUE_URL,
   metaQueueUrl: process.env.META_QUEUE_URL,
   shiprocketQueueUrl: process.env.SHIPROCKET_QUEUE_URL,
+  delhiveryQueueUrl: process.env.DELHIVERY_QUEUE_URL,
   summaryQueueUrl: process.env.SUMMARY_QUEUE_URL,
   productQueueUrl: process.env.PRODUCT_QUEUE_URL,
   s3BucketName: process.env.S3_BUCKET_NAME,

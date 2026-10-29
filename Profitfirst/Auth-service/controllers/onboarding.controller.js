@@ -334,26 +334,47 @@ class OnboardingController {
         const {
           sqsClient,
           shiprocketQueueUrl,
+          delhiveryQueueUrl,
         } = require("../config/aws.config");
         const { SendMessageCommand } = require("@aws-sdk/client-sqs");
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        await sqsClient.send(
-          new SendMessageCommand({
-            QueueUrl: shiprocketQueueUrl,
-            MessageBody: JSON.stringify({
-              type: "SHIPROCKET_SYNC",
-              merchantId,
-              sinceDate: thirtyDaysAgo.toISOString(),
-              mode: "shiprocket_onboarding",
-              stage: "collect",
-              affectedDates: [],
+       if (platform === "Shiprocket") {
+          // ── 1. SHIPROCKET FLOW (Untouched & Safe) ──
+          await sqsClient.send(
+            new SendMessageCommand({
+              QueueUrl: shiprocketQueueUrl,
+              MessageBody: JSON.stringify({
+                type: "SHIPROCKET_SYNC",
+                merchantId,
+                sinceDate: sinceDateISO,
+                mode: "shiprocket_onboarding",
+                stage: "collect",
+                affectedDates: [],
+              }),
             }),
-          }),
-        );
-        console.log(`📡 Shiprocket sync triggered for ${merchantId}`);
+          );
+          console.log(`📡 Shiprocket sync triggered for ${merchantId}`);
+
+        } else if (platform === "Dilevery") {
+          // ── 2. DELHIVERY FLOW (Dedicated Queue & Worker) ──
+          await sqsClient.send(
+            new SendMessageCommand({
+              QueueUrl: delhiveryQueueUrl,
+              MessageBody: JSON.stringify({
+                type: "DELHIVERY_SYNC",
+                merchantId,
+                sinceDate: sinceDateISO,
+                mode: "delhivery_onboarding",
+                affectedDates: [],
+              }),
+            }),
+          );
+          console.log(`📡 Delhivery sync triggered for ${merchantId}`);
+        }
+
       } catch (sqsErr) {
         console.error(
           `⚠️ Shiprocket SQS trigger failed (non-critical): ${sqsErr.message}`,
@@ -596,19 +617,32 @@ class OnboardingController {
     }
   }
 
-  async getShiprocketInsight(req, res) {
+ async getShippingInsight(req, res) {
     try {
       const merchantId = req.user.userId;
 
+      console.log(`\n📊 Shipping Insight: fetching for merchant=${merchantId}`);
+
+      // 1. Check karo merchant ne kaunsa shipping partner connect kiya hai
       const { newDynamoDB, newTableName } = require("../config/aws.config");
       const { GetCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 
-      // 1. Sync status check
+      const dlvCheck = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#DILEVERY" },
+        })
+      );
+
+      const isDelhivery = !!dlvCheck.Item;
+      const syncSK = isDelhivery ? "SYNC#DILEVERY" : "SYNC#SHIPROCKET";
+
+      // 2. Sahi sync record ka status check karo
       const syncRes = await newDynamoDB.send(
         new GetCommand({
           TableName: newTableName,
-          Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#SHIPROCKET" },
-        }),
+          Key: { PK: `MERCHANT#${merchantId}`, SK: syncSK },
+        })
       );
 
       const isCompleted = syncRes.Item?.status === "completed";
@@ -617,13 +651,15 @@ class OnboardingController {
         return res.status(200).json({
           success: true,
           syncStatus: "in_progress",
+          courier: isDelhivery ? "Delhivery" : "Shiprocket",
         });
       }
 
-      // 2. Last 30 days SUMMARY# records se aggregate karo
+      // 3. Last 30 days SUMMARY# records se aggregate karo
       const today = new Date();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(today.getDate() - 30);
+
       const startDate = thirtyDaysAgo.toISOString().split("T")[0];
       const endDate = today.toISOString().split("T")[0];
 
@@ -634,50 +670,37 @@ class OnboardingController {
           ExpressionAttributeValues: {
             ":pk": `MERCHANT#${merchantId}`,
             ":start": `SUMMARY#${startDate}`,
-            ":end": `SUMMARY#${endDate}`,
+            ":end": `SUMMARY#${endDate}#~`,
           },
-        }),
+        })
       );
 
       const items = summaryRes.Items || [];
 
-      const deliveredOrders = items.reduce(
-        (s, d) => s + Number(d.deliveredOrders || 0),
-        0,
-      );
+      const deliveredOrders = items.reduce((s, d) => s + Number(d.deliveredOrders || 0), 0);
       const rtoOrders = items.reduce((s, d) => s + Number(d.rtoOrders || 0), 0);
-      const shippingSpend = items.reduce(
-        (s, d) => s + Number(d.shippingSpend || 0),
-        0,
-      );
+      const shippingSpend = items.reduce((s, d) => s + Number(d.shippingSpend || 0), 0);
       const moneyKept = items.reduce((s, d) => s + Number(d.moneyKept || 0), 0);
-      const rtoHandlingFees = items.reduce(
-        (s, d) => s + Number(d.rtoHandlingFees || 0),
-        0,
-      );
-      const revenueEarned = items.reduce(
-        (s, d) => s + Number(d.revenueEarned || 0),
-        0,
-      );
+      const revenueEarned = items.reduce((s, d) => s + Number(d.revenueEarned || 0), 0);
+
+      console.log(`✅ Shipping Insight ready (${isDelhivery ? "Delhivery" : "Shiprocket"}): delivered=${deliveredOrders}, shipping=${shippingSpend}`);
 
       return res.status(200).json({
         success: true,
         syncStatus: "completed",
+        courier: isDelhivery ? "Delhivery" : "Shiprocket",
         deliveredOrders,
         rtoOrders,
         shippingSpend: Math.round(shippingSpend),
         moneyKept: Math.round(moneyKept),
-        rtoHandlingFees: Math.round(rtoHandlingFees),
         revenueEarned: Math.round(revenueEarned),
       });
+
     } catch (error) {
-      console.error("❌ getShiprocketInsight error:", error.message);
-      return res
-        .status(500)
-        .json({ error: "Failed to fetch Shiprocket insight" });
+      console.error("❌ getShippingInsight error:", error.message);
+      return res.status(500).json({ error: "Failed to fetch shipping insight" });
     }
   }
-
   async setOnboardingStep(req, res) {
     try {
       const merchantId = req.user.userId;

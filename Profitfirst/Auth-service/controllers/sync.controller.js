@@ -1,6 +1,7 @@
 const syncService = require("../services/sync.service");
 const { SendMessageCommand } = require("@aws-sdk/client-sqs");
-const { sqsClient, shopifyQueueUrl } = require("../config/aws.config");
+const { sqsClient, shopifyQueueUrl, shiprocketQueueUrl, delhiveryQueueUrl, newDynamoDB, newTableName } = require('../config/aws.config');
+const { GetCommand } = require('@aws-sdk/lib-dynamodb');
 
 class SyncController {
   async triggerSync(req, res) {

@@ -17,10 +17,10 @@ let isShuttingDown = false;
 const normalize = (name) =>
   name
     ? String(name)
-        .replace(/^R_/i, "")       // strip return prefix  e.g. R_#4067-77946
-        .replace(/^#/, "")          // strip leading #
-        .replace(/-[A-Z]$/i, "")    // strip trailing single-letter suffix e.g. -C
-        .replace(/-\d{5,}$/, "")    // strip trailing Shopify internal ID  e.g. -85624
+        .replace(/^R_/i, "") // strip return prefix  e.g. R_#4067-77946
+        .replace(/^#/, "") // strip leading #
+        .replace(/-[A-Z]$/i, "") // strip trailing single-letter suffix e.g. -C
+        .replace(/-\d{5,}$/, "") // strip trailing Shopify internal ID  e.g. -85624
         .trim()
         .toLowerCase()
     : "";
@@ -57,14 +57,24 @@ const pollQueue = async () => {
 };
 
 const PICKUP_PENDING_STATUSES = [
-  "NEW", "READY_TO_SHIP", "PICKUP_SCHEDULED", "PICKUP_GENERATED", "PICKUP_QUEUED",
-  "LABEL_GENERATED", "MANIFEST_GENERATED", "PICKUP RESCHEDULED", "PICKUP_RESCHEDULED",
-  "AWB_ASSIGNED",  // AWB assigned but not yet picked up
+  "NEW",
+  "READY_TO_SHIP",
+  "PICKUP_SCHEDULED",
+  "PICKUP_GENERATED",
+  "PICKUP_QUEUED",
+  "LABEL_GENERATED",
+  "MANIFEST_GENERATED",
+  "PICKUP RESCHEDULED",
+  "PICKUP_RESCHEDULED",
+  "AWB_ASSIGNED", // AWB assigned but not yet picked up
 ];
 
 // NDR = delivery attempted but failed. Only UNDELIVERED family per SR dashboard.
 const NDR_PENDING_STATUSES = [
-  "UNDELIVERED", "UNDELIVERED_1ST", "UNDELIVERED_2ND", "UNDELIVERED_3RD",
+  "UNDELIVERED",
+  "UNDELIVERED_1ST",
+  "UNDELIVERED_2ND",
+  "UNDELIVERED_3RD",
 ];
 
 // REACHED BACK statuses = RTO per SR dashboard
@@ -78,17 +88,31 @@ const calculateProfitSummaries = async (job) => {
   const { merchantId, affectedDates = [] } = job;
 
   try {
-    // ── GUARD: only run after Shiprocket sync is fully complete ──────
-    // Prevents stale SQS messages from recalculating mid-sync.
-    const syncRes = await newDynamoDB.send(new GetCommand({
-      TableName: newTableName,
-      Key: { PK: `MERCHANT#${merchantId}`, SK: "SYNC#SHIPROCKET" },
-    }));
-    const srStatus = syncRes?.Item?.status;
-    if (srStatus === "in_progress") {
-      console.warn(`⏳ [SummaryWorker] Shiprocket sync still in_progress for ${merchantId}. Skipping — will recalculate after sync finishes.`);
+    // ── GUARD: only run after shipping sync is fully complete ──────
+
+    const shipIntRes = await newDynamoDB.send(
+      new GetCommand({
+        TableName: newTableName,
+        Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#DILEVERY" },
+      }),
+    );
+
+    const shippingSk = shipIntRes.Item ? "SYNC#DILEVERY" : "SYNC#SHIPROCKET";
+
+    const syncRes = await newDynamoDB.send(
+      new GetCommand({
+        TableName: newTableName,
+        Key: { PK: `MERCHANT#${merchantId}`, SK: shippingSk },
+      }),
+    );
+
+
+    const shippingStatus = syncRes?.Item?.status;
+    if (shippingStatus === "in_progress") {
+      console.warn(`⏳ [SummaryWorker] Shipping sync still in_progress for ${merchantId} (${shippingSk}). Skipping.`);
       return;
     }
+
     // ─────────────────────────────────────────────────────────────────
     const profileRes = await newDynamoDB.send(
       new GetCommand({
@@ -125,9 +149,13 @@ const calculateProfitSummaries = async (job) => {
     ]);
 
     // Compact data quality log — one line per merchant, non-blocking
-    const hasSrCreated = shipments.filter(s => s.srCreatedAtIST && !s.isPhantom).length;
-    const totalNonPhantom = shipments.filter(s => !s.isPhantom).length;
-    console.log(`📊 [Summary] ${merchantId} | shipments: ${totalNonPhantom} (phantoms excluded: ${shipments.length - totalNonPhantom}) | srCreatedAtIST: ${hasSrCreated}/${totalNonPhantom}`);
+    const hasSrCreated = shipments.filter(
+      (s) => s.srCreatedAtIST && !s.isPhantom,
+    ).length;
+    const totalNonPhantom = shipments.filter((s) => !s.isPhantom).length;
+    console.log(
+      `📊 [Summary] ${merchantId} | shipments: ${totalNonPhantom} (phantoms excluded: ${shipments.length - totalNonPhantom}) | srCreatedAtIST: ${hasSrCreated}/${totalNonPhantom}`,
+    );
 
     const orderMap = new Map(orders.map((o) => [normalize(o.orderName), o]));
 
@@ -185,11 +213,10 @@ const calculateProfitSummaries = async (job) => {
       //    shipActivityDateIST) because money moves on those dates.
       // ─────────────────────────────────────────────────────────────────────
       shipments.forEach((s) => {
-
-        if (s.isPhantom) return;  // phantom records excluded from all counts
+        if (s.isPhantom) return; // phantom records excluded from all counts
 
         const rawUp = (s.rawStatus || "").toUpperCase().trim();
-        const dsUp  = (s.deliveryStatus || "").toUpperCase().trim();
+        const dsUp = (s.deliveryStatus || "").toUpperCase().trim();
 
         // ── FINANCIAL: Shipping spend → when money was charged ──────────
         if (s.shipActivityDateIST === targetDate) {
@@ -199,7 +226,8 @@ const calculateProfitSummaries = async (job) => {
 
         // ── STATUS COUNTS: anchored to srCreatedAtIST (Shiprocket cohort) ─
         // Falls back to orderCreatedAtIST for records without srCreatedAtIST yet.
-        const shipCountDate = s.srCreatedAtIST || s.orderCreatedAtIST || s.shipActivityDateIST;
+        const shipCountDate =
+          s.srCreatedAtIST || s.orderCreatedAtIST || s.shipActivityDateIST;
         if (shipCountDate === targetDate && !s.isPhantom) {
           hasActivity = true;
           stats.totalShipments += 1;
@@ -207,13 +235,10 @@ const calculateProfitSummaries = async (job) => {
 
           if (PICKUP_PENDING_STATUSES.includes(rawUp)) {
             stats.pickupPendingOrders += 1;
-
           } else if (NDR_PENDING_STATUSES.includes(rawUp)) {
             stats.ndrPendingOrders += 1;
-
           } else if (dsUp === "CANCELLED") {
             stats.cancelledOrders += 1;
-
           } else if (
             dsUp === "RTO" ||
             rawUp.includes("RTO") ||
@@ -221,11 +246,9 @@ const calculateProfitSummaries = async (job) => {
           ) {
             // RTO: current status is RTO — count it in this cohort
             stats.rtoOrders += 1;
-
           } else if (dsUp === "DELIVERED") {
             // Current status is DELIVERED — count it in this cohort
             stats.deliveredOrders += 1;
-
           } else if (
             dsUp === "IN_TRANSIT" &&
             !RETURNING_TO_SELLER_STATUSES.includes(rawUp)
@@ -236,10 +259,7 @@ const calculateProfitSummaries = async (job) => {
 
         // ── FINANCIAL: COD revenue → when the order was delivered ────────
         // This is separate from status counts — it's about when money arrived.
-        if (
-          s.deliveredAtIST === targetDate &&
-          dsUp === "DELIVERED"
-        ) {
+        if (s.deliveredAtIST === targetDate && dsUp === "DELIVERED") {
           const orderKey = normalize(s.shopifyOrderName);
           if (deliveredUniqueOrders.has(orderKey)) return;
           deliveredUniqueOrders.add(orderKey);
@@ -252,7 +272,12 @@ const calculateProfitSummaries = async (job) => {
             : Number(s.codAmount || 0);
 
           if (!matchingOrder) {
-            console.log("ORDER MATCH FAILED", orderKey, s.shopifyOrderName, s.srOrderId);
+            console.log(
+              "ORDER MATCH FAILED",
+              orderKey,
+              s.shopifyOrderName,
+              s.srOrderId,
+            );
           }
 
           if (codAmount > 0) {
@@ -263,7 +288,8 @@ const calculateProfitSummaries = async (job) => {
               ? Number(matchingOrder.totalCogs || 0)
               : Number(s.totalCogs || 0);
 
-            const orderDate = s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
+            const orderDate =
+              s.orderCreatedAtIST || matchingOrder?.orderCreatedAtIST;
             if (orderDate?.substring(0, 7) < targetDate.substring(0, 7)) {
               stats.revenueFromPastOrders += codAmount;
               stats.pastOrdersCount += 1;
@@ -299,7 +325,6 @@ const calculateProfitSummaries = async (job) => {
 
         // ── FINANCIAL: RTO handling fee → when RTO was confirmed ─────────
         // (handled above — nothing extra needed here)
-
       });
       // 3. Marketing & Aggregation
       const adsForDay = ads.filter((a) => a.date === targetDate);
@@ -360,7 +385,7 @@ const calculateProfitSummaries = async (job) => {
   } catch (e) {
     console.error("❌ Summary Error:", e.message);
   }
-}; 
+};
 function initDay() {
   return {
     revenueGenerated: 0,

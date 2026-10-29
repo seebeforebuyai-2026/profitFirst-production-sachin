@@ -22,7 +22,7 @@ const ShiprocketOnboarding = () => {
   const fetchInsight = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const res = await axios.get(`${API_URL}/api/onboard/shiprocket-insight`, {
+      const res = await axios.get(`${API_URL}/api/onboard/shipping-insight`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

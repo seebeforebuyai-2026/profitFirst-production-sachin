@@ -42,7 +42,7 @@ router.get('/shopify-insight', onboardingController.getShopifyInsight);
 router.post('/complete-shopify', onboardingController.completeShopifyOnboarding);
 
 router.get('/meta-insight', onboardingController.getMetaInsight);
-router.get('/shiprocket-insight', onboardingController.getShiprocketInsight);
+router.get('/shipping-insight', authenticateToken, onboardingController.getShippingInsight);
 router.post('/set-step', onboardingController.setOnboardingStep);
 
 

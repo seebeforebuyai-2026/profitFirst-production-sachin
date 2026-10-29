@@ -32,6 +32,7 @@ const Step4 = ({ onComplete }) => {
           break;
 
         case "Dilevery":
+        case "Velocity":
           payload.access_token = formData.access_token;
           break;
 
@@ -104,9 +105,10 @@ const Step4 = ({ onComplete }) => {
           </>
         );
       case "Dilevery":
+      case "Velocity":
         return (
           <InputField
-            label="Access Token"
+            label={platform === "Velocity" ? "Velocity Access Token (Bearer Token)" : "Access Token"}
             name="access_token"
             value={formData.access_token}
             onChange={handleChange}
@@ -282,6 +284,7 @@ const Step4 = ({ onComplete }) => {
                   "Shipway",
                   "Ithink Logistics",
                   "Nimbuspost",
+                  "Velocity",
                 ].map((name) => {
                   const isActive = platform === name;
                   return (
@@ -314,7 +317,7 @@ const Step4 = ({ onComplete }) => {
                     cursor: loading ? "not-allowed" : "pointer",
                   }}
                 >
-                  {loading ? "Connecting..." : "Connect Shiprocket →"}
+                  {loading ? "Connecting..." : `Connect ${platform} →`}
                 </button>
               </form>
             </div>

@@ -23,19 +23,24 @@ const SHOPIFY_STORE = normalizeStore(
 const LOOKBACK_DAYS = Number(process.env.DELHIVERY_LOOKBACK_DAYS || 0);
 const DETAIL_LIMIT = Number(process.env.DELHIVERY_DETAIL_LIMIT || 50);
 const SCAN_LIMIT = Number(process.env.DELHIVERY_SCAN_LIMIT || 5);
-const DELHIVERY_API_URL =
-  "https://track.delhivery.com/api/v1/packages/json/";
+const QUOTE_LIMIT = Number(process.env.DELHIVERY_QUOTE_LIMIT || 0);
+const ORIGIN_PINCODE = process.env.DELHIVERY_ORIGIN_PINCODE || "440010";
+const RATE_MODE = process.env.DELHIVERY_RATE_MODE || "E";
+const DELHIVERY_API_URL = "https://track.delhivery.com/api/v1/packages/json/";
+const DELHIVERY_QUOTE_API_URL =
+  "https://track.delhivery.com/api/kinko/v1/invoice/charges/.json";
 const ORDER_BATCH_SIZE = 25;
 const BATCH_DELAY_MS = 300;
+const QUOTE_DELAY_MS = 1250;
 const FINANCIAL_FIELD_PATTERN =
   /(charge|freight|amount|weight|payment|invoice|currency|value|price|^cod$)/i;
 const OPERATIONAL_FIELD_PATTERN =
   /(attempt|ndr|remark|reason|exception|rto|return|status|scan)/i;
 const PRIVATE_FIELD_PATTERN =
-  /(name|phone|mobile|address|email|pincode|pin_code|consignee|customer|receiver|recipient|contact|token|password|authorization)/i;
+  /(name|phone|mobile|address|email|pincode|pin_code|d_pin|o_pin|zipcode|consignee|customer|receiver|recipient|contact|token|password|authorization)/i;
 const LOG_FILE = path.resolve(
   process.env.DELHIVERY_LOG_FILE ||
-    path.join(__dirname, "delhivery-test.log"),
+    path.join(__dirname, "delhivery-rate-quotes.log"),
 );
 const logDirectory = path.dirname(LOG_FILE);
 fs.mkdirSync(logDirectory, { recursive: true });
@@ -56,9 +61,7 @@ console.dir = (value, options = {}) =>
 
 function finishLogging(exitCode) {
   logStream.end(() => {
-    process.stdout.write(
-      `Delhivery diagnostic log saved to: ${LOG_FILE}\n`,
-    );
+    process.stdout.write(`Delhivery diagnostic log saved to: ${LOG_FILE}\n`);
     if (exitCode) process.exitCode = exitCode;
   });
 }
@@ -125,10 +128,7 @@ async function findShopifyIntegration(store) {
 }
 
 async function getDelhiveryIntegration(merchantId) {
-  for (const sk of [
-    "INTEGRATION#DILEVERY",
-    "INTEGRATION#DELHIVERY",
-  ]) {
+  for (const sk of ["INTEGRATION#DILEVERY", "INTEGRATION#DELHIVERY"]) {
     const result = await newDynamoDB.send(
       new GetCommand({
         TableName: newTableName,
@@ -161,7 +161,7 @@ async function getRecentOrders(merchantId) {
           ":sk": "ORDER#",
         },
         ProjectionExpression:
-          "orderName, orderCreatedAtIST, netRevenue, prepaidAmount, codAmount, paymentType, isTest",
+          "SK, orderId, orderName, orderCreatedAtIST, netRevenue, prepaidAmount, codAmount, paymentType, isTest",
         ExclusiveStartKey: lastKey,
       }),
     );
@@ -170,9 +170,8 @@ async function getRecentOrders(merchantId) {
     lastKey = result.LastEvaluatedKey;
   } while (lastKey);
 
-  const startDate = LOOKBACK_DAYS > 0
-    ? getIstDate(subDays(today, LOOKBACK_DAYS - 1))
-    : null;
+  const startDate =
+    LOOKBACK_DAYS > 0 ? getIstDate(subDays(today, LOOKBACK_DAYS - 1)) : null;
   const selectedOrders = orders.filter((order) => {
     if (order.isTest) return false;
     if (startDate) {
@@ -196,9 +195,9 @@ async function getRecentOrders(merchantId) {
 
 function extractShipments(responseData) {
   if (Array.isArray(responseData?.ShipmentData)) {
-    return responseData.ShipmentData
-      .map((entry) => entry?.Shipment)
-      .filter(Boolean);
+    return responseData.ShipmentData.map((entry) => entry?.Shipment).filter(
+      Boolean,
+    );
   }
 
   return [];
@@ -216,9 +215,7 @@ function getShipmentStatus(shipment) {
 }
 
 function getStatusDetails(shipment) {
-  return sanitizeForConsole(
-    shipment.Status || shipment.status_details || {},
-  );
+  return sanitizeForConsole(shipment.Status || shipment.status_details || {});
 }
 
 function getShipmentReference(shipment) {
@@ -232,6 +229,7 @@ function getShipmentReference(shipment) {
 
 function classifyStatus(status) {
   const value = String(status || "").toUpperCase();
+  if (value === "DTO" || value.includes("DELIVERED TO ORIGIN")) return "dto";
   if (value.includes("RTO") || value.includes("RETURN")) return "rto_or_return";
   if (value.includes("DELIVER")) return "delivered";
   if (value.includes("CANCEL")) return "cancelled";
@@ -246,7 +244,7 @@ function classifyStatus(status) {
   if (value.includes("TRANSIT")) return "in_transit";
   if (value.includes("PENDING")) return "pending";
   return "other";
-} 
+}
 
 function sanitizeForConsole(value, depth = 0) {
   if (depth > 5 || value === null || value === undefined) return value;
@@ -316,7 +314,11 @@ function sumTopLevelNumericField(shipments, field) {
 
   for (const shipment of shipments) {
     const value = Number(shipment[field]);
-    if (shipment[field] === null || shipment[field] === undefined || !Number.isFinite(value)) {
+    if (
+      shipment[field] === null ||
+      shipment[field] === undefined ||
+      !Number.isFinite(value)
+    ) {
       continue;
     }
     count++;
@@ -352,7 +354,24 @@ async function fetchShipments(token, references) {
         const status = error.response?.status;
         if (status !== 429 && (!status || status < 500)) throw error;
         if (attempt >= 4) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        const detail = String(error.response?.data?.detail || "");
+        const throttleSeconds = Number(
+          detail.match(
+            /expected available in\s+(\d+(?:\.\d+)?)\s+seconds/i,
+          )?.[1],
+        );
+        const retryAfterSeconds = Number(
+          error.response?.headers?.["retry-after"],
+        );
+        const serverDelayMs = Math.max(
+          Number.isFinite(throttleSeconds) ? throttleSeconds * 1000 + 1000 : 0,
+          Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 0,
+        );
+        const delayMs = Math.max(serverDelayMs, 1000 * attempt);
+        console.warn(
+          `Rate quote request throttled or temporarily unavailable (HTTP ${status || "network"}); retry ${attempt}/3 after ${delayMs} ms.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
     shipments.push(...extractShipments(response.data));
@@ -362,6 +381,466 @@ async function fetchShipments(token, references) {
   }
 
   return shipments;
+}
+
+function getShopifyOrderGid(order) {
+  const orderId =
+    order.orderId || String(order.SK || "").replace(/^ORDER#/, "");
+  return orderId ? `gid://shopify/Order/${orderId}` : null;
+}
+
+async function fetchShopifyShippingData(shopifyIntegration, orders) {
+  if (!shopifyIntegration?.accessToken) {
+    throw new Error(
+      "The matched Shopify integration has no saved access token; cannot fetch destination and weight for rate quotes.",
+    );
+  }
+
+  const shop = normalizeStore(
+    shopifyIntegration.shopifyStore || shopifyIntegration.shopDomain,
+  );
+  if (!shop) {
+    throw new Error(
+      "The matched Shopify integration has no Shopify store domain for rate quotes.",
+    );
+  }
+
+  const accessToken = encryptionService.decrypt(shopifyIntegration.accessToken);
+  const orderGids = orders
+    .map((order) => ({
+      order,
+      gid: getShopifyOrderGid(order),
+    }))
+    .filter(({ gid }) => gid);
+  const shippingDataByOrderId = new Map();
+  const batchSize = 50;
+  const query = `
+    query GetOrderShippingInputs($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order {
+          id
+          totalWeight
+          shippingAddress {
+            zip
+          }
+        }
+      }
+    }
+  `;
+
+  for (let i = 0; i < orderGids.length; i += batchSize) {
+    const batch = orderGids.slice(i, i + batchSize);
+    const response = await axios.post(
+      `https://${shop}/admin/api/2024-04/graphql.json`,
+      {
+        query,
+        variables: { ids: batch.map(({ gid }) => gid) },
+      },
+      {
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000,
+      },
+    );
+
+    if (response.data?.errors?.length) {
+      throw new Error(
+        `Shopify rate-quote input lookup failed: ${response.data.errors
+          .map(({ message }) => message)
+          .join("; ")}`,
+      );
+    }
+
+    for (const node of response.data?.data?.nodes || []) {
+      if (!node?.id) continue;
+      const orderId = node.id.split("/").pop();
+      shippingDataByOrderId.set(orderId, {
+        destinationPincode: node.shippingAddress?.zip || null,
+        weightGrams: Number(node.totalWeight),
+      });
+    }
+  }
+
+  return shippingDataByOrderId;
+}
+
+function getQuoteAmounts(responseData) {
+  const queue = Array.isArray(responseData)
+    ? [...responseData]
+    : [responseData];
+
+  while (queue.length > 0) {
+    const value = queue.shift();
+    if (!value || typeof value !== "object") continue;
+    if (Array.isArray(value)) {
+      queue.push(...value);
+      continue;
+    }
+
+    const amountFields = [
+      ["total_amount", "totalAmount"],
+      ["gross_amount", "grossAmount"],
+    ];
+    const amounts = {};
+    for (const [normalizedKey, camelKey] of amountFields) {
+      const fieldValue = value[normalizedKey] ?? value[camelKey];
+      if (
+        fieldValue !== null &&
+        fieldValue !== undefined &&
+        String(fieldValue).trim() !== "" &&
+        Number.isFinite(Number(fieldValue))
+      ) {
+        amounts[normalizedKey] = Number(fieldValue);
+      }
+    }
+    if (Object.keys(amounts).length > 0) return amounts;
+
+    for (const fieldValue of Object.values(value)) {
+      if (fieldValue && typeof fieldValue === "object") {
+        queue.push(fieldValue);
+      }
+    }
+  }
+
+  return {};
+}
+
+async function fetchShippingQuote(
+  token,
+  { destinationPincode, weightGrams, paymentType, shippingStatus, codAmount },
+) {
+  let attempt = 0;
+  while (attempt < 4) {
+    try {
+      const response = await axios.get(DELHIVERY_QUOTE_API_URL, {
+        headers: {
+          Authorization: `Token ${token}`,
+          Accept: "application/json",
+        },
+        params: {
+          md: RATE_MODE,
+          ss: shippingStatus,
+          o_pin: ORIGIN_PINCODE,
+          d_pin: destinationPincode,
+          cgm: weightGrams,
+          pt: paymentType,
+          cod: codAmount,
+        },
+        timeout: 20000,
+      });
+      return response.data;
+    } catch (error) {
+      attempt++;
+      const status = error.response?.status;
+      if (status !== 429 && (!status || status < 500)) throw error;
+      if (attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+
+  throw new Error("Delhivery rate quote retries exhausted unexpectedly.");
+}
+
+async function logShippingRateQuotes(
+  token,
+  matchedTrackingRecords,
+  shopifyIntegration,
+) {
+  console.log(
+    "\nDelhivery shipping-rate API quotes (estimates, not billed spend)",
+  );
+  console.log(`Rate API: ${DELHIVERY_QUOTE_API_URL}`);
+  console.log(`Origin pickup pincode configured: ${ORIGIN_PINCODE}`);
+  console.log(
+    `Quotes use Delhivery status, tracking ChargedWeight (grams) where present (otherwise Shopify totalWeight), destination pincode, payment type, ${RATE_MODE} mode, and COD amount. They are not invoice charges.`,
+  );
+  console.log(
+    "Delhivery billing documentation describes actual freight invoices separately under Finances > Invoices.",
+  );
+
+  if (matchedTrackingRecords.length === 0) {
+    console.log(
+      "No Shopify orders matched a Delhivery tracking record; no rate quotes requested.",
+    );
+    return;
+  }
+
+  const uniqueOrders = new Map();
+  for (const { order } of matchedTrackingRecords) {
+    const orderId = String(
+      order.orderId || String(order.SK || "").replace(/^ORDER#/, ""),
+    );
+    if (orderId && !uniqueOrders.has(orderId)) {
+      uniqueOrders.set(orderId, order);
+    }
+  }
+  const shippingDataByOrderId = await fetchShopifyShippingData(
+    shopifyIntegration,
+    [...uniqueOrders.values()],
+  );
+
+  const quoteGroups = new Map();
+  let missingPincodeCount = 0;
+  let missingWeightCount = 0;
+  let unsupportedStatusCount = 0;
+  const shipmentQuoteResults = [];
+  for (const record of matchedTrackingRecords) {
+    let shippingStatus;
+    if (record.category === "delivered") {
+      shippingStatus = "Delivered";
+    } else if (record.category === "rto_or_return") {
+      shippingStatus = "RTO";
+    } else if (record.category === "dto") {
+      shippingStatus = "DTO";
+    } else {
+      unsupportedStatusCount++;
+      shipmentQuoteResults.push({
+        reference: record.reference,
+        orderName: record.order.orderName,
+        awb: record.awb,
+        status: record.status,
+        estimatedTotalAmount: null,
+        quoteStatus: "skipped_unsupported_status",
+      });
+      continue;
+    }
+    record.shippingStatus = shippingStatus;
+
+    const orderId = String(
+      record.order.orderId ||
+        String(record.order.SK || "").replace(/^ORDER#/, ""),
+    );
+    const shippingData = shippingDataByOrderId.get(orderId);
+    const destinationPincode = String(
+      shippingData?.destinationPincode || "",
+    ).replace(/\D/g, "");
+    if (!/^\d{6}$/.test(destinationPincode)) {
+      missingPincodeCount++;
+      shipmentQuoteResults.push({
+        reference: record.reference,
+        orderName: record.order.orderName,
+        awb: record.awb,
+        status: shippingStatus,
+        estimatedTotalAmount: null,
+        quoteStatus: "skipped_missing_destination_pincode",
+      });
+      continue;
+    }
+
+    const trackingWeight = Number(record.shipment.ChargedWeight);
+    const shopifyWeight = Number(shippingData?.weightGrams);
+    const weightGrams =
+      Number.isFinite(trackingWeight) && trackingWeight > 0
+        ? trackingWeight
+        : shopifyWeight;
+    if (!Number.isFinite(weightGrams) || weightGrams <= 0) {
+      missingWeightCount++;
+      shipmentQuoteResults.push({
+        reference: record.reference,
+        orderName: record.order.orderName,
+        awb: record.awb,
+        status: shippingStatus,
+        estimatedTotalAmount: null,
+        quoteStatus: "skipped_missing_weight",
+      });
+      continue;
+    }
+
+    const paymentType =
+      record.order.paymentType === "COD" ||
+      record.order.paymentType === "PARTIAL_COD"
+        ? "COD"
+        : "Pre-paid";
+    const codAmount =
+      paymentType === "COD" ? Number(record.order.codAmount || 0) : 0;
+    const input = {
+      destinationPincode,
+      weightGrams,
+      paymentType,
+      shippingStatus,
+      codAmount,
+    };
+    const key = JSON.stringify([
+      ORIGIN_PINCODE,
+      RATE_MODE,
+      destinationPincode,
+      weightGrams,
+      paymentType,
+      codAmount,
+      shippingStatus,
+    ]);
+    const group = quoteGroups.get(key) || { key, input, records: [] };
+    group.records.push(record);
+    quoteGroups.set(key, group);
+  }
+
+  const groupsByStatus = new Map(
+    ["Delivered", "RTO", "DTO"].map((status) => [status, []]),
+  );
+  for (const group of quoteGroups.values()) {
+    groupsByStatus.get(group.input.shippingStatus).push(group);
+  }
+  const allQuoteGroups = [];
+  while ([...groupsByStatus.values()].some((groups) => groups.length > 0)) {
+    for (const groups of groupsByStatus.values()) {
+      if (groups.length > 0) allQuoteGroups.push(groups.shift());
+    }
+  }
+  const quoteBatch = QUOTE_LIMIT
+    ? allQuoteGroups.slice(0, QUOTE_LIMIT)
+    : allQuoteGroups;
+  console.log(`Matched tracking shipments: ${matchedTrackingRecords.length}`);
+  console.log(`Unique eligible API quote inputs: ${allQuoteGroups.length}`);
+  console.log(
+    `Shipments missing valid destination pincode: ${missingPincodeCount}`,
+  );
+  console.log(`Shipments missing valid weight: ${missingWeightCount}`);
+  console.log(
+    `Shipments with other statuses (not quoted): ${unsupportedStatusCount}`,
+  );
+  console.log(`Unique rate quote limit: ${QUOTE_LIMIT || "unlimited"}`);
+
+  let successfulQuotes = 0;
+  let failedQuotes = 0;
+  let quotesWithAmount = 0;
+  let quotedTotalAmount = 0;
+  let quotedGrossAmount = 0;
+  const statusTotals = {};
+
+  for (let i = 0; i < quoteBatch.length; i++) {
+    const group = quoteBatch[i];
+    console.log(
+      `Requesting unique rate quote ${i + 1}/${quoteBatch.length} (${group.input.shippingStatus}, ${group.records.length} shipments)...`,
+    );
+
+    try {
+      const responseData = await fetchShippingQuote(token, group.input);
+      const quoteAmounts = getQuoteAmounts(responseData);
+      const estimatedAmount =
+        quoteAmounts.total_amount ?? quoteAmounts.gross_amount ?? null;
+      successfulQuotes++;
+      if (estimatedAmount !== null) {
+        quotesWithAmount++;
+      }
+
+      for (const record of group.records) {
+        const totalAmount = quoteAmounts.total_amount;
+        const grossAmount = quoteAmounts.gross_amount;
+        if (totalAmount !== undefined) {
+          quotedTotalAmount += totalAmount;
+          if (!statusTotals[record.shippingStatus]) {
+            statusTotals[record.shippingStatus] = { amount: 0, shipments: 0 };
+          }
+          statusTotals[record.shippingStatus].amount += totalAmount;
+          statusTotals[record.shippingStatus].shipments++;
+        }
+        if (grossAmount !== undefined) {
+          quotedGrossAmount += grossAmount;
+        }
+        shipmentQuoteResults.push({
+          reference: record.reference,
+          orderName: record.order.orderName,
+          awb: record.awb,
+          status: record.shippingStatus,
+          paymentType: group.input.paymentType,
+          codAmount: group.input.codAmount,
+          weightGrams: group.input.weightGrams,
+          estimatedTotalAmount: totalAmount ?? null,
+          estimatedGrossAmount: grossAmount ?? null,
+          quoteStatus: estimatedAmount === null ? "amount_missing" : "quoted",
+        });
+      }
+      console.log(
+        "Rate quote result:",
+        util.inspect(
+          sanitizeForConsole({
+            shipments: group.records.map((record) => ({
+              reference: record.reference,
+              orderName: record.order.orderName,
+              awb: record.awb,
+            })),
+            ...group.input,
+            mode: RATE_MODE,
+            estimatedAmount,
+            totalAmountIncludingTax: quoteAmounts.total_amount ?? null,
+            grossAmountBeforeTax: quoteAmounts.gross_amount ?? null,
+            response: responseData,
+          }),
+          { depth: 8, colors: false, maxArrayLength: null },
+        ),
+      );
+    } catch (error) {
+      failedQuotes++;
+      console.error(
+        `Rate quote failed for input group ${i + 1}: HTTP ${error.response?.status || "network"}; ${error.message}`,
+      );
+      for (const record of group.records) {
+        shipmentQuoteResults.push({
+          reference: record.reference,
+          orderName: record.order.orderName,
+          awb: record.awb,
+          status: record.shippingStatus,
+          paymentType: group.input.paymentType,
+          codAmount: group.input.codAmount,
+          weightGrams: group.input.weightGrams,
+          estimatedTotalAmount: null,
+          estimatedGrossAmount: null,
+          quoteStatus: `failed_http_${error.response?.status || "network"}`,
+        });
+      }
+      if (error.response?.data) {
+        console.error(
+          `Sanitized Delhivery response: ${util.inspect(
+            sanitizeForConsole(error.response.data),
+            { depth: 5, colors: false },
+          )}`,
+        );
+      }
+    }
+
+    if (i + 1 < quoteBatch.length) {
+      await new Promise((resolve) => setTimeout(resolve, QUOTE_DELAY_MS));
+    }
+  }
+
+  console.log(`Rate quotes successful: ${successfulQuotes}`);
+  console.log(`Rate quotes failed: ${failedQuotes}`);
+  console.log(`Responses with a recognized quote amount: ${quotesWithAmount}`);
+  console.log(
+    "Estimated shipping totals by shipment status:",
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(statusTotals).map(([status, totals]) => [
+          status,
+          {
+            shipments: totals.shipments,
+            estimatedAmount: Number(totals.amount.toFixed(2)),
+          },
+        ]),
+      ),
+      null,
+      2,
+    ),
+  );
+  console.log(
+    `Estimated total including tax for quoted shipments: ₹${quotedTotalAmount.toFixed(2)} (estimate only; not actual billed shipping spend)`,
+  );
+  console.log(
+    `Estimated gross amount before tax: ₹${quotedGrossAmount.toFixed(2)}`,
+  );
+  console.log("\nPer-shipment estimated shipping quotes:");
+  console.dir(shipmentQuoteResults, {
+    depth: 5,
+    colors: false,
+    maxArrayLength: null,
+  });
+  if (quoteBatch.length < allQuoteGroups.length) {
+    console.log(
+      `Rate quote inputs omitted by the configured limit: ${allQuoteGroups.length - quoteBatch.length}. Set DELHIVERY_QUOTE_LIMIT=0 to request every unique eligible quote input.`,
+    );
+  }
 }
 
 async function main() {
@@ -383,6 +862,19 @@ async function main() {
       "DELHIVERY_SCAN_LIMIT must be zero (all scans) or a positive integer.",
     );
   }
+  if (!Number.isInteger(QUOTE_LIMIT) || QUOTE_LIMIT < 0) {
+    throw new Error(
+      "DELHIVERY_QUOTE_LIMIT must be zero (all eligible orders) or a positive integer.",
+    );
+  }
+  if (!/^\d{6}$/.test(ORIGIN_PINCODE)) {
+    throw new Error(
+      "DELHIVERY_ORIGIN_PINCODE must be a valid six-digit pickup pincode.",
+    );
+  }
+  if (!["E", "S"].includes(RATE_MODE)) {
+    throw new Error("DELHIVERY_RATE_MODE must be E (Express) or S (Surface).");
+  }
 
   console.log(`Searching Shopify integration for ${SHOPIFY_STORE}...`);
   const shopifyIntegration = await findShopifyIntegration(SHOPIFY_STORE);
@@ -397,6 +889,15 @@ async function main() {
 
   const merchantId = shopifyIntegration.PK.replace(/^MERCHANT#/, "");
   console.log(`Matched merchant: ${merchantId}`);
+  const shopifyIntegrationDetails = await newDynamoDB.send(
+    new GetCommand({
+      TableName: newTableName,
+      Key: {
+        PK: shopifyIntegration.PK,
+        SK: shopifyIntegration.SK,
+      },
+    }),
+  );
 
   const delhiveryIntegration = await getDelhiveryIntegration(merchantId);
   if (!delhiveryIntegration?.access_token) {
@@ -466,6 +967,7 @@ async function main() {
   const statusCategories = {};
   const trackedReferences = new Set();
   const trackedOrders = new Map();
+  const matchedTrackingRecords = [];
   const observedFieldPaths = new Set();
   const matchedShipments = [];
   const financeDetails = [];
@@ -532,12 +1034,21 @@ async function main() {
 
     if (matchedOrder) {
       trackedReferences.add(reference);
+      matchedTrackingRecords.push({
+        reference,
+        order: matchedOrder,
+        shipment,
+        status,
+        category,
+        awb: shipment.AWB || shipment.awb || null,
+      });
       const existing = trackedOrders.get(reference);
       const orderStatus = existing?.statuses || new Set();
       orderStatus.add(category);
       trackedOrders.set(reference, {
         order: matchedOrder,
         statuses: orderStatus,
+        awb: shipment.AWB || shipment.awb || null,
       });
     }
   }
@@ -558,6 +1069,12 @@ async function main() {
     (total, { order, statuses }) =>
       total + (statuses.has("delivered") ? Number(order.codAmount || 0) : 0),
     0,
+  );
+
+  await logShippingRateQuotes(
+    token,
+    matchedTrackingRecords,
+    shopifyIntegrationDetails.Item,
   );
 
   console.log("\nDelhivery tracking test results");
@@ -607,9 +1124,7 @@ async function main() {
 
   console.log("\nObserved non-personal tracking response fields:");
   console.log([...observedFieldPaths].sort().join("\n") || "(none)");
-  console.log(
-    "\nShipment details (customer-identifying fields omitted):",
-  );
+  console.log("\nShipment details (customer-identifying fields omitted):");
   const detailLimit = DETAIL_LIMIT || matchedShipments.length;
   console.dir(matchedShipments.slice(0, detailLimit), {
     depth: 8,
@@ -645,7 +1160,9 @@ async function main() {
     );
   }
 
-  console.log("\nNot queried by this tracking-only script:");
+  console.log(
+    "\nNot available from the rate-quote/tracking APIs queried by this script:",
+  );
   console.log(
     "- Invoice PDFs and AWB-wise billed freight: Delhivery One > Finances > Invoices.",
   );
@@ -656,7 +1173,7 @@ async function main() {
     "- Scheduled Order and Exceptions/NDR reports: Delhivery One > Reports.",
   );
   console.log(
-    "- Pickup, shipment creation, shipping-cost calculation and NDR update APIs require the account's authenticated developer-portal request examples; this read-only script does not call them.",
+    "- The rate API is queried for Delivered, RTO, and DTO outcomes; its response is an estimate, not a historical billed invoice charge.",
   );
   console.log(
     "Developer portal: https://ucp.delhivery.com/developer-portal/documents",
@@ -669,6 +1186,15 @@ async function main() {
   );
   console.log(
     "Set DELHIVERY_SCAN_LIMIT=0 to print every scan event per displayed shipment; the default shows the first 5 scans per shipment.",
+  );
+  console.log(
+    `Set DELHIVERY_ORIGIN_PINCODE to override the default pickup pincode ${ORIGIN_PINCODE}.`,
+  );
+  console.log(
+    "Set DELHIVERY_QUOTE_LIMIT to a positive number to cap unique quote API calls; default 0 requests every unique eligible input.",
+  );
+  console.log(
+    `Set DELHIVERY_RATE_MODE to E (Express) or S (Surface); default is ${RATE_MODE}.`,
   );
   console.log("\nNo database records were modified.");
 }

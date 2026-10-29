@@ -237,12 +237,31 @@ async function markSyncComplete(
         `✅ [Meta] meta_onboarding done → Summary triggered for ${finalAffectedDates.length} dates`,
       );
     } else {
-      // Normal flow — Shiprocket ko bhejo
+      // 🟢 DYNAMIC SHIPPING ROUTING (Shiprocket vs Delhivery)
+      const {
+        shiprocketQueueUrl,
+        delhiveryQueueUrl,
+      } = require("../config/aws.config");
+
+      // Check karo ki merchant ka shipping partner kaunsa active hai
+      const dlvCheck = await newDynamoDB.send(
+        new GetCommand({
+          TableName: newTableName,
+          Key: { PK: `MERCHANT#${merchantId}`, SK: "INTEGRATION#DILEVERY" },
+        }),
+      );
+
+      const isDelhivery = !!dlvCheck.Item;
+      const targetQueueUrl = isDelhivery
+        ? delhiveryQueueUrl
+        : shiprocketQueueUrl;
+      const syncJobType = isDelhivery ? "DELHIVERY_SYNC" : "SHIPROCKET_SYNC";
+
       await sqsClient.send(
         new SendMessageCommand({
-          QueueUrl: shiprocketQueueUrl,
+          QueueUrl: targetQueueUrl,
           MessageBody: JSON.stringify({
-            type: "SHIPROCKET_SYNC",
+            type: syncJobType,
             merchantId,
             sinceDate,
             mode,
@@ -251,7 +270,7 @@ async function markSyncComplete(
         }),
       );
       console.log(
-        `✅ [Meta] Done. Passing ${finalAffectedDates.length} dirty dates to Shiprocket.`,
+        `✅ [Meta] Done. Passing ${finalAffectedDates.length} dirty dates to ${isDelhivery ? "Delhivery" : "Shiprocket"} worker.`,
       );
     }
   } catch (err) {
